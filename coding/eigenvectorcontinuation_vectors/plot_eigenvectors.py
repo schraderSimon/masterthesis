@@ -1,12 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
-def plot_eigenvectors(M,xmin,xmax,symmetric=False,num=5):
-    n=1000
+from eigenvec_cont import *
+def plot_eigenvectors(M,x,symmetric=False,num=5):
+    """Plots, for each x, the 'num' first eigenvalues of M(x)"""
+    n=len(x)
     if num>M(0).shape[0]:
         num=M(0).shape[0]
-    xs=np.linspace(xmin,xmax,n)
     eigenvalues=np.zeros((num,n))
-    for index,i in enumerate(xs):
+    for index,i in enumerate(x):
         print(M(i))
         if symmetric:
             eigvals,eigvecs=np.linalg.eigh(M(i))
@@ -14,20 +15,13 @@ def plot_eigenvectors(M,xmin,xmax,symmetric=False,num=5):
             eigvals,eigvecs=np.linalg.eig(M(i))
         eigenvalues[:,index]=eigvals[:num]
     for i in range(num):
-        plt.plot(xs,eigenvalues[i,:])
+        plt.plot(x,eigenvalues[i,:])
     plt.show()
-n=3
-M=np.random.rand(n,n)*1
-M=(M+M.T)/2
-def generate_random_matrix_function(n,deg, M):
-    numbers=np.random.rand(n,deg)
-    def matrix(x):
-        a=np.ones(n)
-        for i in range(n):
-            for j in range(deg):
-                a[i]*=(x-numbers[i,j]) #random polynomial
-        print(a)
-        return M+np.diag(a)
-    return matrix
-matrix=generate_random_matrix_function(n,3,M)
-plot_eigenvectors(matrix,-1,1,symmetric=True,num=2)
+
+if __name__=="__main__":
+    n=10
+    M=np.random.rand(n,n)*1
+    M=(M+M.T)/2
+    matrix=generate_random_matrix_function(n,3,M)
+    x=np.linspace(-1,1,100)
+    plot_eigenvectors(matrix,x,symmetric=True,num=10)

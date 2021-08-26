@@ -1,2 +1,2 @@
-#Master thessis
-##Simon Elias Schrader, UiO, 2021/2022
+# Master thessis
+## Simon Elias Schrader, UiO, 2021/2022

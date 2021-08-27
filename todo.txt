@@ -1,0 +1,2 @@
+- Very basic error estimate - this is easy. Simply show for one vector <v|M(x)|v>=lambda(x) will be a polynomial in x, necessarily bounded.
+- For a general matrix T(x), find the "special points" and see how they relate to the accuracy of the eigenvector continuation algorithm

@@ -59,7 +59,7 @@ def find_lowest_eigenvectors(matrix,xarr,symmetric=False):
     return eigenvalues, eigenvectors
 def generate_random_matrix_function(n,deg, M,a=0,b=1,scaling=1):
     """Generates a random Hermitian matrix function.
-    Generates a random Hermitian matrix function. Hermiticity is enforced
+    Generates a random matrix function. Hermiticity is remained
     by influencing the diagonal elements only.
     The diagonal elements are each modelled as a monic polynomial of degree "deg",
     with zeros in [a,b).
@@ -74,26 +74,27 @@ def generate_random_matrix_function(n,deg, M,a=0,b=1,scaling=1):
     """
     numbers=(b-a)*np.random.rand(n,deg)+a
     def matrix(x):
-        a=np.ones(n)
+        A=np.ones(n)
         for i in range(n):
             for j in range(deg):
-                a[i]*=(x-numbers[i,j]) #random polynomial
-        return (M+np.diag(a))*scaling
+                A[i]*=(x-numbers[i,j]) #random polynomial
+        return (M+np.diag(A))*scaling
     return matrix
 
 
 if __name__=="__main__":
-    n=50
+    num_samples=10
+    n=100
     M=np.random.rand(n,n)*1
     M=(M+M.T)/2
-    matrix=generate_random_matrix_function(n,3,M,a=-2,b=2)
+    matrix=generate_random_matrix_function(n,3,M,a=0,b=2)
     fig,(ax1,ax2)=plt.subplots(1,2,sharex=True)
     x=[0]
 
-    xnew=np.linspace(-3,3,101)
+    xnew=np.linspace(-1,1,1001)
     eigvals=np.zeros(len(xnew))
     true_eigenvalues,true_eigenvectors=find_lowest_eigenvectors(matrix,xnew,False)
-    dots=np.arange(0,10,1)
+    dots=np.arange(0,100,0.1)
     for i in range(1,6,1):
         x=dots[:i]
         eigenvalues,eigenvectors=find_lowest_eigenvectors(matrix,x,False)
@@ -104,7 +105,8 @@ if __name__=="__main__":
         ax2.plot(xnew,eigvals-true_eigenvalues,label="Continuation with i=%d"%i)
     ax1.plot(xnew,true_eigenvalues,label="True")
     ax2.plot(xnew,true_eigenvalues-true_eigenvalues,label="True")
-
+    ax1.set_title("Eigenvalues")
+    ax2.set_title("Deviation from true eigenvalues")
     ax1.legend()
     ax2.legend()
 

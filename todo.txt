@@ -1,2 +1,7 @@
 - Very basic error estimate - this is easy. Simply show for one vector <v|M(x)|v>=lambda(x) will be a polynomial in x, necessarily bounded.
 - For a general matrix T(x), find the "special points" and see how they relate to the accuracy of the eigenvector continuation algorithm
+
+- Regarding what I talked about with Simen, for the overlap, the following extra complications show up: 
+  1. The atomic orbitals are not orthogonal - need to take that into account.
+  2. We are dealing with molecular orbitals, which however ARE orthogonal. So we can, in principle, use the same thingy for orthogonal matrices.
+  3. One should be able to calculate the overlap between the individual MO's from the overlap matrix (will this be a DET...?

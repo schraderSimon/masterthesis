@@ -15,7 +15,9 @@ def plot_eigenvectors(M,x,symmetric=False,num=5):
             eigvals,eigvecs=np.linalg.eig(M(i))
         eigenvalues[:,index]=eigvals[:num]
     for i in range(num):
-        plt.plot(x,eigenvalues[i,:])
+        plt.plot(x,eigenvalues[i,:],label=r"$\lambda_{%d}$"%i)
+    plt.legend()
+
     plt.show()
 
 if __name__=="__main__":
@@ -23,5 +25,5 @@ if __name__=="__main__":
     M=np.random.rand(n,n)*1
     M=(M+M.T)/2
     matrix=generate_random_matrix_function(n,3,M)
-    x=np.linspace(-1,1,100)
+    x=np.linspace(0,1,100)
     plot_eigenvectors(matrix,x,symmetric=True,num=10)

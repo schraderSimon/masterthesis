@@ -40,10 +40,11 @@ def eigenvec_cont(x,M,solv):
     lowest_eigenvalue=epsilon[0]
     lowest_eigenvector=C[:,0]
     return lowest_eigenvalue,lowest_eigenvector
-def find_lowest_eigenvectors(matrix,xarr,symmetric=False):
+def find_lowest_eigenvectors(matrix,xarr,num_levels=1,symmetric=False):
     """For each x in xarr, returns the lowest eigenvalue and eigenvector of a matrix function M(x)"""
-    eigenvectors=np.zeros((len(xarr),matrix(0).shape[0])) #
-    eigenvalues=np.zeros(len(xarr))
+    eigenvectors=np.zeros((len(xarr)*num_levels,matrix(0).shape[0])) #
+    eigenvalues=np.zeros(len(xarr)*num_levels)
+    print(num_levels)
     for index,x in enumerate(xarr):
         if symmetric:
             eigvals,eigvecs=np.linalg.eigh(matrix(x))
@@ -52,10 +53,21 @@ def find_lowest_eigenvectors(matrix,xarr,symmetric=False):
         idx = eigvals.argsort()
         eigvals.sort()
         eigvecs = eigvecs[:, idx]
-        sol=eigvecs[:,0]
-        sol_val=eigvals[0]
-        eigenvalues[index]=sol_val
-        eigenvectors[index]=sol
+        #sol=eigvecs[:,0]
+        #sol_val=eigvals[0]
+        #print(eigenvalues)
+        #eigenvalues[index]=sol_val
+        #eigenvectors[index]=sol
+        sol=eigvecs[:,:num_levels]#,:num_levels]
+
+        sol_val=eigvals[:num_levels]
+        print(sol_val)
+        eigenvalues[num_levels*index:num_levels*(index+1)]=sol_val
+        print(eigenvectors.shape)
+        print(sol.shape)
+        print(eigenvectors[2:4,:].shape)
+        eigenvectors[num_levels*index:num_levels*(index+1),:]=sol.T
+
     return eigenvalues, eigenvectors
 def generate_random_matrix_function(n,deg, M,a=0,b=1,scaling=1):
     """Generates a random Hermitian matrix function.

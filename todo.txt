@@ -1,7 +1,14 @@
 - Very basic error estimate - this is easy. Simply show for one vector <v|M(x)|v>=lambda(x) will be a polynomial in x, necessarily bounded.
 - For a general matrix T(x), find the "special points" and see how they relate to the accuracy of the eigenvector continuation algorithm
 
-- Regarding what I talked about with Simen, for the overlap, the following extra complications show up: 
+- Regarding what I talked about with Simen, for the overlap, the following extra complications show up:
   1. The atomic orbitals are not orthogonal - need to take that into account.
   2. We are dealing with molecular orbitals, which however ARE orthogonal. So we can, in principle, use the same thingy for orthogonal matrices.
   3. One should be able to calculate the overlap between the individual MO's from the overlap matrix (will this be a DET...?
+
+
+- Now, there's one other thing that I would like to think of. How does this turn out in terms of MP perturbation theory? What I'm thinking is:
+- Assume that MP gives crappy results // perturbation theory does not converge. Now, what about turning on a "weak parameter" in terms of 2nd-order determinants
+- HF-theory is exact for non-interacting particles (more correctly speaking, HF-theory is exact for a system of non-repulsive electrons).
+ --> from that point of view, the HF-solution attained for **very weak** electron-repulsions will be **very close** to the real energy.
+ --> can we sample at 1% electron-repulsion, 2% electron repulsion, 5% electron repulsion --> 100% electron repulsion?

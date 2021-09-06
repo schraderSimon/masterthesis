@@ -7,7 +7,7 @@ from eigenvectorcontinuation import generalized_eigenvector
 np.set_printoptions(linewidth=200,precision=2,suppress=True)
 
 
-basis_type="STO-3G"
+basis_type="sto-3G"
 mol0=gto.Mole()
 pos_x0=1.5
 pos_x1=1.5
@@ -36,7 +36,8 @@ basisset_size=mol1.nao_nr()
 expansion_coefficients_mol1 = mf.mo_coeff[:, mf.mo_occ > 0.]
 expansion_coefficients_mol1_complete = mf.mo_coeff[:, mf.mo_occ > -1e-15]
 number_electronshalf=int(mol1.nelectron/2)
-
+mf.dump_scf_summary()
+#eri_4fold_mo = pyscf.ao2mo.incore.full(mol1.intor('int2e',aosym="s1"), expansion_coefficients_mol1_complete)
 
 mol_energy=gto.Mole()
 mol_energy.atom="""H 0 0 0; F 0 0 %f; GHOST_H1 0 0 0;GHOST_F1 0 0 %f; GHOST_H2 0 0 0; GHOST_F2 0 0 %f"""%(pos_xc,pos_x0,pos_x1)
@@ -50,27 +51,26 @@ energies=kin+vnuc
 energy_matrix=energies[basisset_size:2*basisset_size,2*basisset_size:].copy()
 overlap=mol_energy.intor("int1e_ovlp")
 overlap_matrix_of_AO_orbitals=overlap[basisset_size:2*basisset_size,2*basisset_size:].copy()
-S_matrix_overlap=np.zeros((number_electronshalf,number_electronshalf)) #the matrix to take the determinant of
-S_matrix_full_energy=np.zeros((number_electronshalf*2,number_electronshalf*2))
-"""We consider h(1) for simplicity, but the idea is rather general"""
+
+
 #Set up the overlap matrix
-for i in range(number_electronshalf):
-    for j in range(0,number_electronshalf): #The S_matrix is NOT symmetric!!
-        matrix_element=np.einsum("ab,a,b->",overlap_matrix_of_AO_orbitals,expansion_coefficients_mol0[:,i],expansion_coefficients_mol1[:,j])
-        S_matrix_overlap[i,j]=matrix_element
-        S_matrix_full_energy[2*i,2*j]=matrix_element
-        S_matrix_full_energy[2*i+1,2*j+1]=matrix_element
+S_matrix_overlap=np.einsum("ab,ai,bj->ij",overlap_matrix_of_AO_orbitals,expansion_coefficients_mol0,expansion_coefficients_mol1)
+#Step 0:Write out the Hamiltonian elements of the new matrix. The new matrix is the hamiltonian element between the occupied AND unoccupied MO-basises
+Hamiltonian_SLbasis=np.einsum("ki,lj,kl->ij",expansion_coefficients_mol0,expansion_coefficients_mol1,energy_matrix)
 
-
+#Step 0.5: Calculate the repulsion part (this is easz)
+nuc_energy_molecule=gto.Mole()
+nuc_energy_molecule.atom="""H 0 0 0; F 0 0 %f"""%pos_xc
+nuc_energy_molecule.basis=basis_type
+nuc_energy_molecule.build()
+nuc_repulsion=nuc_energy_molecule.energy_nuc()*np.linalg.det(S_matrix_overlap)**2
 """Approach 1"""
 S_matrix_energy=S_matrix_overlap.copy()
-print(S_matrix_overlap)
 energy=0
 for j in range(number_electronshalf):
     S_matrix_energy=S_matrix_overlap.copy() #Re-initiate Energy matrix
     for i in range(number_electronshalf):
-            matrix_element=np.einsum("k,l,kl->",expansion_coefficients_mol0[:,i],expansion_coefficients_mol1[:,j],energy_matrix)
-            S_matrix_energy[i,j]=matrix_element
+            S_matrix_energy[i,j]=Hamiltonian_SLbasis[i,j]
     energy_contribution=np.linalg.det(S_matrix_energy)*np.linalg.det(S_matrix_overlap)
     energy+=energy_contribution
 energy*=2 #Beta spin part
@@ -78,13 +78,6 @@ print("Energy from approach 1: %f"%energy)
 #print("Energy from approach 1: %f"%(np.linalg.det(S_matrix_energy)*np.linalg.det(S_matrix_overlap)))
 
 """Approach 2"""
-#Step 1:Write out the Hamiltonian elements of the new matrix. The new matrix is the hamiltonian element between the occupied AND unoccupied MO-basises
-Hamiltonian_SLbasis=np.zeros((number_electronshalf,number_electronshalf))
-for i in range(number_electronshalf):
-    for j in range(number_electronshalf):
-        Hamiltonian_SLbasis[i,j]=matrix_element=np.einsum("k,l,kl->",expansion_coefficients_mol0[:,i],expansion_coefficients_mol1[:,j],energy_matrix)
-#Step 2: Calculate overlapperino
-
 toteng=0
 for b in range(number_electronshalf):
     S_matrix_energy=S_matrix_overlap.copy()
@@ -95,3 +88,38 @@ for b in range(number_electronshalf):
         toteng+=np.linalg.det(S_matrix_energy)*np.linalg.det(S_matrix_overlap)*Hamiltonian_SLbasis[a,b]
 toteng*=2#Beta spin part
 print("Energy from approach 2: %f"%toteng)
+
+eri = mol_energy.intor('int2e',aosym="s1")
+relevant_eri=eri[basisset_size:2*basisset_size,2*basisset_size:,basisset_size:2*basisset_size,2*basisset_size:]
+np.einsum("ki,lj,kl->ij",expansion_coefficients_mol0,expansion_coefficients_mol1,energy_matrix)
+
+eri_MO_transformed=np.einsum("ka,lb,mi,nj,kmln->aibj",expansion_coefficients_mol0,expansion_coefficients_mol0,expansion_coefficients_mol1,expansion_coefficients_mol1,relevant_eri)
+MO_eri=eri_MO_transformed
+two_energy=0
+large_S=np.zeros((number_electronshalf*2,number_electronshalf*2))
+large_S[:number_electronshalf,:number_electronshalf]=S_matrix_overlap.copy()
+large_S[number_electronshalf:,number_electronshalf:]=S_matrix_overlap.copy()
+for i in range(number_electronshalf*2):
+    for j in range(i+1,number_electronshalf*2):
+        largeS_2e=large_S.copy()
+        largeS_2e[:,i]=0
+        largeS_2e[:,j]=0
+        for a in range(number_electronshalf*2):
+            for b in range(number_electronshalf*2):
+                largeS_2e[a,i]=1
+                largeS_2e[b,j]=1
+                largeS_2e[a-1,i]=0
+                largeS_2e[b-1,j]=0
+                if(i<number_electronshalf and j<number_electronshalf and a < number_electronshalf and b< number_electronshalf):
+                    two_energy+=np.linalg.det(largeS_2e)*MO_eri[a,i,b,j]
+                elif(i>=number_electronshalf and j>=number_electronshalf and a >= number_electronshalf and b>= number_electronshalf):
+                    two_energy+=np.linalg.det(largeS_2e)*MO_eri[a-number_electronshalf,i-number_electronshalf,b-number_electronshalf,j-number_electronshalf]
+                elif(i<number_electronshalf and j>=number_electronshalf and a < number_electronshalf and b>= number_electronshalf):
+                    two_energy+=np.linalg.det(largeS_2e)*MO_eri[a,i,b-number_electronshalf,j-number_electronshalf]
+                elif(i>=number_electronshalf and j<number_electronshalf and a >= number_electronshalf and b< number_electronshalf):
+                    two_energy+=np.linalg.det(largeS_2e)*MO_eri[a-number_electronshalf,i-number_electronshalf,b,j]
+
+energy_total=two_energy+toteng+nuc_repulsion
+print("Two-energy: %f"%two_energy)
+print("Nuclear repulsion: %f"%nuc_repulsion)
+print("The total energy is %.3f"%energy_total)

@@ -7,7 +7,7 @@ from eigenvectorcontinuation import generalized_eigenvector
 np.set_printoptions(linewidth=200)
 
 base_pos=0.8
-sample_vals=np.linspace(base_pos-0.3,base_pos+0.3,50)
+sample_vals=np.linspace(base_pos-0.3,base_pos+0.3,101)
 
 basis_type="STO-3G"
 mol0=gto.Mole()
@@ -40,7 +40,6 @@ for xindex in range(len(sample_vals)):
     number_electronshalf=int(mol1.nelectron/2)
     S_matrix=np.zeros((number_electronshalf,number_electronshalf)) #the matrix to take the determinant of...
     S_matrix_full=np.zeros((number_electronshalf*2,number_electronshalf*2))
-
     """Create a macromolecule simply to fetch out the integrals"""
     mol_overlap=gto.Mole()
     mol_overlap.atom="""H 0 0 0; F 0 0 %f; H 0 0 0; F 0 0 %f"""%(base_pos,x)
@@ -49,15 +48,10 @@ for xindex in range(len(sample_vals)):
     mol_overlap.spin=0
     mol_overlap.build()
     overlap=mol_overlap.intor("int1e_ovlp")
-    print(overlap)
     overlap_matrix_of_AO_orbitals=overlap[:basisset_size,basisset_size:]
-    print(overlap_matrix_of_AO_orbitals)
-    sys.exit(1)
-    for i in range(number_electronshalf):
-        for j in range(0,number_electronshalf): #The S_matrix is NOT symmetric!!
-            matrix_element=np.einsum("ab,a,b->",overlap_matrix_of_AO_orbitals,expansion_coefficients_mol0[:,i],expansion_coefficients_mol1[:,j])
-            S_matrix[i,j]=matrix_element
+    S_matrix=np.einsum("ab,ai,bj->ij",overlap_matrix_of_AO_orbitals,expansion_coefficients_mol0,expansion_coefficients_mol1)
     overlap_values[xindex]=np.linalg.det(S_matrix)**2 #The power of 2 comes from the observation that we have alpha and beta spin; the S-matrix for both is block-diagonal, and as we're dealing with RHF, the blocks are identical, and we can
+
 def fitterino(x):
     return np.exp(1/(sample_vals[0]-base_pos)**2*np.log(overlap_values[0])*x**2)
 plt.plot(sample_vals-base_pos,overlap_values,label="real")

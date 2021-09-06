@@ -7,11 +7,11 @@ from eigenvectorcontinuation import generalized_eigenvector
 np.set_printoptions(linewidth=200,precision=2,suppress=True)
 
 
-basis_type="sto-3G"
+basis_type="cc-pVDZ"
 mol0=gto.Mole()
-pos_x0=1.5
-pos_x1=1.5
-pos_xc=1.5
+pos_x0=1.6
+pos_x1=1.6
+pos_xc=1.6
 mol0.atom="""H 0 0 0;F 0 0 %f"""%pos_x0 #take this as a "basis" assumption.
 mol0.basis=basis_type
 mol0.unit="Angstrom"
@@ -91,7 +91,6 @@ print("Energy from approach 2: %f"%toteng)
 
 eri = mol_energy.intor('int2e',aosym="s1")
 relevant_eri=eri[basisset_size:2*basisset_size,2*basisset_size:,basisset_size:2*basisset_size,2*basisset_size:]
-np.einsum("ki,lj,kl->ij",expansion_coefficients_mol0,expansion_coefficients_mol1,energy_matrix)
 
 eri_MO_transformed=np.einsum("ka,lb,mi,nj,kmln->aibj",expansion_coefficients_mol0,expansion_coefficients_mol0,expansion_coefficients_mol1,expansion_coefficients_mol1,relevant_eri)
 MO_eri=eri_MO_transformed

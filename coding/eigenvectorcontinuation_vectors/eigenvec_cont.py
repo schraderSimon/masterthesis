@@ -44,7 +44,6 @@ def find_lowest_eigenvectors(matrix,xarr,num_levels=1,symmetric=False):
     """For each x in xarr, returns the lowest eigenvalue and eigenvector of a matrix function M(x)"""
     eigenvectors=np.zeros((len(xarr)*num_levels,matrix(0).shape[0])) #
     eigenvalues=np.zeros(len(xarr)*num_levels)
-    print(num_levels)
     for index,x in enumerate(xarr):
         if symmetric:
             eigvals,eigvecs=np.linalg.eigh(matrix(x))
@@ -61,11 +60,7 @@ def find_lowest_eigenvectors(matrix,xarr,num_levels=1,symmetric=False):
         sol=eigvecs[:,:num_levels]#,:num_levels]
 
         sol_val=eigvals[:num_levels]
-        print(sol_val)
         eigenvalues[num_levels*index:num_levels*(index+1)]=sol_val
-        print(eigenvectors.shape)
-        print(sol.shape)
-        print(eigenvectors[2:4,:].shape)
         eigenvectors[num_levels*index:num_levels*(index+1),:]=sol.T
 
     return eigenvalues, eigenvectors

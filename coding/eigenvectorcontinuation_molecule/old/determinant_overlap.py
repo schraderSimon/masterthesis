@@ -3,10 +3,9 @@ import numpy as np
 from pyscf import gto, scf
 import pyscf
 import sys
-from eigenvectorcontinuation import generalized_eigenvector
 np.set_printoptions(linewidth=200)
 
-base_pos=0.8
+base_pos=1.3
 sample_vals=np.linspace(base_pos-0.3,base_pos+0.3,101)
 
 basis_type="STO-3G"

@@ -234,7 +234,6 @@ class eigvecsolver_UHF(eigvecsolver_RHF):
                 beta =self.basischange(self.HF_coefficients[i][1],mol_xc.intor("int1e_ovlp"))
                 new_HF_coefficients.append([alpha,beta])
             S,T=self.calculate_ST_matrices(mol_xc,new_HF_coefficients)
-            print(T)
             eigval,eigvec=generalized_eigenvector(T,S)
             energy_array[index]=eigval
             eigval_array.append(eigval)
@@ -336,7 +335,6 @@ def energy_curve_RHF(xvals,basis_type,molecule):
         mol1.unit='AU'
         mol1.spin=0 #Assume closed shell
         mol1.verbose=2
-        mol1.symmetry=True
         mol1.build()
         mf=scf.RHF(mol1)
         energy=mf.kernel()
@@ -352,7 +350,6 @@ def CC_energy_curve(xvals,basis_type,molecule):
         mol1.basis=basis_type
         mol1.unit='AU'
         mol1.spin=0 #Assume closed shell
-        mol1.symmetry=True
         mol1.build()
         mf=mol1.RHF().run(verbose=2) #Solve RHF equations to get overlap
         ccsolver=cc.CCSD(mf).run(verbose=2)
@@ -369,7 +366,6 @@ def FCI_energy_curve(xvals,basis_type,molecule):
         mol1.basis=basis_type
         mol1.unit='AU'
         mol1.spin=0 #Assume closed shell
-        mol1.symmetry=True
         mol1.build()
         mf=mol1.RHF().run(verbose=2) #Solve RHF equations to get overlap
         cisolver = fci.FCI(mol1, mf.mo_coeff)
@@ -382,7 +378,6 @@ def CASCI_energy_curve(xvals,basis_type,molecule):
     mol1.atom=molecule(x) #take this as a "basis" assumption.
     mol1.basis=basis_type
     mol1.unit='AU'
-    mol1.symmetry=True
     mol1.spin=0 #Assume closed shell
     myhf = mol.RHF().run()
     # Use MP2 natural orbitals to define the active space for the single-point CAS-CI calculation
@@ -397,7 +392,8 @@ if __name__=="__main__":
     sample_x=np.flip(np.array([2,2.5,3,3.5,4,4.5,5]))
     xc_array=np.linspace(1,6.0,21)
     molecule=lambda x: """N 0 0 0; N 0 0 %f"""%x
-    sample_x=np.linspace(0,4,9)
+    sample_x=np.linspace(0,4,17)
+    sample_x=np.roll(sample_x,1)
     xc_array=np.linspace(0,4,81)
     molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
     print("FCI")
@@ -405,7 +401,7 @@ if __name__=="__main__":
     print("CCSDT")
     energiesCC=CC_energy_curve(xc_array,basis,molecule=molecule)
 
-    for i in range(0,9,1):
+    for i in range(0,7,1):
         print("Eigvec (%d)"%(i+1))
         HF=eigvecsolver_RHF(sample_x[:i+1],basis,molecule=molecule)
         energiesEC,eigenvectors=HF.calculate_energies(xc_array)
@@ -427,8 +423,8 @@ if __name__=="__main__":
     plt.legend()
     plt.savefig("EC_UHF_itworks.png")
     plt.show()
-    plt.plot(xc_array,energiesEC-energiesCC,label="EC (max)-FCI")
+    plt.plot(xc_array,energiesEC-energiesCC,label="EC (max)-CCSDT")
     #plt.plot(xc_array,energiesCC-energiesCC,label="CC-CCSD(T)")
-    plt.plot(xc_array,energiesHF-energiesCC,label="RHF-FCI")
+    plt.plot(xc_array,energiesHF-energiesCC,label="RHF-CCSDT")
     plt.legend()
     plt.show()

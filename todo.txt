@@ -12,3 +12,16 @@
 - HF-theory is exact for non-interacting particles (more correctly speaking, HF-theory is exact for a system of non-repulsive electrons).
  --> from that point of view, the HF-solution attained for **very weak** electron-repulsions will be **very close** to the real energy.
  --> can we sample at 1% electron-repulsion, 2% electron repulsion, 5% electron repulsion --> 100% electron repulsion?
+
+10.Sept. - goals for next week
+0. Finish Michele's exercise. That should not take me more than one hour!
+1. Read evangelista (2011)
+2. Create energy curve for F-H with energy approach, as well as test energy approach (better)
+3. Systematize N2, HF, BeH2 insertions
+4. Make code more accessible, both in terms of readability, and speed
+5. Talk to Simen what he thinks
+6. Quantify the "3.rd" example, make some nice plots/animations here. Make the problem "accessible". 
+7. Prepare a presentation
+8. Read theory on (Unitary) Coupled Cluster; group theory, multiconfigurational methods
+9. TeX some of this (should do anyways if I want to meet Simen)
+10. If time - read complex analysis

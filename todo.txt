@@ -14,12 +14,13 @@
  --> can we sample at 1% electron-repulsion, 2% electron repulsion, 5% electron repulsion --> 100% electron repulsion?
 
 10.Sept. - goals for next week
-0. Finish Michele's exercise. That should not take me more than one hour!
-1. Read evangelista (2011)
-2. Create energy curve for F-H with energy approach, as well as test energy approach (better)
+0.5. Keep writing summer job article. This is important for you!!
+0.9. PRINT OUT THINGS FOR YOUR POLICE MEETING!!!!
 3. Systematize N2, HF, BeH2 insertions
 4. Make code more accessible, both in terms of readability, and speed
-5. Talk to Simen what he thinks
+5. Talk to Simen what he thinks. Show him results. Questions to ask:1. presentation. 2. how to continue. 3. simpler formula for determinant thingy /slash/ create MO orbitals. 4. Question regarding the two proofs. 
+1. Read evangelista (2011)
+
 6. Quantify the "3.rd" example, make some nice plots/animations here. Make the problem "accessible". 
 7. Prepare a presentation
 8. Read theory on (Unitary) Coupled Cluster; group theory, multiconfigurational methods

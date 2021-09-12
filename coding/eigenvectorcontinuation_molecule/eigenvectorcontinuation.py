@@ -5,8 +5,19 @@ def generalized_eigenvector(T,S,symmetric=True):
     "T: The symmetric matrix"
     "S: The overlap matrix"
     s, U=np.linalg.eigh(S)
+    """
     s=np.diag(s)
-    X=U@np.linalg.inv(np.sqrt(s))@U.T
+    X=U@np.linalg.inv(np.sqrt(s))
+    """
+    U=np.fliplr(U)
+    s=s[::-1]
+    s=s[s>1e-12]
+    s=s**(-0.5)
+    snew=np.zeros((len(U),len(s)))
+    sold=np.diag(s)
+    snew[:len(s),:]=sold
+    s=snew
+    X=U@s
     Tstrek=X.T@T@X
     if symmetric:
         epsilon, Cstrek = np.linalg.eigh(Tstrek)

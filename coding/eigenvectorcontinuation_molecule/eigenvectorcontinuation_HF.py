@@ -168,11 +168,11 @@ def CC_energy_curve(xvals,basis_type):
         energy=ccsolver.e_tot
         energies.append(energy)
     return np.array(energies)
-xvals=np.linspace(0.90,1.0,21) # 37
+xvals=np.linspace(0.90,1.0,33)
 energies_eigvec_sto3g=np.zeros(len(xvals))
 energies_eigvec_ccpVDZ=np.zeros(len(xvals))
 
-sample_x=np.linspace(0.93,0.97,5) # 9
+sample_x=np.linspace(0.93,0.97,17)
 H_eigvec_STO3G=np.zeros((len(sample_x),len(sample_x)))
 H_eigvec_ccpvdz=np.zeros((len(sample_x),len(sample_x)))
 
@@ -180,10 +180,10 @@ S_eigvec_STO3G=np.zeros((len(sample_x),len(sample_x)))
 S_eigvec_ccpvdz=np.zeros((len(sample_x),len(sample_x)))
 print("Calculate HF")
 energy_curve_STO3G=energy_curve(xvals,"STO-3G")
-#energy_curve_ccpVDZ=energy_curve(xvals,"6-31G")
+energy_curve_ccpVDZ=energy_curve(xvals,"6-31G")
 print("Calculate CC")
 energy_curve_STO3G_CC=CC_energy_curve(xvals,"STO-3G")
-#energy_curve_ccpVDZ_CC=CC_energy_curve(xvals,"6-31G")
+energy_curve_ccpVDZ_CC=CC_energy_curve(xvals,"6-31G")
 print("Calulate overlap")
 for i in range(len(sample_x)):
     for j in range(i,len(sample_x)):
@@ -199,27 +199,27 @@ for index,xc in enumerate(xvals):
     for i in range(len(sample_x)):
         for j in range(i,len(sample_x)):
             energy_STO3G=calculate_energy(sample_x[i],sample_x[j],xc,"sto-3G")
-            #energy_ccpvdz=calculate_energy(sample_x[i],sample_x[j],xc,"6-31G")
+            energy_ccpvdz=calculate_energy(sample_x[i],sample_x[j],xc,"6-31G")
             H_eigvec_STO3G[i,j]=energy_STO3G
             H_eigvec_STO3G[j,i]=energy_STO3G
-            #H_eigvec_ccpvdz[i,j]=energy_ccpvdz
-            #H_eigvec_ccpvdz[j,i]=energy_ccpvdz
+            H_eigvec_ccpvdz[i,j]=energy_ccpvdz
+            H_eigvec_ccpvdz[j,i]=energy_ccpvdz
     print(H_eigvec_STO3G)
     print(H_eigvec_ccpvdz)
     eigenval_STO3G,trash=generalized_eigenvector(H_eigvec_STO3G,S_eigvec_STO3G)
-    #eigenval_ccpvdz,trash=generalized_eigenvector(H_eigvec_ccpvdz,S_eigvec_ccpvdz)
+    eigenval_ccpvdz,trash=generalized_eigenvector(H_eigvec_ccpvdz,S_eigvec_ccpvdz)
     energies_eigvec_sto3g[index]=eigenval_STO3G
-    #energies_eigvec_ccpVDZ[index]=eigenval_ccpvdz
+    energies_eigvec_ccpVDZ[index]=eigenval_ccpvdz
 plt.xlabel("Distance from F to H [Angstrom]")
 plt.ylabel("Energy (Hartree)")
 for x in sample_x:
     plt.axvline(x,linestyle="--",color="grey",alpha=0.5)
 plt.plot(xvals,energy_curve_STO3G,label="HF, STO-3G")
-#plt.plot(xvals,energy_curve_ccpVDZ,label="HF, 6-31G")
+plt.plot(xvals,energy_curve_ccpVDZ,label="HF, 6-31G")
 plt.plot(xvals,energies_eigvec_sto3g,label="EC, STO-3G")
-#plt.plot(xvals,energies_eigvec_ccpVDZ,label="EC, 6-31G")
+plt.plot(xvals,energies_eigvec_ccpVDZ,label="EC, 6-31G")
 plt.plot(xvals,energy_curve_STO3G_CC,label="CCSD,STO-3G")
-#plt.plot(xvals,energy_curve_ccpVDZ_CC,label="CCSD,6-31G")
+plt.plot(xvals,energy_curve_ccpVDZ_CC,label="CCSD,6-31G")
 plt.legend()
 plt.savefig("Oof2.pdf")
 plt.show()

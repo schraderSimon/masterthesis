@@ -1,3 +1,8 @@
+"""
+Contains the functions to perform eigenvector continuation at a single molecular position R
+for a set of eigenfunctions that are centered around a position R, where the parameter $\lambda$ is the electron-electron repulsion.
+This can improve the RHF result, but does not seem to converge (close to) the full CI limit.
+"""
 import sys
 # insert at 1, 0 is the script path (or '' in REPL)
 sys.path.insert(1, '../eigenvectorcontinuation_molecule')
@@ -23,7 +28,7 @@ helium.incore_anyway=True
 print(mf._eri)
 mf.kernel()
 class eigvecsolver_RHF_coupling(eigvecsolver_RHF):
-    def __init__(self,sample_lambdas,sample_points,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0):
+    def __init__(self,sample_lambdas,sample_points,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0,symmetry=False):
         self.sample_positions=sample_points
         self.HF_coefficients=[] #The Hartree Fock coefficients solved at the sample points
         self.molecule=molecule
@@ -31,6 +36,7 @@ class eigvecsolver_RHF_coupling(eigvecsolver_RHF):
         self.spin=spin
         self.unit=unit
         self.charge=charge
+        self.symmetry=symmetry
         self.sample_points=sample_lambdas
     def solve_HF(self,sample_point):
         """Solve equations for different RHF's"""
@@ -63,7 +69,7 @@ class eigvecsolver_RHF_coupling(eigvecsolver_RHF):
                 eigval_array.append(eigval)
             return energy_array,eigval_array
 class eigvecsolver_UHF_coupling(eigvecsolver_UHF):
-    def __init__(self,sample_lambdas,sample_points,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0):
+    def __init__(self,sample_lambdas,sample_points,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0,symmetry=False):
         self.sample_positions=sample_points
         self.HF_coefficients=[] #The Hartree Fock coefficients solved at the sample points
         self.molecule=molecule
@@ -71,6 +77,7 @@ class eigvecsolver_UHF_coupling(eigvecsolver_UHF):
         self.spin=spin
         self.unit=unit
         self.charge=charge
+        self.symmetry=symmetry
         self.sample_points=sample_lambdas
     def solve_HF(self,sample_point):
         """Solve equations for different RHF's"""
@@ -126,28 +133,28 @@ def RHF_energy_e2strength(strengths,basis_type,molecule):
     return np.array(energies)
 if __name__=="__main__":
     fig, ax = plt.subplots(figsize=(10,10))
-    '''
+
     basis="6-31G"
     def molecule(x):
-        return "H 0 0 0; F 0 0 %f"%x
-    molecule_name="HydrogenFluoride"
-    xc_array=np.linspace(1,5,51)
+        return "F 0 0 0; F 0 0 %f"%x
+    molecule_name=r"$N_2$ Molecule"
+    xc_array=np.linspace(1,5,21)
     '''
     basis="6-31G*"
     molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
     molecule_name="BeH2"
     xc_array=np.linspace(0,4,41)
-
+    '''
     energies_HF=energy_curve_RHF(xc_array,basis,molecule=molecule)
-    sample_strengths=np.linspace(0.0,0.9,12)
-    for i in range(4,len(sample_strengths)+1):
+    sample_strengths=np.linspace(1,0,5)
+    for i in range(5,0,-1):
         print("Eigvec (%d)"%(i))
-        HF=eigvecsolver_RHF_coupling(sample_strengths[:i],xc_array,basis,molecule=molecule)
+        HF=eigvecsolver_RHF_coupling(sample_strengths[:i],xc_array,basis,molecule=molecule,symmetry=True)
         energiesEC,eigenvectors=HF.calculate_energies(xc_array)
         print(energiesEC)
         plt.plot(xc_array,energiesEC,label="EC (%d points), %s"%(i,basis))
     plt.plot(xc_array,energies_HF,label="RHF,%s"%basis)
-    plt.plot(xc_array,FCI_energy_curve(xc_array,basis,molecule=molecule),label="FCI,%s"%basis)
+    plt.plot(xc_array,CC_energy_curve(xc_array,basis,molecule=molecule),label="CCSD(T),%s"%basis)
 
     string=r"repulsion strengths $\in$["
     for xc in sample_strengths:

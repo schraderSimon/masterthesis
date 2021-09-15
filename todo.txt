@@ -18,11 +18,9 @@
 0.9. PRINT OUT THINGS FOR YOUR POLICE MEETING!!!!
 3. Systematize N2, HF, BeH2 insertions
 4. Make code more accessible, both in terms of readability, and speed
-5. Talk to Simen what he thinks. Show him results. Questions to ask:1. presentation. 2. how to continue. 3. simpler formula for determinant thingy /slash/ create MO orbitals. 4. Question regarding the two proofs. 
 1. Read evangelista (2011)
 
 6. Quantify the "3.rd" example, make some nice plots/animations here. Make the problem "accessible". 
 7. Prepare a presentation
 8. Read theory on (Unitary) Coupled Cluster; group theory, multiconfigurational methods
 9. TeX some of this (should do anyways if I want to meet Simen)
-10. If time - read complex analysis

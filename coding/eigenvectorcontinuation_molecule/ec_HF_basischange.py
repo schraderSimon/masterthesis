@@ -92,39 +92,6 @@ class eigvecsolver_RHF():
             energy_1e+=energy_contribution
         energy_1e*=2 #Beta spin part
         return energy_1e
-
-    def twobody_energy(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
-        MO_eri=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left,HF_coefficients_right,HF_coefficients_left,HF_coefficients_right))
-        energy_2e=0
-        number_electronshalf=self.number_electronshalf
-        large_S=np.zeros((self.number_electronshalf*2,self.number_electronshalf*2))
-        large_S[:self.number_electronshalf,:self.number_electronshalf]=determinant_matrix.copy()
-        large_S[self.number_electronshalf:,self.number_electronshalf:]=determinant_matrix.copy()
-        share_ignore=0
-        for k in range(number_electronshalf*2):
-            for l in range(k+1,number_electronshalf*2):
-                remcol = [k,l]
-                idxcol = list(set(range(number_electronshalf*2)).difference(remcol))
-
-                for a in range(number_electronshalf*2):
-                    for b in range(number_electronshalf*2):
-                        if(a==b):
-                            continue
-                        remrow = [a,b]
-                        idxrow = list(set(range(number_electronshalf*2)).difference(remrow))
-                        if(k<number_electronshalf and l<number_electronshalf and a < number_electronshalf and b< number_electronshalf):
-                            twobody=MO_eri[a,k,b,l]
-                        elif(k>=number_electronshalf and l>=number_electronshalf and a >= number_electronshalf and b>= number_electronshalf):
-                            twobody=MO_eri[a-number_electronshalf,k-number_electronshalf,b-number_electronshalf,l-number_electronshalf]
-                        elif(k<number_electronshalf and l>=number_electronshalf and a < number_electronshalf and b>= number_electronshalf):
-                            twobody=MO_eri[a,k,b-number_electronshalf,l-number_electronshalf]
-                        elif(k>=number_electronshalf and l<number_electronshalf and a >= number_electronshalf and b< number_electronshalf):
-                            twobody=MO_eri[a-number_electronshalf,k-number_electronshalf,b,l]
-                        else:
-                            continue
-                        if(abs(twobody)>1e-10):
-                            energy_2e+=(-1)**(k+l+a+b)*np.linalg.det(large_S[np.ix_(idxcol,idxrow)])*twobody
-        return energy_2e
     def twobody_energy(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
         MO_eri=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left,HF_coefficients_right,HF_coefficients_left,HF_coefficients_right))
         energy_2e=0
@@ -134,40 +101,124 @@ class eigvecsolver_RHF():
         large_S[self.number_electronshalf:,self.number_electronshalf:]=determinant_matrix.copy()
         for k in range(number_electronshalf*2):
             for l in range(k+1,number_electronshalf*2):
-                #largeS_2e=large_S.copy() #Do I really have to do this 16 times...?
-                #largeS_2e[:,k]=0
-                #largeS_2e[:,l]=0
-                remcol = [k,l]
-                idxcol = list(set(range(number_electronshalf*2)).difference(remcol))
+                largeS_2e=large_S.copy() #Do I really have to do this 16 times...?
+                largeS_2e[:,k]=0
                 for a in range(number_electronshalf*2):
                     for b in range(number_electronshalf*2):
-                        remrow = [a,b]
-                        idxrow = list(set(range(number_electronshalf*2)).difference(remrow))
-                        #matrix_of_interest=np.delete(np.delete(large_S,[k,l],1),[a,b],0)
-                        #matrix_of_interest=large_S[np.ix_(idxrow,idxcol)]
-                        determinant_tracker=(-1)**(a+b+k+l)
-                        if b<a:
-                            determinant_tracker*=(-1)
-
-                        #largeS_2e[:,k]=0
-                        #largeS_2e[:,l]=0
-                        #largeS_2e[a,k]=1
-                        #largeS_2e[b,l]=1
+                        largeS_2e[a,k]=1
+                        largeS_2e[b,l]=1
+                        largeS_2e[a-1,k]=0
+                        largeS_2e[b-1,l]=0
                         if(a==b):
                             continue #Determinant is zero in that case
                         if(k<number_electronshalf and l<number_electronshalf and a < number_electronshalf and b< number_electronshalf):
-                            twobody=MO_eri[a,k,b,l]
+                            eri_of_interest=MO_eri[a,k,b,l]
                         elif(k>=number_electronshalf and l>=number_electronshalf and a >= number_electronshalf and b>= number_electronshalf):
-                            twobody=MO_eri[a-number_electronshalf,k-number_electronshalf,b-number_electronshalf,l-number_electronshalf]
+                            eri_of_interest=MO_eri[a-number_electronshalf,k-number_electronshalf,b-number_electronshalf,l-number_electronshalf]
                         elif(k<number_electronshalf and l>=number_electronshalf and a < number_electronshalf and b>= number_electronshalf):
-                            twobody=MO_eri[a,k,b-number_electronshalf,l-number_electronshalf]
+                            eri_of_interest=MO_eri[a,k,b-number_electronshalf,l-number_electronshalf]
                         elif(k>=number_electronshalf and l<number_electronshalf and a >= number_electronshalf and b< number_electronshalf):
-                            twobody=MO_eri[a-number_electronshalf,k-number_electronshalf,b,l]
+                            eri_of_interest=MO_eri[a-number_electronshalf,k-number_electronshalf,b,l]
                         else:
                             continue
+                        if(abs(eri_of_interest)>1e-10):
+                            energy_2e+=np.linalg.det(largeS_2e)*eri_of_interest
+        return energy_2e
+    """
+    def twobody_energy_shit(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
+        MO_eri=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left,HF_coefficients_right,HF_coefficients_left,HF_coefficients_right))
+        energy_2e=0
+        number_electronshalf=self.number_electronshalf
+        large_S=np.zeros((self.number_electronshalf*2,self.number_electronshalf*2))
+        large_S[:self.number_electronshalf,:self.number_electronshalf]=determinant_matrix.copy()
+        large_S[self.number_electronshalf:,self.number_electronshalf:]=determinant_matrix.copy()
+        abiggerb=0
+        bbiggera=0
+        for k in range(number_electronshalf*2):
+            for l in range(k+1,number_electronshalf*2):
+                remcol = [k,l]
+                idxcol = list(set(range(number_electronshalf*2)).difference(remcol))
+                for a in range(number_electronshalf*2):
+                    for b in range(number_electronshalf*2):
+                        if(a==b):
+                            continue #Determinant is zero in that case
+
+                        remrow = [a,b]
+                        idxrow = list(set(range(number_electronshalf*2)).difference(remrow))
+                        determinant_tracker=(-1)**(a+b+k+l)
+                        if b<a:
+                            determinant_tracker*=(-1)
+                        if(a==b):
+                            continue #Determinant is zero in that case
+                        abkl=np.array([a,b,k,l])
+                        if(k<number_electronshalf and l<number_electronshalf and a < number_electronshalf and b< number_electronshalf):
+                            pass
+                        elif(k>=number_electronshalf and l>=number_electronshalf and a >= number_electronshalf and b>= number_electronshalf):
+                            abkl-=number_electronshalf
+                        elif(k<number_electronshalf and l>=number_electronshalf and a < number_electronshalf and b>= number_electronshalf):
+                            abkl[1]-=number_electronshalf
+                            abkl[3]-=number_electronshalf
+                        elif(k>=number_electronshalf and l<number_electronshalf and a >= number_electronshalf and b< number_electronshalf):
+                            abkl[0]-=number_electronshalf
+                            abkl[2]-=number_electronshalf
+                        else:
+                            continue
+                        twobody=MO_eri[abkl[0],abkl[2],abkl[1],abkl[3]]
+                        """
+                        if a>b:
+                            if(abs(np.linalg.det(large_S[np.ix_(idxrow,idxcol)])*determinant_tracker*twobody)>1e-10):
+                                print(a,b,k,l,abs(np.linalg.det(large_S[np.ix_(idxrow,idxcol)])*determinant_tracker*twobody))
+                            abiggerb+=abs(np.linalg.det(large_S[np.ix_(idxrow,idxcol)])*determinant_tracker*twobody)
+                        else:
+                            bbiggera+=abs(np.linalg.det(large_S[np.ix_(idxrow,idxcol)])*determinant_tracker*twobody)
+                        """
                         if(abs(twobody)>1e-10):
                             energy_2e+=np.linalg.det(large_S[np.ix_(idxrow,idxcol)])*determinant_tracker*twobody
+        #print("A bigger B: %f"%abiggerb)
+        #print("B bigger A: %f"%bbiggera)
         return energy_2e
+    def twobody_energy_bug(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
+        MO_eri=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left,HF_coefficients_right,HF_coefficients_left,HF_coefficients_right))
+        energy_2e=0
+        number_electronshalf=self.number_electronshalf
+        large_S=np.zeros((self.number_electronshalf*2,self.number_electronshalf*2))
+        large_S[:self.number_electronshalf,:self.number_electronshalf]=determinant_matrix.copy()
+        large_S[self.number_electronshalf:,self.number_electronshalf:]=determinant_matrix.copy()
+        abiggerb=0
+        bbiggera=0
+        for k in range(number_electronshalf*2):
+            for l in range(k+1,number_electronshalf*2):
+                remcol = [k,l]
+                idxcol = list(set(range(number_electronshalf*2)).difference(remcol))
+                for a in range(number_electronshalf*2):
+                    for b in range(a+1,number_electronshalf*2):
+                        remrow = [a,b]
+                        idxrow = list(set(range(number_electronshalf*2)).difference(remrow))
+                        determinant_tracker=(-1)**(a+b+k+l)
+                        abkl=np.array([a,b,k,l])
+                        if(k<number_electronshalf and l<number_electronshalf and a < number_electronshalf and b< number_electronshalf):
+                            pass
+                        elif(k>=number_electronshalf and l>=number_electronshalf and a >= number_electronshalf and b>= number_electronshalf):
+                            abkl-=number_electronshalf
+                        elif(k<number_electronshalf and l>=number_electronshalf and a < number_electronshalf and b>= number_electronshalf):
+                            abkl[1]-=number_electronshalf
+                            abkl[3]-=number_electronshalf
+                        elif(k>=number_electronshalf and l<number_electronshalf and a >= number_electronshalf and b< number_electronshalf):
+                            abkl[0]-=number_electronshalf
+                            abkl[2]-=number_electronshalf
+                        else:
+                            continue
+                        twobody=(MO_eri[abkl[0],abkl[2],abkl[1],abkl[3]]+MO_eri[abkl[1],abkl[2],abkl[0],abkl[3]])
+                        if(abs(MO_eri[abkl[1],abkl[2],abkl[0],abkl[3]]*np.linalg.det(large_S[np.ix_(idxrow,idxcol)])*determinant_tracker)>1e-10):
+                            print(a,b,k,l,abs(MO_eri[abkl[1],abkl[2],abkl[0],abkl[3]]*np.linalg.det(large_S[np.ix_(idxrow,idxcol)])*determinant_tracker))
+                        abiggerb+=abs(MO_eri[abkl[1],abkl[2],abkl[0],abkl[3]]*np.linalg.det(large_S[np.ix_(idxrow,idxcol)])*determinant_tracker)
+                        bbiggera+=abs(MO_eri[abkl[0],abkl[2],abkl[1],abkl[3]]*np.linalg.det(large_S[np.ix_(idxrow,idxcol)])*determinant_tracker)
+                        if(abs(twobody)>1e-10):
+                            energy_2e+=np.linalg.det(large_S[np.ix_(idxrow,idxcol)])*determinant_tracker*twobody
+        print("A bigger B: %f"%(abiggerb/8))
+        print("B bigger A: %f"%bbiggera)
+        return energy_2e
+    """
     def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
         number_electronshalf=self.number_electronshalf
         overlap_basis=mol_xc.intor("int1e_ovlp")
@@ -322,13 +373,17 @@ class eigvecsolver_UHF(eigvecsolver_RHF):
                         largeS_2e[a-1,k]=0
                         largeS_2e[b-1,l]=0
                         if(k<number_electronshalf and l<number_electronshalf and a < number_electronshalf and b< number_electronshalf): #alpha, alpha
-                            energy_2e+=np.linalg.det(largeS_2e)*eri_MO_aaaa[a,k,b,l]
+                            eri_of_interest=eri_MO_aaaa[a,k,b,l]
                         elif(k>=number_electronshalf and l>=number_electronshalf and a >= number_electronshalf and b>= number_electronshalf): #beta, beta
-                            energy_2e+=np.linalg.det(largeS_2e)*eri_MO_bbbb[a-number_electronshalf,k-number_electronshalf,b-number_electronshalf,l-number_electronshalf]
+                            eri_of_interest=eri_MO_bbbb[a-number_electronshalf,k-number_electronshalf,b-number_electronshalf,l-number_electronshalf]
                         elif(k<number_electronshalf and l>=number_electronshalf and a < number_electronshalf and b>= number_electronshalf):#alpha, beta
-                            energy_2e+=np.linalg.det(largeS_2e)*eri_MO_aabb[a,k,b-number_electronshalf,l-number_electronshalf]
-                        elif(k>=number_electronshalf and l<number_electronshalf and a >= number_electronshalf and b< number_electronshalf): #beta,alpha
-                            energy_2e+=np.linalg.det(largeS_2e)*eri_MO_bbaa[a-number_electronshalf,k-number_electronshalf,b,l]
+                            eri_of_interest=eri_MO_aabb[a,k,b-number_electronshalf,l-number_electronshalf]
+                        elif(k>=number_electronshalf and l<number_electronshalf and a >= number_electronshalf and b< number_electronshalf): #beta,alpha and b>= number_electronshalf):#alpha, beta
+                                eri_of_interest=eri_MO_bbaa[a-number_electronshalf,k-number_electronshalf,b,l]
+                        else:
+                            continue
+                        if(abs(eri_of_interest)>=1e-10):
+                            energy_2e+=np.linalg.det(largeS_2e)*eri_of_interest
         return energy_2e
 
 def energy_curve_UHF(xvals,basis_type,molecule):
@@ -416,10 +471,12 @@ def CASCI_energy_curve(xvals,basis_type,molecule):
     mycas = mcscf.CASCI(myhf, ncas, nelecas)
     energyies.append(mycas.kernel(natorbs))
 if __name__=="__main__":
+    from timeit import default_timer as timer
+
     plt.figure(figsize=(8,5))
     basis="cc-pVDZ"
     sample_x=np.linspace(1.5,2.5,3)
-    xc_array=np.linspace(1.5,2.5,11)
+    xc_array=np.linspace(1.2,5.0,39)
     molecule=lambda x: """F 0 0 0; H 0 0 %f"""%x
     molecule_name=r"Hydrogen Fluoride"
     '''
@@ -433,12 +490,14 @@ if __name__=="__main__":
     #energiesFCI=FCI_energy_curve(xc_array,basis,molecule=molecule)
     print("CCSDT")
     energiesCC=CC_energy_curve(xc_array,basis,molecule=molecule)
-
+    start=timer()
     for i in range(1,len(sample_x)+1,2):
         print("Eigvec (%d)"%(i))
         HF=eigvecsolver_RHF(sample_x[:i],basis,molecule=molecule,symmetry="coov")
         energiesEC,eigenvectors=HF.calculate_energies(xc_array)
         plt.plot(xc_array,energiesEC,label="EC (%d point(s)), %s"%(i,basis))
+    end=timer()
+    print("Time elapsed: %f"%(end-start))
     #In addition:"outliers":
     #HF=eigvecsolver_RHF([2.5,3],basis,molecule=molecule)
     #energiesEC,eigenvectors=HF.calculate_energies(xc_array)

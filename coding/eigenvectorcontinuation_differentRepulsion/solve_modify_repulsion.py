@@ -3,6 +3,11 @@ Contains the functions to perform eigenvector continuation at a single molecular
 for a set of eigenfunctions that are centered around a position R, where the parameter $\lambda$ is the electron-electron repulsion.
 This can improve the RHF result, but does not seem to converge (close to) the full CI limit.
 """
+import matplotlib
+font = {'family' : 'normal',
+        'weight' : 'bold',
+        'size'   : 14}
+
 import sys
 # insert at 1, 0 is the script path (or '' in REPL)
 sys.path.insert(1, '../eigenvectorcontinuation_molecule')
@@ -132,13 +137,13 @@ def RHF_energy_e2strength(strengths,basis_type,molecule):
         energies.append(energy)
     return np.array(energies)
 if __name__=="__main__":
-    fig, ax = plt.subplots(figsize=(10,10))
+    fig, ax = plt.subplots(figsize=(9,6))
 
-    basis="6-31G"
+    basis="cc-pVDZ"
     def molecule(x):
-        return "F 0 0 0; F 0 0 %f"%x
-    molecule_name=r"$N_2$ Molecule"
-    xc_array=np.linspace(1,5,21)
+        return "F 0 0 0; H 0 0 %f"%x
+    molecule_name=r"Hydrogen Fluoride"
+    xc_array=np.linspace(1.2,5,49)
     '''
     basis="6-31G*"
     molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
@@ -146,25 +151,30 @@ if __name__=="__main__":
     xc_array=np.linspace(0,4,41)
     '''
     energies_HF=energy_curve_RHF(xc_array,basis,molecule=molecule)
-    sample_strengths=np.linspace(1,0,5)
-    for i in range(5,0,-1):
+    sample_strengths=np.linspace(1,0,11)
+    additions=np.array([-0.1,1.1])
+    sample_strengths=np.concatenate((sample_strengths,additions))
+    for i in range(13,1,-3):
         print("Eigvec (%d)"%(i))
         HF=eigvecsolver_RHF_coupling(sample_strengths[:i],xc_array,basis,molecule=molecule,symmetry=True)
         energiesEC,eigenvectors=HF.calculate_energies(xc_array)
         print(energiesEC)
-        plt.plot(xc_array,energiesEC,label="EC (%d points), %s"%(i,basis))
-    plt.plot(xc_array,energies_HF,label="RHF,%s"%basis)
-    plt.plot(xc_array,CC_energy_curve(xc_array,basis,molecule=molecule),label="CCSD(T),%s"%basis)
+        ax.plot(xc_array,energiesEC,label="EC (%d points), %s"%(i,basis))
+    ax.plot(xc_array,energies_HF,label="RHF,%s"%basis)
+    ax.plot(xc_array,CC_energy_curve(xc_array,basis,molecule=molecule),label="CCSD(T),%s"%basis)
 
-    string=r"repulsion strengths $\in$["
+    string=r"c $\in$["
     for xc in sample_strengths:
-        string+="%.2f,"%xc
+        string+="%.1f,"%xc
+    string=string[:-1]
     string+="]"
-    plt.text(0.5, 0.9, string, horizontalalignment='center',verticalalignment='center', transform=ax.transAxes)
-    plt.title("Potential energy curve for %s"%molecule_name)
-    plt.xlabel("Molecular distance (Bohr)")
-    plt.ylabel("Energy (Hartree)")
+    ax.text(0.5, 0.9, string, horizontalalignment='center',verticalalignment='center', transform=ax.transAxes)
+    ax.set_title("Potential energy curve for %s"%molecule_name)
+    ax.set_xlabel("Atomic distance (Bohr)")
+    ax.set_ylabel("Energy (Hartree)")
+    ax.set_ylim([-100.3,-99.4])
+    plt.legend(loc="lower right")
+    plt.tight_layout()
 
-    plt.legend(loc="upper right")
-    plt.savefig("repulsion_%s.png"%molecule_name)
+    plt.savefig("repulsion_%s.pdf"%molecule_name)
     plt.show()

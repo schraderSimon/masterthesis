@@ -8,19 +8,17 @@ np.set_printoptions(linewidth=200,precision=4,suppress=True)
 
 from ec_HF_basischange import *
 ax,fig=plt.subplots(figsize=(10,10))
-
-basis="STO-3G"
-sample_x=np.linspace(1.5,1.6,2)
-xc_array=np.linspace(1.5,1.6,2)
-molecule=lambda x: """H 0 0 0; F 0 0 %f"""%x
-molecule_name="HF"
+basis="6-31G"
+sample_x=np.linspace(1.5,2.0,3)
+xc_array=np.linspace(1.2,3.0,10)
+molecule=lambda x: """F 0 0 0; H 0 0 %f"""%x
+molecule_name=r"Hydrogen Fluoride"
 energiesCC=CC_energy_curve(xc_array,basis,molecule=molecule)
-for i in range(1,3):
+for i in range(1,4):
     print("Eigvec (%d)"%(i))
-    HF=eigensolver_RCI(sample_x[:i],basis,molecule=molecule,symmetry="coov")
+    HF=eigvecsolver_UHF_singles(sample_x[:i],basis,molecule=molecule,symmetry="c2v")
     energiesEC,eigenvectors=HF.calculate_energies(xc_array)
     plt.plot(xc_array,energiesEC,label="EC (%d points), %s"%(i,basis))
-#In addition:"outliers":
 print("RHF")
 energiesHF=energy_curve_RHF(xc_array,basis,molecule=molecule)
 ymin=np.amin([energiesHF,energiesCC])

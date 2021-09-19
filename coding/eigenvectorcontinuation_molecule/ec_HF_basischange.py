@@ -1,10 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from numba import jit
+import numba as nb
 from pyscf import gto, scf, fci,cc,ao2mo, mp, mcscf
 import pyscf
 import sys
 import itertools
-from eigenvectorcontinuation import generalized_eigenvector
+from eigenvectorcontinuation import *
 np.set_printoptions(linewidth=200,precision=4,suppress=True)
 import matplotlib
 font = {'family' : 'normal',
@@ -92,8 +94,7 @@ class eigvecsolver_RHF():
             energy_1e+=energy_contribution
         energy_1e*=2 #Beta spin part
         return energy_1e
-    def twobody_energy_newnew()
-    def twobody_energy(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
+    def twobody_energy_old(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
         MO_eri=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left,HF_coefficients_right,HF_coefficients_left,HF_coefficients_right))
         energy_2e=0
         number_electronshalf=self.number_electronshalf
@@ -106,28 +107,50 @@ class eigvecsolver_RHF():
                 largeS_2e[:,k]=0
                 largeS_2e[:,l]=0
                 for a in range(number_electronshalf*2):
-                    for b in range(number_electronshalf*2):
+                    for b in range(a+1,number_electronshalf*2):
                         largeS_2e[a,k]=1
                         largeS_2e[b,l]=1
                         largeS_2e[a-1,k]=0
                         largeS_2e[b-1,l]=0
-                        if(a==b):
-                            continue #Determinant is zero in that case
+                        eri_of_interestl=0
+                        gright=0
+                        nh=number_electronshalf
                         if(k<number_electronshalf and l<number_electronshalf and a < number_electronshalf and b< number_electronshalf):
-                            eri_of_interest=MO_eri[a,k,b,l]
+                            eri_of_interestl=MO_eri[a,k,b,l]
                         elif(k>=number_electronshalf and l>=number_electronshalf and a >= number_electronshalf and b>= number_electronshalf):
-                            eri_of_interest=MO_eri[a-number_electronshalf,k-number_electronshalf,b-number_electronshalf,l-number_electronshalf]
+                            eri_of_interestl=MO_eri[a-number_electronshalf,k-number_electronshalf,b-number_electronshalf,l-number_electronshalf]
                         elif(k<number_electronshalf and l>=number_electronshalf and a < number_electronshalf and b>= number_electronshalf):
-                            eri_of_interest=MO_eri[a,k,b-number_electronshalf,l-number_electronshalf]
+                            eri_of_interestl=MO_eri[a,k,b-number_electronshalf,l-number_electronshalf]
                         elif(k>=number_electronshalf and l<number_electronshalf and a >= number_electronshalf and b< number_electronshalf):
-                            eri_of_interest=MO_eri[a-number_electronshalf,k-number_electronshalf,b,l]
-                        else:
-                            continue
+                            eri_of_interestl=MO_eri[a-number_electronshalf,k-number_electronshalf,b,l]
+                        if (a<nh and l< nh):
+                            if (b<nh and k< nh):
+                                gright=MO_eri[a,l,b,k]
+                            elif(b>=nh and k>= nh):
+                                gright=MO_eri[a,l,b-nh,k-nh]
+                        elif(a>=nh and l>=nh):
+                            if (b<nh and k< nh):
+                                gright=MO_eri[a-nh,l-nh,b,k]
+                            elif(b>=nh and k>= nh):
+                                gright=MO_eri[a-nh,l-nh,b-nh,k-nh]
+                        eri_of_interest=eri_of_interestl-gright
                         if(abs(eri_of_interest)>1e-10):
                             energy_2e+=np.linalg.det(largeS_2e)*eri_of_interest
         return energy_2e
+    def twobody_energy(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
+        MO_eri=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left,HF_coefficients_right,HF_coefficients_left,HF_coefficients_right))
+        energy_2e=0
+        n=self.number_electronshalf*2
+        nh=self.number_electronshalf
 
-    '''
+        large_S=np.zeros((n,n))
+        large_S[:nh,:nh]=determinant_matrix.copy()
+        large_S[nh:,nh:]=determinant_matrix.copy()
+
+        G_mat=get_antisymm_element(MO_eri,int(n))
+        second_adjugate=second_order_adj_matrix(large_S)
+        energy_2e=np.trace(dot_nb(second_adjugate,G_mat))
+        return energy_2e
     def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
         number_electronshalf=self.number_electronshalf
         overlap_basis=mol_xc.intor("int1e_ovlp")
@@ -564,8 +587,8 @@ if __name__=="__main__":
 
     plt.figure(figsize=(9,6))
     basis="cc-pVDZ"
-    sample_x=np.linspace(1.5,2.0,5)
-    xc_array=np.linspace(1.2,5.0,39)
+    sample_x=np.linspace(1.5,2.0,11)
+    xc_array=np.linspace(1.2,5.0,20)
     molecule=lambda x: """F 0 0 0; H 0 0 %f"""%x
     molecule_name=r"Hydrogen Fluoride"
     '''
@@ -606,7 +629,7 @@ if __name__=="__main__":
     plt.title("%s potential energy curve"%molecule_name)
     plt.legend(loc="lower right")
     plt.tight_layout()
-    plt.ylim([-100.3,-99.4])
+    #plt.ylim([-100.3,-99.4])
     plt.savefig("EC_RHF_%s.pdf"%molecule_name)
     plt.show()
     plt.plot(xc_array,energiesEC-energiesFCI,label="EC (max)-FCI")

@@ -23,4 +23,11 @@ at vi løser for mange punkter "i nærheten (veldig små \Delta x)" av en opprin
 --> Kan ta med negative verdier og verdier større enn 1!
 
 5. Sammenligne Eigenvector kontinuation med MH2. Her er det altså relevant å "løse" MP2(3...)-ligningene for forskjellige lambda og se hva dette blir. Spesielt se om det konvergerer greit utenfor lambda. Ikke påbegynt. For de ulike lambda: løse HF for ulike verdier av lambda (blir det i det hele tatt noen forbedring her...? Det må meg finne ut av!), eller inkludere singles (og doubles...) Her blir det også relevant å se på konvergensradiussen av perturbasjonsteori, dette krever riktignok FCI, men det blir i alle fall riktig!!
-6.
+
+
+Hva er det som skal inn i teori-delen?
+Jo:
+1. Hartree-Fock (grunnleggende)
+2. Eigenvector continuation
+3. Symmetrisk ortogonalisering
+

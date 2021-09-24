@@ -140,16 +140,17 @@ class eigvecsolver_RHF():
     def twobody_energy(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
         MO_eri=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left,HF_coefficients_right,HF_coefficients_left,HF_coefficients_right))
         energy_2e=0
-        n=self.number_electronshalf*2
+        n=int(self.number_electronshalf*2)
         nh=self.number_electronshalf
-
-        large_S=np.zeros((n,n))
-        large_S[:nh,:nh]=determinant_matrix.copy()
-        large_S[nh:,nh:]=determinant_matrix.copy()
-
-        G_mat=get_antisymm_element(MO_eri,int(n))
-        second_adjugate=second_order_adj_matrix(large_S)
-        energy_2e=np.trace(dot_nb(second_adjugate,G_mat))
+        len1=int(nh*(nh-1)/2)
+        len2=nh**2+len1
+        len3=int(nh*(nh-1)/2)+len2
+        #G_mat=get_antisymm_element(MO_eri,n)
+        #second_adjugate=second_order_adj_matrix_blockdiag(determinant_matrix,determinant_matrix)
+        #energy_2e=np.trace(dot_nb(G_mat,second_adjugate))
+        G1s,G2s,G3s=get_antisymm_element_separated(MO_eri,int(n))
+        M1s,M2s,M3s=second_order_adj_matrix_blockdiag_separated(determinant_matrix,determinant_matrix)
+        energy_2e=np.trace(dot_nb(M1s,G1s))+np.trace(dot_nb(M2s,G2s))+np.trace(dot_nb(M3s,G3s))
         return energy_2e
     def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
         number_electronshalf=self.number_electronshalf
@@ -586,6 +587,7 @@ if __name__=="__main__":
     from timeit import default_timer as timer
 
     plt.figure(figsize=(9,6))
+
     basis="cc-pVDZ"
     sample_x=np.linspace(1.5,2.0,11)
     xc_array=np.linspace(1.2,5.0,20)
@@ -594,8 +596,8 @@ if __name__=="__main__":
     '''
     basis="6-31G*"
     molecule_name="BeH2"
-    sample_x=np.linspace(0,4,5)
-    xc_array=np.linspace(0,4,41)
+    sample_x=np.linspace(0,2.5,151)
+    xc_array=np.linspace(3,4,11)
     molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
     '''
     print("FCI")
@@ -605,7 +607,7 @@ if __name__=="__main__":
     start=timer()
     for i in range(1,len(sample_x)+1,2):
         print("Eigvec (%d)"%(i))
-        HF=eigvecsolver_RHF(sample_x[:i],basis,molecule=molecule,symmetry="coov")
+        HF=eigvecsolver_RHF(sample_x[:i],basis,molecule=molecule,symmetry="C2v")
         energiesEC,eigenvectors=HF.calculate_energies(xc_array)
         plt.plot(xc_array,energiesEC,label="EC (%d point(s)), %s"%(i,basis))
     end=timer()
@@ -623,7 +625,7 @@ if __name__=="__main__":
     plt.plot(xc_array,energiesHF,label="RHF,%s"%basis)
     plt.plot(xc_array,energiesCC,label="CCSD(T),%s"%basis)
     #plt.plot(xc_array,energiesFCI,label="FCI,%s"%basis)
-    plt.plot(sample_x,energiesHF_sample,"o",color="black",label="Sample points")
+    #plt.plot(sample_x,energiesHF_sample,"o",color="black",label="Sample points")
     plt.xlabel("Atomic distance (Bohr)")
     plt.ylabel("Energy (Hartree)")
     plt.title("%s potential energy curve"%molecule_name)

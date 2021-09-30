@@ -2,7 +2,7 @@
     - implementeringen er ferdig og finnes i mappen "eigenvectorcontinuation_molecule" med eksempelnavn "eigenvectorcontinuation_HF.py".
     - Resultatene er konseptuelt klare (det funker dårlig), men det må skrives om i resultatdelen av masteravhandlingen - at det ikke funker, og hvorfor det ikke funker.
 
-3:Gammeldags metode for set av trial points, so translatere. (se hvordan energien blir for en infinitesimal forflytting) 
+3:Gammeldags metode for set av trial points, so translatere. (se hvordan energien blir for en infinitesimal forflytting)
  - Löse for veldig mange stokastiske x rundt referansegeometrien, forbedre ved referansegeometrien.
   --> saa translatere alle sammen
 
@@ -14,12 +14,13 @@ at vi løser for mange punkter "i nærheten (veldig små \Delta x)" av en opprin
 2. Implementering av eigenvector continuation for forskjellige avstander med samme basis (1-1 mapping a la Trygve):
     - Implementeringen er ferdig og finnes i mappen "eigenvectorcontinuation_molecule" med eksempelnavn "ec_HF_basischange.py".
     - Må skrives om i masteroppgave!!
-3. Fortsettelse av 2:Ta med singles (doubles...) og i praksis "utvide" basisen til CIS(D). Dette er prinspielt lett å implementere, men må gjøres. 
+    - Jeg må ta hensyn til hva som skjer hvis overlappet er lik 0.
+3. Fortsettelse av 2:Ta med singles (doubles...) og i praksis "utvide" basisen til CIS(D). Dette er prinspielt lett å implementere, men må gjøres.
 --> Her finnes det problemet med BeH2, dvs. jeg får ikke samme plottene som Simen.
 --> Her har jeg ikke laget flere eksempler, blir spennende å se på Nitrogen og BeH2.
 4. Jeg har i prinsippet implementert elektron-elektron-frastøtnings-lambdaen, og den fungerer konseptuelt bra (for HF, men ikke ved sterk multikonfigurasjon). Dette er i mappa /eigenvectorcontinuation_differentRepulsion/
 --> Må skrive om i masteroppgave
---> Må finne gode eksepler. 
+--> Må finne gode eksepler.
 --> Kan ta med negative verdier og verdier større enn 1!
 
 5. Sammenligne Eigenvector kontinuation med MH2. Her er det altså relevant å "løse" MP2(3...)-ligningene for forskjellige lambda og se hva dette blir. Spesielt se om det konvergerer greit utenfor lambda. Ikke påbegynt. For de ulike lambda: løse HF for ulike verdier av lambda (blir det i det hele tatt noen forbedring her...? Det må meg finne ut av!), eller inkludere singles (og doubles...) Her blir det også relevant å se på konvergensradiussen av perturbasjonsteori, dette krever riktignok FCI, men det blir i alle fall riktig!!
@@ -30,4 +31,3 @@ Jo:
 1. Hartree-Fock (grunnleggende)
 2. Eigenvector continuation
 3. Symmetrisk ortogonalisering
-

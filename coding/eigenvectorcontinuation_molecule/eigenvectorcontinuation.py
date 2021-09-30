@@ -3,10 +3,75 @@ from numpy import linalg
 from numba import jit
 import scipy
 import numba as nb
+from scipy.linalg import lu, qr
 def swap_cols(arr, frm, to): #Swap columns of a matrix
     arrny=arr.copy()
     arrny[:,[frm, to]] = arrny[:,[to, frm]]
     return arrny
+def LDU_decomp(X,threshold=1e-10):
+    """Implement the LDU decomposition of a square matrix X"""
+    L,R,P=qr(X,pivoting=True)
+    Pinverse=np.argsort(P)
+    d=np.diag(R) #Diagonal matrix
+    d[abs(d)<threshold]=0 #ignore that very part of the matrix
+    Rn=np.divide(R.T,d).T
+
+    Rn[np.isnan(Rn)]=0
+    Rn[np.isinf(Rn)]=0
+
+    #d=np.diag(d)
+    np.fill_diagonal(Rn,1)
+    X_permute=X[np.ix_(np.arange(X.shape[0]),P)]
+
+    print("old X")
+    print(X)
+    print("new X")
+    print((L@np.diag(d)@Rn)[np.ix_(np.arange(X.shape[0]),Pinverse)])
+    print("old d")
+    print(np.diag(d))
+    print("new d")
+    print(L.T@X_permute@np.linalg.inv(Rn))
+    print(Rn)
+    print(np.linalg.inv(Rn))
+    #print(scipy.linalg.pinv(Rn))
+    return L, d, Rn, P
+
+def biorthogonalize(X): #biorthogonalization of a generic matric X
+    permuted=False
+    R=np.eye(X.shape[1])
+    L=np.eye(X.shape[0])
+    Xopy=X.copy()
+    permutation_matrix=np.eye(X.shape[1])
+    for i in range(X.shape[0]): # For each row
+        R_i=np.eye(X.shape[1])
+        """
+        if abs(X[i,i])<=1e-10:
+            X[i,i]=0
+            for k in range(i,X.shape[0]):
+                if permuted:
+                    break
+                for l in range(i,X.shape[1]):
+                    if abs(X[k,l])>1e-10:
+                        rowvec=np.arange(X.shape[0]); rowvec[i]=k; rowvec[k]=i
+                        colvec=np.arange(X.shape[1]); colvec[i]=l; colvec[k]=l
+                        X=X[np.ix_(rowvec,colvec)]
+                        permutation_matrix=permutation_matrix[np.ix_(rowvec,colvec)]
+                        R=R[np.ix_(np.arange(X.shape[0]),colvec)]
+                        permuted=True
+                        break
+            if permuted is False: #We're done
+                break
+            permuted=False
+        """
+        for j in range(i+1,X.shape[1]): #For each column
+            R_i[i,j]=-Xopy[i,j]/Xopy[i,i]
+        Xopy=Xopy@R_i
+        R=(R@R_i)
+    print(Xopy)
+    print(R)
+    print(np.linalg.det(Xopy))
+    print(np.linalg.det(R))
+    print(Xopy@permutation_matrix@R)
 def generalized_eigenvector(T,S,symmetric=True):
     """Solves the generalized eigenvector problem.
 

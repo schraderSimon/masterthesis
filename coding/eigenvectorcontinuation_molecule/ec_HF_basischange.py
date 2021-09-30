@@ -6,6 +6,7 @@ from pyscf import gto, scf, fci,cc,ao2mo, mp, mcscf
 import pyscf
 import sys
 import itertools
+import scipy
 from eigenvectorcontinuation import *
 np.set_printoptions(linewidth=200,precision=2,suppress=True)
 import matplotlib
@@ -179,7 +180,7 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
     def getoverlap(self,determinant_matrix):
         overlap=np.linalg.det(determinant_matrix[0])*np.linalg.det(determinant_matrix[1]) #alpha part times beta part
         return overlap
-    def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
+    def calculate_ST_matrices_OLD(self,mol_xc,new_HF_coefficients):
         number_electronshalf=self.number_electronshalf
         neh=number_electronshalf
         overlap_basis=mol_xc.intor("int1e_ovlp")
@@ -189,11 +190,15 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
         number_matrix_elements=len(self.HF_coefficients)*(len(permutations))
         S=np.zeros((number_matrix_elements,number_matrix_elements))
         T=np.zeros((number_matrix_elements,number_matrix_elements))
+        e1_slbasis=[]
+        e2_slbasis=[]
         for i in range(len(self.HF_coefficients)):
             for j in range(len(permutations)):
                 for k in range(len(self.HF_coefficients)):
                     determinant_matrix_groundstate_alpha=self.getdeterminant_matrix(overlap_basis,new_HF_coefficients[i][:,:neh],new_HF_coefficients[k][:,:neh]) #The unmodified part
                     for l in range(len(permutations)):
+                        if(i*(len(permutations))+j>k*(len(permutations))+l):
+                            continue #Symmetry and stuff
                         if l==0 and j==0: #Both are non-excited states
                             determinant=self.getdeterminant_matrix(overlap_basis,new_HF_coefficients[i][:,:neh],new_HF_coefficients[k][:,:neh])
                             overlap=self.getoverlap([determinant,determinant])
@@ -209,7 +214,6 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
                             energy_total=energy_2e+energy_1e+nuc_repulsion_energy
                             T[i*(len(permutations))+j,k*(len(permutations))+l]=T[k*(len(permutations))+l,i*(len(permutations))+j]=energy_total
                             continue
-                        multiplicator=1
                         #1. Create excited state for the one excitation
                         #Groundstate_Left with groundstate_right (alpha,alpha)
                         GS_Left=new_HF_coefficients[i][:,:neh]
@@ -242,11 +246,10 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
                                 HF_coefficients_Right_1=[new_HF_coefficients[k][:,:neh],new_HF_coefficients[k][:,:neh]]
                                 HF_coefficients_Right_2=HF_coefficients_Right_1
                             overlap=(self.getoverlap(determinant_matrix_1)+self.getoverlap(determinant_matrix_2))*1/np.sqrt(2)
-                            S[i*(len(permutations))+j,k*(len(permutations))+l]=overlap
+                            S[k*(len(permutations))+l,i*(len(permutations))+j]=S[i*(len(permutations))+j,k*(len(permutations))+l]=overlap
                             nuc_repulsion_energy=mol_xc.energy_nuc()*overlap
                             energy_1e=self.onebody_energy(energy_basis_1e,HF_coefficients_Left_1,HF_coefficients_Right_1,determinant_matrix_1)
                             energy_2e=self.twobody_energy(energy_basis_2e,HF_coefficients_Left_1,HF_coefficients_Right_1,determinant_matrix_1)
-                            print(energy_1e-energy_2e)
                             energy_1e+=self.onebody_energy(energy_basis_1e,HF_coefficients_Left_2,HF_coefficients_Right_2,determinant_matrix_2)
 
                             energy_2e+=self.twobody_energy(energy_basis_2e,HF_coefficients_Left_2,HF_coefficients_Right_2,determinant_matrix_2)
@@ -265,69 +268,186 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
                             HF_coefficients_Right_1=[right_GS,right_ES]
                             HF_coefficients_Right_2=[right_ES,right_GS]
                             overlap=self.getoverlap(determinant_matrix_1)+self.getoverlap(determinant_matrix_2)
-                            S[i*(len(permutations))+j,k*(len(permutations))+l]=overlap
+                            S[k*(len(permutations))+l,i*(len(permutations))+j]=S[i*(len(permutations))+j,k*(len(permutations))+l]=overlap
                             nuc_repulsion_energy=mol_xc.energy_nuc()*overlap
                             energy_1e=self.onebody_energy(energy_basis_1e,HF_coefficients_Left_1,HF_coefficients_Right_1,determinant_matrix_1)
                             energy_1e+=self.onebody_energy(energy_basis_1e,HF_coefficients_Left_2,HF_coefficients_Right_2,determinant_matrix_2)
                             energy_2e=self.twobody_energy(energy_basis_2e,HF_coefficients_Left_1,HF_coefficients_Right_1,determinant_matrix_1)
                             energy_2e+=self.twobody_energy(energy_basis_2e,HF_coefficients_Left_2,HF_coefficients_Right_2,determinant_matrix_2)
                             energy_total=energy_2e+energy_1e+nuc_repulsion_energy
+                        T[i*(len(permutations))+j,k*(len(permutations))+l]=T[k*(len(permutations))+l,i*(len(permutations))+j]=energy_total#=T[k*(len(permutations))+l,i*(len(permutations))+j]=energy_total
 
-                        #Calculate overlap of CAS...
-                        T[i*(len(permutations))+j,k*(len(permutations))+l]=energy_total#=T[k*(len(permutations))+l,i*(len(permutations))+j]=energy_total
-                        if(i==0 and j==0 and k==0 and l==1):
-                            pass
-                            #print(T[i*(len(permutations))+j,k*(len(permutations))+l])
-                            #sys.exit(1)
-
-        print(S)
-        print(T)
+            print("i=%d,k=%d"%(i,k))
 
         #S is diagonal, hence:
+        #assert np.all(np.abs(S-S.T)<1e-10)
+        #assert np.all(np.abs(T-T.T)<1e-10)
         return S,T
-    def onebody_energy(self,energy_basis_1e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
+    def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
         number_electronshalf=self.number_electronshalf
-        Hamiltonian_SLbasis_alpha=np.einsum("ki,lj,kl->ij",HF_coefficients_left[0],HF_coefficients_right[0],energy_basis_1e) #Hamilton operator in Slater determinant basis
-        Hamiltonian_SLbasis_beta=np.einsum("ki,lj,kl->ij",HF_coefficients_left[1],HF_coefficients_right[1],energy_basis_1e) #Hamilton operator in Slater determinant basis
+        neh=number_electronshalf
+        overlap_basis=mol_xc.intor("int1e_ovlp")
+        energy_basis_1e=mol_xc.intor("int1e_kin")+mol_xc.intor("int1e_nuc")
+        energy_basis_2e=mol_xc.intor('int2e',aosym="s1")
+        permutations=self.create_singles(new_HF_coefficients)
+        number_matrix_elements=len(self.HF_coefficients)*(len(permutations))
+        S=np.zeros((number_matrix_elements,number_matrix_elements))
+        T=np.zeros((number_matrix_elements,number_matrix_elements))
+        e1_slbasis=[]
+        e2_slbasis=[]
+
+        """Find the 1 and 2 electron integrals in the extended basis"""
+        for i in range(len(self.HF_coefficients)):
+            temp_1=[]
+            temp_2=[]
+            for k in range(len(self.HF_coefficients)):
+                temp_1.append(np.einsum("ki,lj,kl->ij",new_HF_coefficients[i],new_HF_coefficients[k],energy_basis_1e))
+                basis=ao2mo.get_mo_eri(energy_basis_2e,(new_HF_coefficients[i],new_HF_coefficients[k],new_HF_coefficients[i],new_HF_coefficients[k]),aosym="s1")
+                temp_2.append(basis)
+            e1_slbasis.append(temp_1)
+            e2_slbasis.append(temp_2)
+        len_permutations=len(permutations)
+        for c1 in range(number_matrix_elements):
+            i=c1//len_permutations
+            j=c1%len_permutations
+            for c2 in range(c1,number_matrix_elements):
+                determinant_matrix_groundstate_alpha=self.getdeterminant_matrix(overlap_basis,new_HF_coefficients[i][:,:neh],new_HF_coefficients[k][:,:neh]) #The unmodified part
+                k=c2//len_permutations
+                l=c2%len_permutations
+                energy_1e=0
+                energy_2e=0
+                if l==0 and j==0: #Both are non-excited states
+                    determinant=self.getdeterminant_matrix(overlap_basis,new_HF_coefficients[i][:,:neh],new_HF_coefficients[k][:,:neh])
+                    overlap=self.getoverlap([determinant,determinant])
+                    [pl,pr],[nana,nene]=self.getpermutations(permutations,(0,j),(0,l),(0,0),(0,0)) #No permutations are performed, this is to work with the functions
+                    energy_1e=self.onebody_energy([determinant,determinant],e1_slbasis[i][k],pl,pr)
+                    energy_2e=self.twobody_energy([determinant,determinant],e2_slbasis[i][k],pl,pr)
+
+                    S[c1,c2]=S[c2,c1]=overlap
+                    #Calculate energy of CAS.
+                    nuc_repulsion_energy=mol_xc.energy_nuc()*overlap
+                    energy_total=energy_2e+energy_1e+nuc_repulsion_energy
+                    T[c1,c2]=T[c2,c1]=energy_total
+                    continue
+                GS_Left=new_HF_coefficients[i][:,:neh]
+                GS_Right=new_HF_coefficients[k][:,:neh]
+                ES_Left=swap_cols(new_HF_coefficients[i],permutations[j][0],permutations[j][1])[:,:neh]
+                ES_Right=swap_cols(new_HF_coefficients[k],permutations[l][0],permutations[l][1])[:,:neh]
+                determinant_matrix_GS_GS=self.getdeterminant_matrix(overlap_basis,GS_Left,GS_Right) #The unmodified part
+                determinant_matrix_EX_EX=self.getdeterminant_matrix(overlap_basis,ES_Left,ES_Right)
+                determinant_matrix_GS_EX=self.getdeterminant_matrix(overlap_basis,GS_Left,ES_Right) #The unmodified part
+                determinant_matrix_EX_GS=self.getdeterminant_matrix(overlap_basis,ES_Left,GS_Right)
+                if j==0: #Left state is ground state
+                    multiplier=1/np.sqrt(2)
+                    determinant_matrix_1=[determinant_matrix_GS_GS,determinant_matrix_GS_EX]
+                    determinant_matrix_2=[determinant_matrix_GS_EX,determinant_matrix_GS_GS]
+                    permutations_loc=self.getpermutations(permutations,(0,j),(0,l),(j,0),(l,0))
+                elif l==0: #Right state is ground state
+                    multiplier=1/np.sqrt(2)
+                    determinant_matrix_1=[determinant_matrix_GS_GS,determinant_matrix_EX_GS]
+                    determinant_matrix_2=[determinant_matrix_EX_GS,determinant_matrix_GS_GS]
+                    permutations_loc=self.getpermutations(permutations,(0,j),(0,l),(j,0),(l,0))
+                else:
+                    multiplier=1
+                    determinant_matrix_1=[determinant_matrix_GS_GS,determinant_matrix_EX_EX]
+                    determinant_matrix_2=[determinant_matrix_GS_EX,determinant_matrix_EX_GS]
+                    permutations_loc=self.getpermutations(permutations,(0,j),(0,l),(0,j),(l,0))
+
+                determinant_matrix=[determinant_matrix_1,determinant_matrix_2]
+                overlap=(self.getoverlap(determinant_matrix_1)+self.getoverlap(determinant_matrix_2))*multiplier
+                S[c2,c1]=S[c1,c2]=overlap
+                nuc_repulsion_energy=mol_xc.energy_nuc()*overlap/multiplier
+
+                for ind,(pl, pr) in enumerate(permutations_loc):
+                    energy_1e+=self.onebody_energy(determinant_matrix[ind],e1_slbasis[i][k],pl,pr)
+                    energy_2e+=self.twobody_energy(determinant_matrix[ind],e2_slbasis[i][k],pl,pr)
+                energy_total=(energy_2e+energy_1e+nuc_repulsion_energy)*multiplier
+                T[c1,c2]=T[c2,c1]=energy_total#=T[k*(len(permutations))+l,c1]=energy_total
+        return S,T
+    def getpermutations(self,permutations,l1,r1,l2,r2):
+        permutations_left_1=[permutations[l1[0]],permutations[l1[1]]]
+        permutations_right_1=[permutations[r1[0]],permutations[r1[1]]]
+        permutations_left_2=[permutations[l2[0]],permutations[l2[1]]]
+        permutations_right_2=[permutations[r2[0]],permutations[r2[1]]]
+        return [[permutations_left_1,permutations_right_1],[permutations_left_2,permutations_right_2]]
+    def onebody_energy(self,determinant_matrix,SLbasis,permutations_left,permutations_right):
+        """Unlike the previous method, the left and right coefficients are now the WHOLE set (occ+unocc). The SLbasis is also the whole (for the corresponding system). The permutations contain all information
+        about the construction of the coefficients.
+        """
+        neh=self.number_electronshalf
+        electrons_basis=np.arange(neh)
+        electrons_alpha_left=np.where(electrons_basis==permutations_left[0][0],permutations_left[0][1],electrons_basis)
+        electrons_beta_left=np.where(electrons_basis==permutations_left[1][0],permutations_left[1][1],electrons_basis)
+        electrons_alpha_right=np.where(electrons_basis==permutations_right[0][0],permutations_right[0][1],electrons_basis)
+        electrons_beta_right=np.where(electrons_basis==permutations_right[1][0],permutations_right[1][1],electrons_basis)
+        Hamiltonian_SLbasis_alpha=SLbasis[np.ix_(electrons_alpha_left,electrons_alpha_right)]
+        Hamiltonian_SLbasis_beta=SLbasis[np.ix_(electrons_beta_left,electrons_beta_right)]
         energy_1e=0
         determinant_matrix_alpha=determinant_matrix[0]
         determinant_matrix_beta=determinant_matrix[1]
-        for k in range(number_electronshalf):
+        for k in range(neh):
             determinant_matrix_energy_alpha=determinant_matrix_alpha.copy() #Re-initiate Energy matrix
-            for l in range(number_electronshalf):
+            for l in range(neh):
                     determinant_matrix_energy_alpha[l,k]=Hamiltonian_SLbasis_alpha[l,k]
             energy_contribution=np.linalg.det(determinant_matrix_energy_alpha)*np.linalg.det(determinant_matrix_beta)
             energy_1e+=energy_contribution
-        for k in range(number_electronshalf):
+        for k in range(neh):
             determinant_matrix_energy_beta=determinant_matrix_beta.copy() #Re-initiate Energy matrix
-            for l in range(number_electronshalf):
+            for l in range(neh):
                     determinant_matrix_energy_beta[l,k]=Hamiltonian_SLbasis_beta[l,k]
             energy_contribution=np.linalg.det(determinant_matrix_energy_beta)*np.linalg.det(determinant_matrix_alpha)
             energy_1e+=energy_contribution
         return energy_1e
-    def twobody_energy_old(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
-        eri_MO_aabb=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left[0],HF_coefficients_right[0],HF_coefficients_left[1],HF_coefficients_right[1]),aosym="s1")
-        eri_MO_aaaa=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left[0],HF_coefficients_right[0],HF_coefficients_left[0],HF_coefficients_right[0]),aosym="s1")
-        eri_MO_bbbb=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left[1],HF_coefficients_right[1],HF_coefficients_left[1],HF_coefficients_right[1]),aosym="s1")
-
+    def twobody_energy(self,determinant_matrix,eribasis,permutations_left,permutations_right):
+        La,da,Ra,Pa=LDU_decomp(determinant_matrix[0]) #Alpha LdR decomposition
+        Lb,db,Rb,Pb=LDU_decomp(determinant_matrix[1]) #Beta LdR decomposition
+        neh=self.number_electronshalf
+        num_singularities=len(da[np.abs(da)<1e-10])+len(db[np.abs(db)<1e-10])
+        if num_singularities>=3:
+            return 0
+        if num_singularities==2:
+            L=scipy.linalg.block_diag(La,Lb)
+            R=scipy.linalg.block_diag(Ra,Rb)
+            L2=second_order_compound(L)
+            R2=second_order_compound(R)
+            dval=np.prod(da[np.abs(da)<1e-10])*np.prod(db[np.abs(db)<1e-10])
+            adjumat=L2[:,-1]@R2[-1,:]*dval
+        if num_singularities==1:
+            pass
+        else:
+        neh=self.number_electronshalf
+        electrons_basis=np.arange(neh)
+        electrons_alpha_left=np.where(electrons_basis==permutations_left[0][0],permutations_left[0][1],electrons_basis)
+        electrons_beta_left=np.where(electrons_basis==permutations_left[1][0],permutations_left[1][1],electrons_basis)
+        electrons_alpha_right=np.where(electrons_basis==permutations_right[0][0],permutations_right[0][1],electrons_basis)
+        electrons_beta_right=np.where(electrons_basis==permutations_right[1][0],permutations_right[1][1],electrons_basis)
+        eri_MO_aaaa=eribasis[np.ix_(electrons_alpha_left,electrons_alpha_right,electrons_alpha_left,electrons_alpha_right)]
+        eri_MO_aabb=eribasis[np.ix_(electrons_alpha_left,electrons_alpha_right,electrons_beta_left,electrons_beta_right)]
+        eri_MO_bbbb=eribasis[np.ix_(electrons_beta_left,electrons_beta_right,electrons_beta_left,electrons_beta_right)]
         energy_2e=0
         n=int(self.number_electronshalf*2)
         nh=self.number_electronshalf
-        G1s,G2s,G3s=get_antisymm_element_separated(eri_MO_aaaa,eri_MO_bbbb,eri_MO_aabb,int(n))
+        G1s,G2s,G3s=get_antisymm_element_separated(eri_MO_aaaa,eri_MO_bbbb,eri_MO_aabb,n)
         M1s,M2s,M3s=second_order_adj_matrix_blockdiag_separated(determinant_matrix[0],determinant_matrix[1])
         energy_2e=np.trace(dot_nb(M1s,G1s))+np.trace(dot_nb(M2s,G2s))+np.trace(dot_nb(M3s,G3s))
         return energy_2e
-    def twobody_energy(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
-        eri_MO_aabb=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left[0],HF_coefficients_right[0],HF_coefficients_left[1],HF_coefficients_right[1]),aosym="s1")
-        eri_MO_bbaa=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left[1],HF_coefficients_right[1],HF_coefficients_left[0],HF_coefficients_right[0]),aosym="s1")
-        eri_MO_aaaa=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left[0],HF_coefficients_right[0],HF_coefficients_left[0],HF_coefficients_right[0]),aosym="s1")
-        eri_MO_bbbb=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left[1],HF_coefficients_right[1],HF_coefficients_left[1],HF_coefficients_right[1]),aosym="s1")
+    def twobody_energy_alt(self,determinant_matrix,eribasis,permutations_left,permutations_right):
+        neh=self.number_electronshalf
+        electrons_basis=np.arange(neh)
+        electrons_alpha_left=np.where(electrons_basis==permutations_left[0][0],permutations_left[0][1],electrons_basis)
+        electrons_beta_left=np.where(electrons_basis==permutations_left[1][0],permutations_left[1][1],electrons_basis)
+        electrons_alpha_right=np.where(electrons_basis==permutations_right[0][0],permutations_right[0][1],electrons_basis)
+        electrons_beta_right=np.where(electrons_basis==permutations_right[1][0],permutations_right[1][1],electrons_basis)
+        eri_MO_aaaa=eribasis[np.ix_(electrons_alpha_left,electrons_alpha_right,electrons_alpha_left,electrons_alpha_right)]
+        eri_MO_aabb=eribasis[np.ix_(electrons_alpha_left,electrons_alpha_right,electrons_beta_left,electrons_beta_right)]
+        eri_MO_bbbb=eribasis[np.ix_(electrons_beta_left,electrons_beta_right,electrons_beta_left,electrons_beta_right)]
+        eri_MO_bbaa=eribasis[np.ix_(electrons_beta_left,electrons_beta_right,electrons_alpha_left,electrons_alpha_right)]
         energy_2e=0
         determinant_matrix_alpha=determinant_matrix[0]
         determinant_matrix_beta=determinant_matrix[1]
         number_electronshalf=self.number_electronshalf
-        number_electrons_alpha=len(HF_coefficients_left[0][0,:])
-        number_electrons_beta=len(HF_coefficients_left[1][0,:])
+        number_electrons_alpha=len(electrons_alpha_left)
+        number_electrons_beta=len(electrons_beta_left)
         large_S=np.zeros((number_electronshalf*2,number_electronshalf*2))
         large_S[:number_electrons_alpha,:number_electrons_alpha]=determinant_matrix_alpha.copy()
         large_S[number_electrons_alpha:,number_electrons_alpha:]=determinant_matrix_beta.copy()
@@ -355,6 +475,7 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
                         if(abs(eri_of_interest)>=1e-10):
                             energy_2e+=np.linalg.det(largeS_2e)*eri_of_interest
         return energy_2e
+
 class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
     def __init__(self,sample_coefficients,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0,symmetry=False):
         """Initiate the solver.
@@ -365,7 +486,6 @@ class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
         basis_type - atomic basis
         molecule - A function f(x), returning the molecule as function of x
         """
-        self.HF_coefficients=[] #The Hartree Fock coefficients solved at the sample points
         self.molecule=molecule
         self.basis_type=basis_type
         self.spin=spin

@@ -10,7 +10,7 @@ from ec_HF_basischange import *
 
 basis="6-31G"
 sample_x=np.linspace(1.5,2.0,3)
-xc_array=np.linspace(1.5,3.0,10)
+xc_array=np.linspace(1.5,5.0,10)
 molecule=lambda x: """H 0 0 0; F 0 0 %f"""%x
 molecule_name=r"Hydrogen Fluoride"
 '''

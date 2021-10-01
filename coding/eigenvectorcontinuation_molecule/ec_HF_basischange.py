@@ -363,6 +363,7 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
                     energy_2e+=self.twobody_energy(determinant_matrix[ind],e2_slbasis[i][k],pl,pr)
                 energy_total=(energy_2e+energy_1e+nuc_repulsion_energy)*multiplier
                 T[c1,c2]=T[c2,c1]=energy_total#=T[k*(len(permutations))+l,c1]=energy_total
+        print("Done one")
         return S,T
     def getpermutations(self,permutations,l1,r1,l2,r2):
         permutations_left_1=[permutations[l1[0]],permutations[l1[1]]]
@@ -399,23 +400,21 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
             energy_1e+=energy_contribution
         return energy_1e
     def twobody_energy(self,determinant_matrix,eribasis,permutations_left,permutations_right):
-        La,da,Ra,Pa=LDU_decomp(determinant_matrix[0]) #Alpha LdR decomposition
-        Lb,db,Rb,Pb=LDU_decomp(determinant_matrix[1]) #Beta LdR decomposition
+        #return self.twobody_energy_alt(determinant_matrix,eribasis,permutations_left,permutations_right)
+        threshold=1e-16
+        La,da,Ra,Pa=LDU_decomp(determinant_matrix[0],threshold=threshold) #Alpha LdR decomposition
+        Lb,db,Rb,Pb=LDU_decomp(determinant_matrix[1],threshold=threshold) #Beta LdR decomposition
         neh=self.number_electronshalf
-        num_singularities=len(da[np.abs(da)<1e-10])+len(db[np.abs(db)<1e-10])
+        num_singularities_left=len(da[np.abs(da)<threshold])
+        num_singularities_right=len(db[np.abs(db)<threshold])
+        num_singularities=num_singularities_left+num_singularities_right
         if num_singularities>=3:
             return 0
-        if num_singularities==2:
-            L=scipy.linalg.block_diag(La,Lb)
-            R=scipy.linalg.block_diag(Ra,Rb)
-            L2=second_order_compound(L)
-            R2=second_order_compound(R)
-            dval=np.prod(da[np.abs(da)<1e-10])*np.prod(db[np.abs(db)<1e-10])
-            adjumat=L2[:,-1]@R2[-1,:]*dval
-        if num_singularities==1:
-            pass
-        else:
+        if num_singularities==2: #This is the one that causes speed bottlenecks... Bitch! And I think also the one that causes problems
+            energy_2e=self.twobody_energy_alt(determinant_matrix,eribasis,permutations_left,permutations_right)
         neh=self.number_electronshalf
+        n=int(self.number_electronshalf*2)
+        nh=self.number_electronshalf
         electrons_basis=np.arange(neh)
         electrons_alpha_left=np.where(electrons_basis==permutations_left[0][0],permutations_left[0][1],electrons_basis)
         electrons_beta_left=np.where(electrons_basis==permutations_left[1][0],permutations_left[1][1],electrons_basis)
@@ -423,13 +422,43 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
         electrons_beta_right=np.where(electrons_basis==permutations_right[1][0],permutations_right[1][1],electrons_basis)
         eri_MO_aaaa=eribasis[np.ix_(electrons_alpha_left,electrons_alpha_right,electrons_alpha_left,electrons_alpha_right)]
         eri_MO_aabb=eribasis[np.ix_(electrons_alpha_left,electrons_alpha_right,electrons_beta_left,electrons_beta_right)]
+        #eri_MO_bbaa=eribasis[np.ix_(electrons_beta_left,electrons_beta_right,electrons_alpha_left,electrons_alpha_right)]
         eri_MO_bbbb=eribasis[np.ix_(electrons_beta_left,electrons_beta_right,electrons_beta_left,electrons_beta_right)]
         energy_2e=0
-        n=int(self.number_electronshalf*2)
-        nh=self.number_electronshalf
-        G1s,G2s,G3s=get_antisymm_element_separated(eri_MO_aaaa,eri_MO_bbbb,eri_MO_aabb,n)
-        M1s,M2s,M3s=second_order_adj_matrix_blockdiag_separated(determinant_matrix[0],determinant_matrix[1])
-        energy_2e=np.trace(dot_nb(M1s,G1s))+np.trace(dot_nb(M2s,G2s))+np.trace(dot_nb(M3s,G3s))
+
+
+
+        if num_singularities==1: #This one is definitely wrong somehow lol
+            if num_singularities_left==1: #Left matrix is "almost non-invertible"
+                nonzero_row,nonzero_col=cofactor_index(determinant_matrix[0])
+                determinant_0_new=determinant_matrix[0].copy()
+                determinant_0_new[nonzero_row,nonzero_col]=determinant_0_new[nonzero_row,nonzero_col]+1
+                M1_1,M2_1,M3_1=second_order_adj_matrix_blockdiag_separated(determinant_0_new,determinant_matrix[1])
+                determinant_0_new[nonzero_row,nonzero_col]=determinant_0_new[nonzero_row,nonzero_col]-2
+                M1_2,M2_2,M3_2=second_order_adj_matrix_blockdiag_separated(determinant_0_new,determinant_matrix[1])
+                M1s=0.5*(M1_1+M1_2)
+                M2s=0.5*(M2_1+M2_2)
+                M3s=0.5*(M3_1+M3_2)
+            elif num_singularities_right==1:
+                nonzero_row,nonzero_col=cofactor_index(determinant_matrix[1])
+                determinant_1_new=determinant_matrix[1].copy()
+                determinant_1_new[nonzero_row,nonzero_col]=determinant_1_new[nonzero_row,nonzero_col]+1
+                M1_1,M2_1,M3_1=second_order_adj_matrix_blockdiag_separated(determinant_matrix[0],determinant_1_new)
+                determinant_1_new[nonzero_row,nonzero_col]=determinant_1_new[nonzero_row,nonzero_col]-2
+                M1_2,M2_2,M3_2=second_order_adj_matrix_blockdiag_separated(determinant_matrix[0],determinant_1_new)
+                M1s=0.5*(M1_1+M1_2)
+                M2s=0.5*(M2_1+M2_2)
+                M3s=0.5*(M3_1+M3_2)
+            M1s=0.5*(M1_1+M1_2)
+            M2s=0.5*(M2_1+M2_2)
+            M3s=0.5*(M3_1+M3_2)
+            G1s,G2s,G3s=get_antisymm_element_separated(eri_MO_aaaa,eri_MO_bbbb,eri_MO_aabb,n)
+            energy_2e=np.trace(dot_nb(M1s,G1s))+np.trace(dot_nb(M2s,G2s))+np.trace(dot_nb(M3s,G3s))
+        else:
+            G1s,G2s,G3s=get_antisymm_element_separated(eri_MO_aaaa,eri_MO_bbbb,eri_MO_aabb,n)
+            M1s,M2s,M3s=second_order_adj_matrix_blockdiag_separated(determinant_matrix[0],determinant_matrix[1])
+            energy_2e=np.trace(dot_nb(M1s,G1s))+np.trace(dot_nb(M2s,G2s))+np.trace(dot_nb(M3s,G3s))
+
         return energy_2e
     def twobody_energy_alt(self,determinant_matrix,eribasis,permutations_left,permutations_right):
         neh=self.number_electronshalf
@@ -473,7 +502,10 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
                         else:
                             continue
                         if(abs(eri_of_interest)>=1e-10):
-                            energy_2e+=np.linalg.det(largeS_2e)*eri_of_interest
+                            det=np.linalg.det(largeS_2e)
+                            if(det>1e-10):
+                                print(largeS_2e)
+                            energy_2e+=eri_of_interest*det
         return energy_2e
 
 class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
@@ -861,7 +893,7 @@ if __name__=="__main__":
 
     plt.figure(figsize=(9,6))
 
-    basis="cc-pVDZ"
+    basis="6-31G"
     sample_x=np.linspace(1.5,2.0,11)
     xc_array=np.linspace(1.2,5.0,20)
     molecule=lambda x: """F 0 0 0; H 0 0 %f"""%x

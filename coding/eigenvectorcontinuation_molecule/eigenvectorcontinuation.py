@@ -13,26 +13,30 @@ def LDU_decomp(X,threshold=1e-10):
     L,R,P=qr(X,pivoting=True)
     Pinverse=np.argsort(P)
     d=np.diag(R) #Diagonal matrix
+    d=d.copy()
     d[abs(d)<threshold]=0 #ignore that very part of the matrix
     Rn=np.divide(R.T,d).T
 
     Rn[np.isnan(Rn)]=0
     Rn[np.isinf(Rn)]=0
 
+
+    X_permute=X[np.ix_(np.arange(X.shape[0]),P)]
+    if abs(np.linalg.det(X_permute)-np.linalg.det(X))>1e-10:
+        pass
+        #d[0]=d[0]*(-1)
     #d=np.diag(d)
     np.fill_diagonal(Rn,1)
-    X_permute=X[np.ix_(np.arange(X.shape[0]),P)]
-
-    print("old X")
-    print(X)
-    print("new X")
-    print((L@np.diag(d)@Rn)[np.ix_(np.arange(X.shape[0]),Pinverse)])
-    print("old d")
-    print(np.diag(d))
-    print("new d")
-    print(L.T@X_permute@np.linalg.inv(Rn))
-    print(Rn)
-    print(np.linalg.inv(Rn))
+    #print("old X")
+    #print(X)
+    #print("new X")
+    #print((L@np.diag(d)@Rn)[np.ix_(np.arange(X.shape[0]),Pinverse)])
+    #print("old d")
+    #print(np.diag(d))
+    #print("new d")
+    #print(L.T@X_permute@np.linalg.inv(Rn))
+    #print(Rn)
+    #print(np.linalg.inv(Rn))
     #print(scipy.linalg.pinv(Rn))
     return L, d, Rn, P
 
@@ -107,7 +111,21 @@ def generalized_eigenvector(T,S,symmetric=True):
     lowest_eigenvalue=epsilon[0]
     lowest_eigenvector=C[:,0]
     return lowest_eigenvalue,lowest_eigenvector
-@jit(nopython=True)
+def cofactor_index(X):
+    #Find first nonzero cofactor
+    C = np.zeros(X.shape)
+    nrows, ncols = C.shape
+    rows_val=np.arange(X.shape[0])
+    cols_val=np.arange(X.shape[1])
+    for row in rows_val:
+        relrows=rows_val[rows_val!=row]
+        for col in cols_val:
+            relcols=cols_val[cols_val!=col]
+            minor = X[np.ix_(relrows,relcols)]
+            C = np.linalg.det(minor)
+            if np.abs(C)>1e-10:
+                return row,col
+    return 0,0
 def first_order_adj_matrix(X,detX=None):
     #Compute the first order adjajency matrix
     if detX is None:
@@ -120,6 +138,16 @@ def first_order_adj_matrix_blockdiag(XL,XR,detX=None):
     if detX==0: #Do something
         pass
     return detX*linalg.inv(XL),detX*linalg.inv(XR)
+def second_order_compound_lastrow(X):
+    n=len(X)
+    M=np.zeros((int(n*(n-1)/2),int(n*(n-1)/2)),dtype=np.float64)
+    for j in range(n):
+        for i in range(j):
+            for l in range(n):
+                for k in range(l):
+                    M[int((j)*(j-1)/2+i),int((l)*(l-1)/2+k)]=X[i,k]*X[j,l]-X[i,l]*X[j,k]
+    return M
+
 #@jit(nopython=True,parallel=True)
 def second_order_compound(X):
     """Compute the second order compound matrix of a matrix X"""
@@ -131,7 +159,7 @@ def second_order_compound(X):
                 for k in range(l):
                     M[int((j)*(j-1)/2+i),int((l)*(l-1)/2+k)]=X[i,k]*X[j,l]-X[i,l]*X[j,k]
     return M
-#@jit(nopython=True)
+@jit(nopython=True)
 def second_order_compound_blockdiag(XL,XR): #XLeft, XRight
     """Compute the second order compound matrix of a block-diagonal matrix """
     n=len(XL)+len(XR)
@@ -330,3 +358,31 @@ def get_antisymm_element_separated(MO_eriaaaa,Moeribbbb,Moeriaabb,n,na=None,nb=N
                     gleft=Moeriaabb[i,k,j,l]
                     G2[int(j*na+i),int(l*na+k)]=gleft
     return G1, G2, G3
+@jit(nopython=True)
+def get_antisymm_element_full(MO_eriaaaa,Moeribbbb,Moeriaabb,n,na=None,nb=None): #This should never be used, its simply for simplicity reasons
+    nh=int(n/2)
+    if(na is None or nb is None):
+        na=nh
+        nb=nh
+    G_mat=np.zeros((int(n*(n-1)/2),int(n*(n-1)/2)),dtype=np.float64)
+    for j in range(na):
+        for i in range(j):
+            for l in range(na):
+                for k in range(l):
+                    gleft=MO_eriaaaa[i,k,j,l]
+                    gright=MO_eriaaaa[i,l,j,k]
+                    G_mat[int((j)*(j-1)/2+i),int((l)*(l-1)/2+k)]=gleft-gright
+    for j in range(na,n):
+        for i in range(0,na):
+            for l in range(na,n):
+                for k in range(0,na):
+                    gleft=Moeriaabb[i,k,j-na,l-na]
+                    G_mat[int((j)*(j-1)/2+i),int((l)*(l-1)/2+k)]=gleft
+    for j in range(na,n):
+        for i in range(na,j):
+            for l in range(na,n):
+                for k in range(na,l):
+                    gleft=Moeribbbb[i-na,k-na,j-na,l-na]
+                    gright=Moeribbbb[i-na,l-na,j-na,k-na]
+                    G_mat[int((j)*(j-1)/2+i),int((l)*(l-1)/2+k)]=gleft-gright
+    return G_mat

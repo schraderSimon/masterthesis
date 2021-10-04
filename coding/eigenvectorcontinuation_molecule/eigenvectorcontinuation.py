@@ -4,6 +4,7 @@ from numba import jit
 import numba as nb
 import scipy
 from scipy.linalg import lu, qr,svd
+"""
 def parity(permutation):
     permutation = list(permutation)
     length = len(permutation)
@@ -21,7 +22,7 @@ def parity(permutation):
         return 1
     else:
         return -1
-
+"""
 def swap_cols(arr, frm, to): #Swap columns of a matrix
     arrny=arr.copy()
     arrny[:,[frm, to]] = arrny[:,[to, frm]]
@@ -359,6 +360,7 @@ def get_antisymm_element_full(MO_eriaaaa,Moeribbbb,Moeriaabb,Moeribbaa,n,na=None
                             gright=Moeribbbb[i-na,l-na,j-na,k-na]
                     G_mat[int((j)*(j-1)/2+i),int((l)*(l-1)/2+k)]=gleft-gright
     return G_mat
+'''
 def LDU_decomp_new(X,threshold=1e-10):
     P,L,U=lu(X,check_finite=False)
     #P.T @ X = L U
@@ -447,3 +449,4 @@ def second_order_compound_col_separated(XL,XR,l,k):
             for i in range(0,na):
                 M2[int(j*na+i)]=XL[i,k]*XR[j,l]
     return M1, M2, M3
+'''

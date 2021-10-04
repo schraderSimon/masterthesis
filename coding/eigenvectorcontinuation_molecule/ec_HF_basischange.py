@@ -8,7 +8,7 @@ import sys
 import itertools
 import scipy
 from eigenvectorcontinuation import *
-np.set_printoptions(linewidth=200,precision=14,suppress=True)
+np.set_printoptions(linewidth=200,precision=2,suppress=True)
 import matplotlib
 font = {'family' : 'normal',
         'weight' : 'bold',
@@ -124,7 +124,7 @@ class eigvecsolver_RHF():
                 T[i,j]=energy_total
                 T[j,i]=energy_total
         return S,T
-    def basischange_alt(self,C_old,overlap_AOs_newnew):
+    def basischange(self,C_old,overlap_AOs_newnew):
         S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
         S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
         S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
@@ -132,7 +132,7 @@ class eigvecsolver_RHF():
         q,r=np.linalg.qr(C_newbasis) #orthonormalise
         return S_powerminusonehalf@q #change back
 
-    def basischange(self,C_old,overlap_AOs_newnew):
+    def basischange_alt(self,C_old,overlap_AOs_newnew):
         S=self.getdeterminant_matrix(overlap_AOs_newnew,C_old,C_old)
         S_eig,S_U=np.linalg.eigh(S)
         S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
@@ -180,7 +180,6 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
     def getoverlap(self,determinant_matrix):
         overlap=np.linalg.det(determinant_matrix[0])*np.linalg.det(determinant_matrix[1]) #alpha part times beta part
         return overlap
-        return S,T
     def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
         number_electronshalf=self.number_electronshalf
         neh=number_electronshalf
@@ -439,7 +438,8 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
                             continue
                         if(abs(eri_of_interest)>=1e-10):
                             det=np.linalg.det(largeS_2e)
-                            energy_2e+=eri_of_interest*det
+                            if(det>1e-10):
+                                energy_2e+=eri_of_interest*det
         return energy_2e
 
 class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
@@ -848,7 +848,6 @@ if __name__=="__main__":
         print("Eigvec (%d)"%(i))
         HF=eigvecsolver_RHF(sample_x[:i],basis,molecule=molecule,symmetry="C2v")
         energiesEC,eigenvectors=HF.calculate_energies(xc_array)
-        print(energiesEC)
         plt.plot(xc_array,energiesEC,label="EC (%d point(s)), %s"%(i,basis))
     end=timer()
     print("Time elapsed: %f"%(end-start))

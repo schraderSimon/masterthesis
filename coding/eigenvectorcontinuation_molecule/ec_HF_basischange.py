@@ -299,8 +299,8 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
     def twobody_energy(self,determinant_matrix,eribasis,permutations_left,permutations_right):
         #return self.twobody_energy_alt(determinant_matrix,eribasis,permutations_left,permutations_right)
         threshold=1e-14
-        Linv_a,da,Rinv_a=LDU_decomp(determinant_matrix[0],threshold=threshold) #Alpha LdR decomposition
-        Linv_b,db,Rinv_b=LDU_decomp(determinant_matrix[1],threshold=threshold) #Beta LdR decomposition
+        Linv_a,da,Rinv_a=LDU_decomp(determinant_matrix[0])#,threshold=threshold) #Alpha LdR decomposition
+        Linv_b,db,Rinv_b=LDU_decomp(determinant_matrix[1])#,threshold=threshold) #Beta LdR decomposition
         neh=self.number_electronshalf
         num_singularities_left=len(da[np.abs(da)<threshold])
         num_singularities_right=len(db[np.abs(db)<threshold])

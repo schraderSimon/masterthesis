@@ -10,7 +10,7 @@ from ec_HF_basischange import *
 
 basis="6-31G"
 sample_x=np.linspace(1.5,2.0,3)
-xc_array=np.linspace(1.5,5.0,10)
+xc_array=np.linspace(1.5,5.0,5)
 molecule=lambda x: """H 0 0 0; F 0 0 %f"""%x
 molecule_name=r"Hydrogen Fluoride"
 '''
@@ -22,7 +22,7 @@ molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-
 ax,fig=plt.subplots(figsize=(10,10))
 '''
 energiesCC=CC_energy_curve(xc_array,basis,molecule=molecule)
-for i in range(1,2):
+for i in range(1,3):
     print("Eigvec (%d)"%(i))
     HF=eigvecsolver_RHF_singles(sample_x[:i],basis,molecule=molecule)
     energiesEC,eigenvectors=HF.calculate_energies(xc_array)

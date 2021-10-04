@@ -5,9 +5,8 @@ import numba as nb
 from pyscf import gto, scf, fci,cc,ao2mo, mp, mcscf
 import pyscf
 import sys
-import itertools
 import scipy
-from eigenvectorcontinuation import *
+from matrix_operations import *
 np.set_printoptions(linewidth=200,precision=14,suppress=True)
 import matplotlib
 font = {'family' : 'normal',
@@ -106,6 +105,10 @@ class eigvecsolver_RHF():
         energy_2e=2*np.trace(dot_nb(M1s,G1s))+np.trace(dot_nb(M2s,G2s))
         return energy_2e
     def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
+        for k in range(len(self.HF_coefficients)):
+            temp_1.append(np.einsum("ki,lj,kl->ij",new_HF_coefficients[i],new_HF_coefficients[k],energy_basis_1e))
+            basis=ao2mo.get_mo_eri(energy_basis_2e,(new_HF_coefficients[i],new_HF_coefficients[k],new_HF_coefficients[i],new_HF_coefficients[k]),aosym="s1")
+            temp_2.append(basis)
         number_electronshalf=self.number_electronshalf
         overlap_basis=mol_xc.intor("int1e_ovlp")
         energy_basis_1e=mol_xc.intor("int1e_kin")+mol_xc.intor("int1e_nuc")
@@ -737,144 +740,3 @@ class eigvecsolver_UHF_singles(eigvecsolver_UHF):
                         if(abs(eri_of_interest)>=1e-10):
                             energy_2e+=np.linalg.det(largeS_2e)*eri_of_interest
         return energy_2e
-
-def energy_curve_UHF(xvals,basis_type,molecule):
-    energies=[]
-    for x in xvals:
-        mol1=gto.Mole()
-        mol1.atom=molecule(x) #take this as a "basis" assumption.
-        mol1.basis=basis_type
-        mol1.unit='AU'
-        mol1.spin=0 #Assume closed shell
-        mol1.verbose=2
-        mol1.build()
-        mf=scf.UHF(mol1)
-        dm_alpha, dm_beta = mf.get_init_guess()
-        dm_beta+=np.random.random_sample(dm_beta.shape)
-        dm_beta[:2,:2] = 0
-        dm = (dm_alpha,dm_beta)
-
-        energy=mf.kernel(dm)
-        energies.append(energy)
-    return np.array(energies)
-def energy_curve_RHF(xvals,basis_type,molecule):
-    energies=[]
-    for x in xvals:
-        mol1=gto.Mole()
-        mol1.atom=molecule(x) #take this as a "basis" assumption.
-        mol1.basis=basis_type
-        mol1.unit='AU'
-        mol1.spin=0 #Assume closed shell
-        mol1.verbose=2
-        mol1.symmetry=True
-        mol1.build()
-        mf=scf.RHF(mol1)
-        energy=mf.kernel()
-        energies.append(energy)
-    return np.array(energies)
-
-def CC_energy_curve(xvals,basis_type,molecule):
-    energies=[]
-    for index,x in enumerate(xvals):
-        print("%d/%d"%(index,len(xvals)))
-        mol1=gto.Mole()
-        mol1.atom=molecule(x) #take this as a "basis" assumption.
-        mol1.basis=basis_type
-        mol1.unit='AU'
-        mol1.spin=0 #Assume closed shell
-        mol1.symmetry=True
-        mol1.build()
-        mf=mol1.RHF().run(verbose=2) #Solve RHF equations to get overlap
-        ccsolver=cc.CCSD(mf).run(verbose=2)
-        energy=ccsolver.e_tot
-        energy+= ccsolver.ccsd_t()
-        energies.append(energy)
-    return np.array(energies)
-def FCI_energy_curve(xvals,basis_type,molecule):
-    energies=[]
-    for index,x in enumerate(xvals):
-        print("%d/%d"%(index,len(xvals)))
-        mol1=gto.Mole()
-        mol1.atom=molecule(x) #take this as a "basis" assumption.
-        mol1.basis=basis_type
-        mol1.unit='AU'
-        mol1.spin=0 #Assume closed shell
-        mol1.symmetry=True
-        mol1.build()
-        mf=mol1.RHF().run(verbose=2) #Solve RHF equations to get overlap
-        cisolver = fci.FCI(mol1, mf.mo_coeff)
-        e, fcivec = cisolver.kernel()
-        energies.append(e)
-    return np.array(energies)
-def CASCI_energy_curve(xvals,basis_type,molecule):
-    energies=[]
-    mol1=gto.Mole()
-    mol1.atom=molecule(x) #take this as a "basis" assumption.
-    mol1.basis=basis_type
-    mol1.unit='AU'
-    mol1.symmetry=True
-    mol1.spin=0 #Assume closed shell
-    myhf = mol.RHF().run()
-    # Use MP2 natural orbitals to define the active space for the single-point CAS-CI calculation
-    mymp = mp.UMP2(myhf).run()
-
-    noons, natorbs = mcscf.addons.make_natural_orbitals(mymp)
-    ncas, nelecas = (6,8)
-    mycas = mcscf.CASCI(myhf, ncas, nelecas)
-    energyies.append(mycas.kernel(natorbs))
-if __name__=="__main__":
-    from timeit import default_timer as timer
-
-    plt.figure(figsize=(9,6))
-
-    basis="6-31G"
-    sample_x=np.linspace(1.5,2.0,11)
-    xc_array=np.linspace(1.2,5.0,20)
-    molecule=lambda x: """F 0 0 0; H 0 0 %f"""%x
-    molecule_name=r"Hydrogen Fluoride"
-    '''
-    basis="6-31G*"
-    molecule_name="BeH2"
-    sample_x=np.linspace(0,2.5,151)
-    xc_array=np.linspace(3,4,11)
-    molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
-    '''
-    print("FCI")
-    #energiesFCI=FCI_energy_curve(xc_array,basis,molecule=molecule)
-    print("CCSDT")
-    energiesCC=CC_energy_curve(xc_array,basis,molecule=molecule)
-    start=timer()
-    for i in range(1,len(sample_x)+1,2):
-        print("Eigvec (%d)"%(i))
-        HF=eigvecsolver_RHF(sample_x[:i],basis,molecule=molecule,symmetry="C2v")
-        energiesEC,eigenvectors=HF.calculate_energies(xc_array)
-        print(energiesEC)
-        plt.plot(xc_array,energiesEC,label="EC (%d point(s)), %s"%(i,basis))
-    end=timer()
-    print("Time elapsed: %f"%(end-start))
-    #In addition:"outliers":
-    #HF=eigvecsolver_RHF([2.5,3],basis,molecule=molecule)
-    #energiesEC,eigenvectors=HF.calculate_energies(xc_array)
-    #plt.plot(xc_array,energiesEC,label="EC (2.5 and 3)")
-    #print("UHF")
-
-    energiesHF=energy_curve_RHF(xc_array,basis,molecule=molecule)
-    energiesHF_sample=energy_curve_RHF(sample_x,basis,molecule=molecule)
-    sample_x=sample_x
-    xc_array=xc_array
-    plt.plot(xc_array,energiesHF,label="RHF,%s"%basis)
-    plt.plot(xc_array,energiesCC,label="CCSD(T),%s"%basis)
-    #plt.plot(xc_array,energiesFCI,label="FCI,%s"%basis)
-    #plt.plot(sample_x,energiesHF_sample,"o",color="black",label="Sample points")
-    plt.xlabel("Atomic distance (Bohr)")
-    plt.ylabel("Energy (Hartree)")
-    plt.title("%s potential energy curve"%molecule_name)
-    plt.legend(loc="lower right")
-    plt.tight_layout()
-    #plt.ylim([-100.3,-99.4])
-    plt.savefig("EC_RHF_%s.pdf"%molecule_name)
-    plt.show()
-    plt.plot(xc_array,energiesEC-energiesFCI,label="EC (max)-FCI")
-    plt.plot(xc_array,energiesHF-energiesFCI,label="RHF-FCI")
-    plt.legend()
-    plt.show()

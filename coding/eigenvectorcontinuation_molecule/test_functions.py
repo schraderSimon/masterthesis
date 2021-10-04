@@ -1,8 +1,8 @@
 import numpy as np
 from numpy import linalg
 from numba import jit
-import numba as nb
 import scipy
+import numba as nb
 from scipy.linalg import lu, qr,svd
 def parity(permutation):
     permutation = list(permutation)
@@ -136,8 +136,15 @@ def second_order_compound(X):
 def second_order_compound_blockdiag(XL,XR): #XLeft, XRight
     """Compute the second order compound matrix of a block-diagonal matrix """
     n=len(XL)+len(XR)
-    na=len(XL)
+    na=len(XL) #Alpha/1
     M=np.zeros((int(n*(n-1)/2),int(n*(n-1)/2)),dtype=np.float64)
+    """
+
+    The following possibilities will yield nonzero elements:
+    - All alpha (1/16)
+    - All beta (1/16)
+    - j beta, i alpha, l beta, k alpha (the way we count)
+    """
     for j in range(na):
         for i in range(j):
             for l in range(na):

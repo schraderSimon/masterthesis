@@ -1,33 +1,22 @@
 import numpy as np
-from numpy import linalg
 from numba import jit
-import numba as nb
 import scipy
 from scipy.linalg import lu, qr,svd
-def parity(permutation):
-    permutation = list(permutation)
-    length = len(permutation)
-    elements_seen = [False] * length
-    cycles = 0
-    for index, already_seen in enumerate(elements_seen):
-        if already_seen:
-            continue
-        cycles += 1
-        current = index
-        while not elements_seen[current]:
-            elements_seen[current] = True
-            current = permutation[current]
-    if((length-cycles) % 2 == 0):
-        return 1
-    else:
-        return -1
 
-def swap_cols(arr, frm, to): #Swap columns of a matrix
+def swap_cols(arr, frm, to):
+    """Swaps the columns of a 2D-array"""
     arrny=arr.copy()
     arrny[:,[frm, to]] = arrny[:,[to, frm]]
     return arrny
-
-def LDU_decomp(X,threshold=1e-10): #Svd based LDU decomp
+def LDU_decomp(X):
+    """Singular-Value-based LDU decomposition.
+    Input:
+        -The matrix X to decompose
+    Returns:
+        - (L.T): 2D array of the left matrix
+        - d : 1D diagonal matrix
+        - R.T: 2D array of the right matrix
+        """
     U,s,Vh=svd(X)
     detU=np.linalg.det(U)
     detVh=np.linalg.det(Vh)
@@ -38,7 +27,6 @@ def LDU_decomp(X,threshold=1e-10): #Svd based LDU decomp
         Vh[0,:]=-1*Vh[0,:]
         s[0]=-s[0]
     return U,s,Vh
-
 def generalized_eigenvector(T,S,symmetric=True):
     """Solves the generalized eigenvector problem.
 
@@ -47,27 +35,28 @@ def generalized_eigenvector(T,S,symmetric=True):
     S: The overlap matrix
     symmetric: Wether the matrices T, S are symmetric
 
-    Returns: The lowest eigenvalue & eigenvector"""
-    s, U=np.linalg.eigh(S)
+    Returns: The lowest eigenvalue & eigenvector
     """
-    s=np.diag(s)
-    X=U@np.linalg.inv(np.sqrt(s))
-    """
+    ###The purpose of this procedure here is to remove all very small eigenvalues of the overlap matrix for stability
+    s, U=np.linalg.eigh(S) #Diagonalize S (overlap matrix, Hermitian by definition)
     U=np.fliplr(U)
-    s=s[::-1]
-    s=s[s>1e-12]
-    s=s**(-0.5)
-    snew=np.zeros((len(U),len(s)))
-    sold=np.diag(s)
+    s=s[::-1] #Order from largest to lowest; S is an overlap matrix, hence we won't
+    s=s[s>1e-12] #Keep only largest eigenvalues
+    spowerminushalf=s**(-0.5) #Take s
+    snew=np.zeros((len(U),len(spowerminushalf)))
+    sold=np.diag(spowerminushalf)
     snew[:len(s),:]=sold
     s=snew
+
+
+    ###Canonical orthogonalization
     X=U@s
     Tstrek=X.T@T@X
     if symmetric:
         epsilon, Cstrek = np.linalg.eigh(Tstrek)
     else:
         epsilon, Cstrek = np.linalg.eig(Tstrek)
-    idx = epsilon.argsort()[::1]
+    idx = epsilon.argsort()[::1] #Order by size (non-absolute)
     epsilon = epsilon[idx]
     Cstrek = Cstrek[:,idx]
     C=X@Cstrek
@@ -75,7 +64,14 @@ def generalized_eigenvector(T,S,symmetric=True):
     lowest_eigenvector=C[:,0]
     return lowest_eigenvalue,lowest_eigenvector
 def cofactor_index(X):
-    #Find first nonzero cofactor
+    """
+    Returns the index of the first nonzero cofactor of a matrix X.
+
+    Input:
+        The matrix X (which is assumed to have nullity 0 or lower)
+    Returns:
+        The first index encountered in an element-wise search with a non-zero cofactor.
+    """
     C = np.zeros(X.shape)
     nrows, ncols = C.shape
     rows_val=np.arange(X.shape[0])
@@ -90,17 +86,23 @@ def cofactor_index(X):
                 return row,col
     return 0,0
 def first_order_adj_matrix(X,detX=None):
-    #Compute the first order adjajency matrix
+    """Compute the first order adjajency matrix of an invertible matrix"""
     if detX is None:
-        detX=np.linalg.det(X) #Do something
-    return detX*linalg.inv(X)
+        detX=np.linalg.det(X)
+    try:
+        adj_matrix=detX*linalg.inv(X)
+    except np.linalg.LinAlgError:
+        raise np.linalg.LinAlgError("Cannot calculate first order adjajency matrix as input is non-invertible.")
+    return adj_matrix
 def first_order_adj_matrix_blockdiag(XL,XR,detX=None):
     """Compute the first order adjajency matrix of a two-block matrix, where XL and XR are the left/right matrix, respectively"""
     if detX is None:
         detX=np.linalg.det(XL)*np.linalg.det(XR)
-    if detX==0: #Do something
-        pass
-    return detX*linalg.inv(XL),detX*linalg.inv(XR)
+    try:
+        adj_matrix_left,adj_matrix_right=detX*linalg.inv(XL),detX*linalg.inv(XR)
+    except np.linalg.LinAlgError:
+        raise np.linalg.LinAlgError("Cannot calculate first order adjajency matrix as input is non-invertible.")
+    return adj_matrix_left,adj_matrix_right
 @jit(nopython=True)
 def second_order_compound_row(X,j,i):
     """Returns only the row with index(ij) of the second order compound of a matrix X"""
@@ -119,8 +121,6 @@ def second_order_compound_col(X,l,k):
         for i in range(j):
             M[int((j)*(j-1)/2+i)]=X[i,k]*X[j,l]-X[i,l]*X[j,k]
     return M
-
-
 @jit(nopython=True)
 def second_order_compound(X):
     """Compute the second order compound matrix of a matrix X"""
@@ -131,7 +131,6 @@ def second_order_compound(X):
             for l in range(n):
                 for k in range(l):
                     M[int((j)*(j-1)/2+i),int((l)*(l-1)/2+k)]=X[i,k]*X[j,l]-X[i,l]*X[j,k]
-    return M
 @jit(nopython=True)
 def second_order_compound_blockdiag(XL,XR): #XLeft, XRight
     """Compute the second order compound matrix of a block-diagonal matrix """
@@ -203,10 +202,11 @@ def second_order_compound_blockdiag_separated_RHF(X): #XLeft, XRight
                 for k in range(0,nh):
                     M2[int(j*nh+i),int(l*nh+k)]=X[i,k]*X[j,l]
     return M1,M2
-#@jit(nopython=True)
 def second_order_adj_matrix_blockdiag(XL,XR,detX=None):
     if detX is None:
         detX=np.linalg.det(XL)*np.linalg.det(XR)
+    if np.abs(detX)<1e-10:
+        raise np.linalg.LinAlgError("Cannot calculate second order adjajency matrix as determinant is zero (Breakdown of Jacobi's theorem).")
     first_order=first_order_adj_matrix_blockdiag(XL,XR,detX)
     compund = second_order_compound_blockdiag(first_order[0],first_order[1])
     return 1/detX*compund
@@ -221,9 +221,12 @@ def second_order_adj_matrix_blockdiag_separated_RHF(X,detX=None):
 def second_order_adj_matrix_blockdiag_separated(XL,XR,detX=None):
     if detX is None:
         detX=np.linalg.det(XL)*np.linalg.det(XR)
+    if np.abs(detX)<1e-10:
+        raise np.linalg.LinAlgError("Cannot calculate second order adjajency matrix as determinant is zero (Breakdown of Jacobi's theorem).")
+    det_inv=1/detX
     first_order=first_order_adj_matrix_blockdiag(XL,XR,detX)
     M1,M2,M3 = second_order_compound_blockdiag_separated(first_order[0],first_order[1])
-    return 1/detX*M1, 1/detX*M2,1/detX*M3
+    return det_inv*M1, det_inv*M2,det_inv*M3
 def second_order_adj_matrix(X,detX=None):
     if detX is None:
         detX=np.linalg.det(X)

@@ -268,10 +268,11 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
         permutations_left_2=[permutations[l2[0]],permutations[l2[1]]]
         permutations_right_2=[permutations[r2[0]],permutations[r2[1]]]
         return [[permutations_left_1,permutations_right_1],[permutations_left_2,permutations_right_2]]
-    def onebody_energy(self,determinant_matrix,SLbasis,permutations_left,permutations_right):
+    def onebody_energy_alt(self,determinant_matrix,SLbasis,permutations_left,permutations_right):
         """Unlike the previous method, the left and right coefficients are now the WHOLE set (occ+unocc). The SLbasis is also the whole (for the corresponding system). The permutations contain all information
         about the construction of the coefficients.
         """
+
         neh=self.number_electronshalf
         electrons_basis=np.arange(neh)
         electrons_alpha_left=np.where(electrons_basis==permutations_left[0][0],permutations_left[0][1],electrons_basis)
@@ -295,6 +296,67 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
                     determinant_matrix_energy_beta[l,k]=Hamiltonian_SLbasis_beta[l,k]
             energy_contribution=np.linalg.det(determinant_matrix_energy_beta)*np.linalg.det(determinant_matrix_alpha)
             energy_1e+=energy_contribution
+        return energy_1e
+    def onebody_energy(self,determinant_matrix,SLbasis,permutations_left,permutations_right):
+        """Unlike the previous method, the left and right coefficients are now the WHOLE set (occ+unocc). The SLbasis is also the whole (for the corresponding system). The permutations contain all information
+        about the construction of the coefficients.
+        """
+        threshold=1e-5
+        Linv_a,da,Rinv_a=LDU_decomp(determinant_matrix[0])#,threshold=threshold) #Alpha LdR decomposition
+        Linv_b,db,Rinv_b=LDU_decomp(determinant_matrix[1])#,threshold=threshold) #Beta LdR decomposition
+        neh=self.number_electronshalf
+        num_singularities_left=len(da[np.abs(da)<threshold])
+        num_singularities_right=len(db[np.abs(db)<threshold])
+        num_singularities=num_singularities_left+num_singularities_right
+        if num_singularities>=2:
+            return 0
+        La=Linv_a.T
+        Lb=Linv_b.T
+        Ra=Rinv_a.T
+        Rb=Rinv_b.T
+        electrons_basis=np.arange(neh)
+        electrons_alpha_left=np.where(electrons_basis==permutations_left[0][0],permutations_left[0][1],electrons_basis)
+        electrons_beta_left=np.where(electrons_basis==permutations_left[1][0],permutations_left[1][1],electrons_basis)
+        electrons_alpha_right=np.where(electrons_basis==permutations_right[0][0],permutations_right[0][1],electrons_basis)
+        electrons_beta_right=np.where(electrons_basis==permutations_right[1][0],permutations_right[1][1],electrons_basis)
+        Hamiltonian_SLbasis_alpha=SLbasis[np.ix_(electrons_alpha_left,electrons_alpha_right)]
+        Hamiltonian_SLbasis_beta=SLbasis[np.ix_(electrons_beta_left,electrons_beta_right)]
+        energy_1e=0.0
+        if num_singularities==1:
+            if num_singularities_left==1:
+                val=np.prod(da[np.abs(da)>threshold])*np.prod(db[np.abs(db)>threshold])
+                adj_alpha=np.outer(Ra[:,neh-1],La[neh-1,:])*val
+                energy_1e=np.trace(Hamiltonian_SLbasis_alpha@adj_alpha)
+                assert np.abs(energy_1e-self.onebody_energy_alt(determinant_matrix,SLbasis,permutations_left,permutations_right))<1e-10,"left"
+            elif num_singularities_right==1:
+                val=np.prod(da[np.abs(da)>threshold])*np.prod(db[np.abs(db)>threshold])
+                adj_beta=np.outer(Rb[:,-1],Lb[-1,:])*val
+                energy_1e=np.trace(Hamiltonian_SLbasis_beta@adj_beta)
+                assert np.abs(energy_1e-self.onebody_energy_alt(determinant_matrix,SLbasis,permutations_left,permutations_right))<1e-10,"right"
+        else:
+            adj_alpha=first_order_adj_matrix_LdR(La,da,Ra)
+            adj_beta=first_order_adj_matrix_LdR(Lb,db,Rb)
+            energy_1e_1=np.trace(Hamiltonian_SLbasis_alpha@adj_alpha)+np.trace(Hamiltonian_SLbasis_beta@adj_beta)
+            full=scipy.linalg.block_diag(adj_alpha,adj_beta)
+            energy_1e_2=np.trace(full@scipy.linalg.block_diag(Hamiltonian_SLbasis_alpha,Hamiltonian_SLbasis_beta))
+            true_e=self.onebody_energy_alt(determinant_matrix,SLbasis,permutations_left,permutations_right)
+            try:
+                assert np.abs(energy_1e_1-true_e)<1,"inbetween %f"%(energy_1e_1-true_e)
+            except:
+                assert(np.all(np.abs(Linv_a@np.diag(da)@Rinv_a-determinant_matrix[0])<1e-10)),"eeype"
+                assert(np.all(np.abs(Linv_b@np.diag(db)@Rinv_b-determinant_matrix[1])<1e-10)),"eeype"
+                determinant_matrix_alpha=determinant_matrix[0]
+                determinant_matrix_beta=determinant_matrix[1]
+                M=np.zeros(determinant_matrix[0].shape)
+                for k in range(neh):
+                    determinant_matrix_energy_alpha=determinant_matrix_alpha.copy() #Re-initiate Energy matrix
+                    for l in range(neh):
+                            determinant_matrix_energy_alpha[l,k]=Hamiltonian_SLbasis_alpha[l,k]
+                    print(np.linalg.det(determinant_matrix_energy_alpha)*np.linalg.det(determinant_matrix_beta))
+                print(Hamiltonian_SLbasis_alpha)
+                print(adj_alpha)
+                print(Hamiltonian_SLbasis_alpha@adj_alpha)
+                sys.exit(1)
         return energy_1e
     def twobody_energy(self,determinant_matrix,eribasis,permutations_left,permutations_right):
         #return self.twobody_energy_alt(determinant_matrix,eribasis,permutations_left,permutations_right)

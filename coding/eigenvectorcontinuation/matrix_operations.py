@@ -1,13 +1,9 @@
 import numpy as np
+from numpy import linalg
 from numba import jit
+import numba as nb
 import scipy
 from scipy.linalg import lu, qr,svd
-
-def swap_cols(arr, frm, to):
-    """Swaps the columns of a 2D-array"""
-    arrny=arr.copy()
-    arrny[:,[frm, to]] = arrny[:,[to, frm]]
-    return arrny
 def LDU_decomp(X):
     """Singular-Value-based LDU decomposition.
     Input:
@@ -29,12 +25,10 @@ def LDU_decomp(X):
     return U,s,Vh
 def generalized_eigenvector(T,S,symmetric=True):
     """Solves the generalized eigenvector problem.
-
     Input:
     T: The symmetric matrix
     S: The overlap matrix
     symmetric: Wether the matrices T, S are symmetric
-
     Returns: The lowest eigenvalue & eigenvector
     """
     ###The purpose of this procedure here is to remove all very small eigenvalues of the overlap matrix for stability
@@ -66,7 +60,6 @@ def generalized_eigenvector(T,S,symmetric=True):
 def cofactor_index(X):
     """
     Returns the index of the first nonzero cofactor of a matrix X.
-
     Input:
         The matrix X (which is assumed to have nullity 0 or lower)
     Returns:
@@ -85,6 +78,9 @@ def cofactor_index(X):
             if np.abs(C)>1e-10:
                 return row,col
     return 0,0
+def first_order_adj_matrix_LdR(L,d,R):
+    determinant=np.prod(d)
+    return R@np.diag(d**(-1))@L*determinant
 def first_order_adj_matrix(X,detX=None):
     """Compute the first order adjajency matrix of an invertible matrix"""
     if detX is None:
@@ -221,7 +217,7 @@ def second_order_adj_matrix_blockdiag_separated_RHF(X,detX=None):
 def second_order_adj_matrix_blockdiag_separated(XL,XR,detX=None):
     if detX is None:
         detX=np.linalg.det(XL)*np.linalg.det(XR)
-    if np.abs(detX)<1e-10:
+    if np.abs(detX)<1e-14:
         raise np.linalg.LinAlgError("Cannot calculate second order adjajency matrix as determinant is zero (Breakdown of Jacobi's theorem).")
     det_inv=1/detX
     first_order=first_order_adj_matrix_blockdiag(XL,XR,detX)
@@ -364,7 +360,7 @@ def get_antisymm_element_full(MO_eriaaaa,Moeribbbb,Moeriaabb,Moeribbaa,n,na=None
     return G_mat
 def LDU_decomp_new(X,threshold=1e-10):
     P,L,U=lu(X,check_finite=False)
-    #P.T @ X = L U
+    #P.T @ X = L U
     L=P@L
     #X=L' U
     d=np.diag(U) #Diagonal matrix

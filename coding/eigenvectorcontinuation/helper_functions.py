@@ -97,6 +97,23 @@ def FCI_energy_curve(xvals,basis_type,molecule):
         e, fcivec = cisolver.kernel()
         energies.append(e)
     return np.array(energies)
+def CISD_energy_curve(xvals,basis_type,molecule):
+    energies=[]
+    for index,x in enumerate(xvals):
+        print("%d/%d"%(index,len(xvals)))
+        mol1=gto.Mole()
+        mol1.atom=molecule(x) #take this as a "basis" assumption.
+        mol1.basis=basis_type
+        mol1.unit='AU'
+        mol1.spin=0 #Assume closed shell
+        mol1.symmetry=True
+        mol1.build()
+        mf=mol1.HF().run(verbose=2) #Solve RHF equations to get overlap
+        mycisd=mf.CISD().run()
+        e=mycisd.e_tot
+        energies.append(e)
+    return np.array(energies)
+
 def CASCI_energy_curve(xvals,basis_type,molecule):
     energies=[]
     mol1=gto.Mole()

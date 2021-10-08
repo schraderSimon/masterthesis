@@ -57,6 +57,9 @@ def generalized_eigenvector(T,S,symmetric=True):
     lowest_eigenvalue=epsilon[0]
     lowest_eigenvector=C[:,0]
     return lowest_eigenvalue,lowest_eigenvector
+def calculate_vector_norm(S,vector):
+    norm = np.einsum("ab,a,b->",S,vector,vector)**2
+    return norm
 def cofactor_index(X):
     """
     Returns the index of the first nonzero cofactor of a matrix X.
@@ -75,9 +78,9 @@ def cofactor_index(X):
             relcols=cols_val[cols_val!=col]
             minor = X[np.ix_(relrows,relcols)]
             C = np.linalg.det(minor)
-            if np.abs(C)>1e-10:
+            if np.abs(C)>1e-7: #Needs to be "relatively large" to assure that matrix later is invertible
                 return row,col
-    return 0,0
+    return None
 def first_order_adj_matrix_LdR(L,d,R):
     determinant=np.prod(d)
     return R@np.diag(d**(-1))@L*determinant
@@ -201,7 +204,7 @@ def second_order_compound_blockdiag_separated_RHF(X): #XLeft, XRight
 def second_order_adj_matrix_blockdiag(XL,XR,detX=None):
     if detX is None:
         detX=np.linalg.det(XL)*np.linalg.det(XR)
-    if np.abs(detX)<1e-10:
+    if np.abs(detX)<1e-12:
         raise np.linalg.LinAlgError("Cannot calculate second order adjajency matrix as determinant is zero (Breakdown of Jacobi's theorem).")
     first_order=first_order_adj_matrix_blockdiag(XL,XR,detX)
     compund = second_order_compound_blockdiag(first_order[0],first_order[1])

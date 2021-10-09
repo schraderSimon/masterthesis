@@ -16,8 +16,8 @@ basis="6-31G"
 sample_x=[]
 #sample_x.append(np.linspace(2.75,3.0,5))
 
-sample_x.append(np.linspace(2.0,2.5,1))
-xc_array=np.linspace(2.0,4.5,5)
+sample_x.append(np.linspace(2.0,3.0,2))
+xc_array=np.linspace(2.0,3.0,2)
 molecule=lambda x: """H 0 0 0; Li 0 0 %f"""%x
 molecule_name=r"Lithium hydride"
 '''

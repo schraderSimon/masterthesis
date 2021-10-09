@@ -669,22 +669,10 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
         #1. Create all possible permutations
         for i in range(n_occ):
             for j in range(n_occ,basisset_size):
-                permutations.append([[i,i],[j,j]]) #This means: i out, j in!. The zero is there as a "do nothing" operator (now we are operating two permutations...)
+                permutations.append([[i,i],[j,j]])
         return permutations
 
     def create_double_fromsame_todiff(self,expansion_coefficients):
-        if self.doubles==False:
-            return []
-        basisset_size=len(expansion_coefficients[0][:,0])
-        n_occ=self.number_electronshalf
-        n_unocc=basisset_size-n_occ
-        permutations=[]
-        for j in range(n_occ):
-            for i in range(0,j):
-                for k in range(n_occ,basisset_size):
-                    permutations.append([[i,j],[k,k]])
-        return permutations
-    def create_double_fromdiff_tosame(self,expansion_coefficients):
         if self.doubles==False:
             return []
         basisset_size=len(expansion_coefficients[0][:,0])
@@ -695,6 +683,18 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
             for l in range(n_occ,basisset_size):
                 for k in range(n_occ,l):
                     permutations.append([[i,i],[k,l]])
+        return permutations
+    def create_double_fromdiff_tosame(self,expansion_coefficients):
+        if self.doubles==False:
+            return []
+        basisset_size=len(expansion_coefficients[0][:,0])
+        n_occ=self.number_electronshalf
+        n_unocc=basisset_size-n_occ
+        permutations=[]
+        for i in range(n_occ):
+            for j in range(i):
+                for l in range(n_occ,basisset_size):
+                    permutations.append([[i,j],[l,l]])
         return permutations
     def create_double_fromdiff_todiff(self,expansion_coefficients):
         if self.doubles==False:
@@ -730,6 +730,7 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
                 eigvec=float('NaN')
             energy_array[index]=eigval
             eigval_array.append(eigvec)
+            print(eigvec)
         return energy_array,eigval_array
     def calculate_basises(self,mol_xc,n_HF_coef):
         number_electronshalf=self.number_electronshalf
@@ -809,7 +810,7 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
             alpha_5=[[0,a],[0,s]]
             beta_5=[[0,b],[0,r]]
             state.append([-1/np.sqrt(12),alpha_5,beta_5])
-        elif index<self.double_dd_1:
+        elif index<self.double_dd_2:
             outs,ins=self.all_permutations[index]
             a,b=outs
             r,s=ins
@@ -847,7 +848,14 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
         self.double_dd_1=self.double_ds+len(self.permutations_d_diffdiff_1)
         self.double_dd_2=self.double_dd_1+len(self.permutations_d_diffdiff_2)
         self.all_permutations=[[[0,0],[0,0]]]+self.permutations_s+self.permutations_d_samesame+self.permutations_d_samediff+self.permutations_d_diffsame+self.permutations_d_diffdiff_1+self.permutations_d_diffdiff_2
-        #print(self.all_permutations[1:19])
+        print("first: %d"%self.first)
+        print("single: %d,%d"%(len(self.permutations_s),self.single))
+        print("double_ss: %d,%d"%(len(self.permutations_d_samesame),self.double_ss))
+        print("double_sd: %d,%d"%(len(self.permutations_d_samediff),self.double_sd))
+        print("double_ds: %d,%d"%(len(self.permutations_d_diffsame),self.double_ds))
+        print("double_dd1: %d,%d"%(len(self.permutations_d_diffdiff_1),self.double_dd_1))
+        print("double_dd2: %d, %d"%(len(self.permutations_d_diffdiff_2),self.double_dd_2))
+        print("Total: %d"%len(self.all_permutations))
         #sys.exit(1)
         number_matrix_elements=len(n_HF_coef)*len_all_permutations
         S=np.zeros((number_matrix_elements,number_matrix_elements))
@@ -904,7 +912,7 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
         num_singularities_left=len(da[np.abs(da)<threshold])
         num_singularities_right=len(db[np.abs(db)<threshold])
         num_singularities=num_singularities_left+num_singularities_right
-        if num_singularities>=3:
+        if num_singularities>=3: ###THIS IS WRONG, THIS SHOULD BE 3 !!! 
             #Everything is zero, das ist gut :)
             return (0,0)
         #Calculate the "perturbed basis" for eri

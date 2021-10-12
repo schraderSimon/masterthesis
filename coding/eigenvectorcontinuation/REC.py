@@ -715,6 +715,7 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
         energy_array=np.zeros(len(xc_array))
         eigval_array=[]
         self.all_new_HF_coefficients=[]
+        outfile=open("temp_energies_len_xc=%d.csv"%len(xc_array),"a")
         for index,xc in enumerate(xc_array):
             mol_xc=self.build_molecule(xc)
             new_HF_coefficients=[]
@@ -729,8 +730,11 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
                 eigval=float('NaN')
                 eigvec=float('NaN')
             energy_array[index]=eigval
+            outfile.write("%f,"%(eigval))
+
             eigval_array.append(eigvec)
-            print(eigvec)
+        outfile.write("\n")
+        outfile.close()
         return energy_array,eigval_array
     def calculate_basises(self,mol_xc,n_HF_coef):
         number_electronshalf=self.number_electronshalf
@@ -912,7 +916,7 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
         num_singularities_left=len(da[np.abs(da)<threshold])
         num_singularities_right=len(db[np.abs(db)<threshold])
         num_singularities=num_singularities_left+num_singularities_right
-        if num_singularities>=3: ###THIS IS WRONG, THIS SHOULD BE 3 !!! 
+        if num_singularities>=3: ###THIS IS WRONG, THIS SHOULD BE 3 !!!
             #Everything is zero, das ist gut :)
             return (0,0)
         #Calculate the "perturbed basis" for eri

@@ -17,9 +17,10 @@ sample_x=[]
 #sample_x.append(np.linspace(2.75,3.0,5))
 
 sample_x.append(np.linspace(2.0,3.0,2))
-xc_array=np.linspace(2.0,3.0,2)
-molecule=lambda x: """H 0 0 0; Li 0 0 %f"""%x
-molecule_name=r"Lithium hydride"
+xc_array=np.linspace(1.5,3.0,8)
+xc_array=np.concatenate((xc_array,[5.0]))
+molecule=lambda x: """H 0 0 0; F 0 0 %f"""%x
+molecule_name=r"Hydrogen"
 '''
 basis="6-31G"
 molecule_name="BeH2"
@@ -42,6 +43,7 @@ for pl_ind,sx in enumerate(sample_x):
         energiesEC,eigenvectors=HF.calculate_energies(xc_array,doubles=True)
         #HF=eigvecsolver_RHF_singles(sx[:i],basis,molecule=molecule)
         #energiesEC,eigenvectors=HF.calculate_energies(xc_array)
+
         if(pl_ind==0):
             ax[pl_ind].plot(xc_array,energiesEC,label="EC (%d point(s))"%(i))
         else:

@@ -204,8 +204,9 @@ def second_order_compound_blockdiag_separated_RHF(X): #XLeft, XRight
 def second_order_adj_matrix_blockdiag(XL,XR,detX=None):
     if detX is None:
         detX=np.linalg.det(XL)*np.linalg.det(XR)
-    if np.abs(detX)<1e-12:
-        raise np.linalg.LinAlgError("Cannot calculate second order adjajency matrix as determinant is zero (Breakdown of Jacobi's theorem).")
+    if np.abs(detX)<1e-20:
+        print("Cannot calculate second order adjajency matrix as determinant is zero (Breakdown of Jacobi's theorem).")
+        #raise np.linalg.LinAlgError("Cannot calculate second order adjajency matrix as determinant is zero (Breakdown of Jacobi's theorem).")
     first_order=first_order_adj_matrix_blockdiag(XL,XR,detX)
     compund = second_order_compound_blockdiag(first_order[0],first_order[1])
     return 1/detX*compund
@@ -220,8 +221,10 @@ def second_order_adj_matrix_blockdiag_separated_RHF(X,detX=None):
 def second_order_adj_matrix_blockdiag_separated(XL,XR,detX=None):
     if detX is None:
         detX=np.linalg.det(XL)*np.linalg.det(XR)
-    if np.abs(detX)<1e-14:
-        raise np.linalg.LinAlgError("Cannot calculate second order adjajency matrix as determinant is zero (Breakdown of Jacobi's theorem).")
+    if np.abs(detX)<1e-20:
+        print("Cannot calculate second order adjajency matrix as determinant is zero (Breakdown of Jacobi's theorem).")
+
+        #raise np.linalg.LinAlgError("Cannot calculate second order adjajency matrix as determinant is zero (Breakdown of Jacobi's theorem).")
     det_inv=1/detX
     first_order=first_order_adj_matrix_blockdiag(XL,XR,detX)
     M1,M2,M3 = second_order_compound_blockdiag_separated(first_order[0],first_order[1])

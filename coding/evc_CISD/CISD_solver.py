@@ -1,12 +1,84 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from pyscf import gto, scf,ao2mo
+from pyscf import gto, scf,ao2mo,lo
 import scipy
 import sys
+from numba import jit
 sys.path.append("../eigenvectorcontinuation/")
 from matrix_operations import *
 from helper_functions import *
+np.set_printoptions(linewidth=200,precision=5,suppress=True)
+def swap_cols(arr, frm, to):
+    """Swaps the columns of a 2D-array"""
+    arrny=arr.copy()
+    arrny[:,[frm, to]] = arrny[:,[to, frm]]
+    return arrny
+def swappistan(matrix):
+    swapperinos=[]
+    for i in range((matrix.shape[1])):
+        for j in range(i+1,matrix.shape[1]):
+            sort_i=np.sort(matrix[:,i])
+            sort_j=np.sort(matrix[:,j])
+            if(np.all(np.abs(sort_i-sort_j)<1e-8)): #If the two columns are equal
+                nonzero_i=np.where(np.abs(matrix[:,i])>=1e-5)[0][0]
+                nonzero_j=np.where(np.abs(matrix[:,j])>=1e-5)[0][0]
+                if nonzero_i>nonzero_j:
+                    matrix=swap_cols(matrix,i,j)
+    return matrix
+def cholesky_pivoting(matrix):
+    n=len(matrix)
+    R=np.zeros((n,n))
+    piv=np.arange(n)
+    for k in range(n):
+        q=np.argmax(np.diag(matrix)[k:])+k
+        if matrix[q,q]<1e-14:
+            break
+        temp=matrix[:,k].copy()
+        matrix[:,k]=matrix[:,q]
+        matrix[:,q]=temp
+        temp=R[:,k].copy()
+        R[:,k]=R[:,q]
+        R[:,q]=temp
+        temp=matrix[k,:].copy()
+        matrix[k,:]=matrix[q,:]
+        matrix[q,:]=temp
+        temp=piv[k]
+        piv[k]=piv[q]
+        piv[q]=temp
+        R[k,k]=np.sqrt(matrix[k,k])
+        R[k,k+1:]=matrix[k,k+1:]/R[k,k]
+        matrix[k+1:n,k+1:n]=matrix[k+1:n,k+1:n]-np.outer(R[k,k+1:],R[k,k+1:])
+    P=np.eye(n)[:,piv]
+    return R,P
+def cholesky_coefficientmatrix(matrix):
+    D=2*matrix@matrix.T
+    R,P=cholesky_pivoting(D)
+    PL=P@R.T
+    Cnew=PL[:,:matrix.shape[1]]/np.sqrt(2)
+    return Cnew
+def localize_mocoeff(mol,mo_coeff,mo_occ):
+    """
+    mo = lo.ER(mol, mo_coeff[:,mo_occ>0])
+    mo.init_guess = None
+    mo = mo.kernel()
+    mo=swappistan(mo)
+    mo_coeff[:,mo_occ>0]=np.array(mo)
+    mo = lo.ER(mol, mo_coeff[:,mo_occ<=0])
+    mo.init_guess = None
+    mo = mo.kernel()
+    mo=swappistan(mo)
+    mo_coeff[:,mo_occ<=0]=np.array(mo)
+    """
+    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
+    mo=swappistan(mo)
 
+    mo_coeff[:,mo_occ>0]=np.array(mo)
+    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
+    mo=swappistan(mo)
+
+    mo_coeff[:,mo_occ<=0]=np.array(mo)
+
+    return mo_coeff
 
 class SL_det():
     def __init__(self,alpha_string,beta_string):
@@ -20,6 +92,8 @@ class permutation_wf():
         self.determinants.append(determinant)
     def add_config(self,alpha_string,beta_string):
         self.determinants.append(SL_det(alpha_string,beta_string))
+
+
 def energy_between_wfs(bra,ket,onebody,twobody):
     e1=0
     e2=0
@@ -29,25 +103,26 @@ def energy_between_wfs(bra,ket,onebody,twobody):
             e1+=prefac*calculate_e1(bra_SL,ket_SL,onebody)
             e2+=prefac*calculate_e2(bra_SL,ket_SL,twobody)
     return e1+e2
+
 def calculate_e1(bra,ket,onebody):
     diff_alpha=np.sum(bra.alpha!=ket.alpha) #Number of different alpha elements
     diff_beta=np.sum(bra.beta!=ket.beta)
     if diff_alpha+diff_beta>1:
         return 0
     elif diff_alpha==1:
-        diffloc=np.where(bra.alpha!=ket.alpha)[0][0]
-        return onebody[bra.alpha[diffloc],ket.alpha[diffloc]]
+        diffloc=np.where(bra.alpha!=ket.alpha)[0][0] #The index where the elements are different
+        return onebody[bra.alpha[diffloc],ket.alpha[diffloc]] #Return the energy at that point
     elif diff_beta==1:
         diffloc=np.where(bra.beta!=ket.beta)[0][0]
         return onebody[bra.beta[diffloc],ket.beta[diffloc]]
     else:
         energy=0
-        for i in bra.alpha:
+        for i in bra.alpha: #bra.alpha is equal to ket.alpha
             energy+=onebody[i,i]
-        for i in bra.beta:
+        for i in bra.beta:  #bra.beta is equal to ket.beta
             energy+=onebody[i,i]
         return energy
-def calculate_e2(bra,ket,twobody):
+        def calculate_e2(bra,ket,twobody):
     diff_alpha=np.sum(bra.alpha!=ket.alpha) #Number of different alpha elements
     diff_beta=np.sum(bra.beta!=ket.beta)
     if diff_alpha+diff_beta>2:
@@ -109,16 +184,26 @@ def calculate_e2(bra,ket,twobody):
             for n in ket.beta:
                 energy+=twobody[m,m,n,n]-twobody[m,n,n,m]
         return 0.5*energy
+def e_doublesum_1(bra,ket,twobody):
+    energy=0
+    for m in bra:
+        for n in ket:
+            energy+=twobody[m,m,n,n]
+def e_doublesum_2(bra,ket,twobody):
+    energy=0
+    for m in bra:
+        for n in ket:
+            energy-=twobody[m,n,n,m]
 class RHF_CISDsolver(): #Closed-shell only
     def __init__(self,mol):
         self.mol=mol
-        if mol.spin ==0:
-            mf=scf.RHF(mol)
-            print(mf.kernel())
+        mf=scf.RHF(mol)
+        mf.kernel()
         self.onebody=mol.intor("int1e_kin")+mol.intor("int1e_nuc")
         self.twobody=mol.intor('int2e',aosym="s1")
         self.overlap=mol.intor("int1e_ovlp")
-        self.mo_coeff=mf.mo_coeff
+        self.mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
+        print(self.mo_coeff)
         self.onebody=np.einsum("ki,lj,kl->ij",self.mo_coeff,self.mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
         self.twobody=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(self.mo_coeff,self.mo_coeff,self.mo_coeff,self.mo_coeff),aosym="s1")
         self.ne=mol.nelectron
@@ -137,7 +222,7 @@ class RHF_CISDsolver(): #Closed-shell only
             for j in range(i,len(T)):
                 T[j,i]=T[i,j]=energy_between_wfs(all_wfs[i],all_wfs[j],self.onebody,self.twobody)
                 if (i==j):
-                    T[i,j]+=self.mol.energy_nuc()
+                    T[i,j]+=self.mol.energy_nuc() #Add nuc. repulsion to diagonal
         self.T=T
     def calculate_coefficients(self):
         if self.T is None:
@@ -148,6 +233,7 @@ class RHF_CISDsolver(): #Closed-shell only
         eigenvector = eigenvector[:,idx]
         lowest_eigenvalue=energy[0]
         lowest_eigenvector=eigenvector[:,0]
+        lowest_eigenvector=lowest_eigenvector*np.sign(lowest_eigenvector[0])
         self.coeff=lowest_eigenvector
         return lowest_eigenvalue,lowest_eigenvector, self.T
     def calculate_energy(self,coeff=None,T=None):
@@ -157,6 +243,9 @@ class RHF_CISDsolver(): #Closed-shell only
         return coeff.T@T@coeff
     def calculate_T_entry(self,coeff_left,coeff_right,T=None):
         if T is None:
+            T=self.T
+        if self.T is None:
+            self.setupT()
             T=self.T
         return coeff_left.T@T@coeff_right
     def calculate_overlap(self,coeff_left,coeff_right):
@@ -172,7 +261,6 @@ class RHF_CISDsolver(): #Closed-shell only
     def create_singles(self):
         wfs=[]
         #1. Create all possible permutations
-        print("Singles")
         for i in range(self.n_occ):
             for j in range(self.n_occ,self.num_bas):
                 alpha1=np.arange(self.neh)
@@ -185,7 +273,6 @@ class RHF_CISDsolver(): #Closed-shell only
         return wfs
     def create_doubles_samesame(self):
         wfs=[]
-        print("Doubles_samsame")
         for i in range(self.n_occ):
             for a in range(self.n_occ,self.num_bas):
                 beta1=np.arange(self.neh)
@@ -195,7 +282,6 @@ class RHF_CISDsolver(): #Closed-shell only
                 wfs.append(wf)
         return wfs
     def create_doubles_samediff(self):
-        print("Doubles samediff")
         wfs=[]
         for i in range(self.n_occ):
             for a in range(self.n_occ,self.num_bas):
@@ -215,7 +301,6 @@ class RHF_CISDsolver(): #Closed-shell only
         return wfs
     def create_doubles_diffsame(self):
         wfs=[]
-        print("Diffsame")
         for i in range(self.n_occ):
             for j in range(i+1,self.n_occ):
                 for a in range(self.n_occ,self.num_bas):
@@ -234,7 +319,6 @@ class RHF_CISDsolver(): #Closed-shell only
         return wfs
     def create_doubles_diffdiff(self):
         wfs=[]
-        print("Diffdiff")
         for i in range(self.n_occ):
             for j in range(self.n_occ):
                 if(j==i):
@@ -262,115 +346,85 @@ class RHF_CISDsolver(): #Closed-shell only
                         wf.add_config(alpha4,beta4)
                         wfs.append(wf)
         return wfs
-mol=gto.Mole()
-mol.atom = 'F 0 0 0; H 0 1.5 0'
-mol.basis = '6-31G'
-mol.unit= "Bohr"
-mol.build()
-solverino=RHF_CISDsolver(mol)
-energy1,coeff1,T1=solverino.calculate_coefficients()
-
-mol=gto.Mole()
-mol.atom = 'F 0 0 0; H 0 2.0 0'
-mol.basis = '6-31G'
-mol.unit= "Bohr"
-mol.build()
-solverino=RHF_CISDsolver(mol)
-energy2,coeff2,T2=solverino.calculate_coefficients()
-
-mol=gto.Mole()
-mol.atom = 'F 0 0 0; H 0 1.75 0'
-mol.basis = '6-31G'
-mol.unit= "Bohr"
-mol.build()
-solverino=RHF_CISDsolver(mol)
-energy4,coeff4,T4=solverino.calculate_coefficients()
+def create_sample_coefficients(molecule,x_sample):
+    coefficients=[]
+    energies=[]
+    for x in x_sample:
+        mol=gto.Mole()
+        mol.atom=molecule(x)
+        mol.basis = '6-31G'
+        mol.unit= "Bohr"
+        mol.build()
+        solverino=RHF_CISDsolver(mol)
+        e,coeff,T=solverino.calculate_coefficients()
+        coefficients.append(coeff)
+        energies.append(e)
+    return coefficients,energies
 
 
-mol=gto.Mole()
-mol.atom = 'F 0 0 0; H 0 2.5 0'
-mol.basis = '6-31G'
-mol.unit= "Bohr"
-mol.build()
-solverino=RHF_CISDsolver(mol)
-energy3,coeff3,T3=solverino.calculate_coefficients()
-print("Bad solver: %f"%energy3)
-
-c_arr=[coeff1,coeff2,coeff4]
-
-mf=mol.HF.run()
-mf.run()
-mycisd=mf.CISD().run()
-
-def eigvec(c_arr,solverino):
+def eigvec(c_arr,x_arr,molecule,printout=False):
+    energies=np.empty(len(x_arr))
+    energies_reference=np.empty(len(x_arr))
     T=np.empty((len(c_arr),len(c_arr)))
     S=np.empty((len(c_arr),len(c_arr)))
-    for i in range(len(c_arr)):
-        coeff_left=c_arr[i]
-        for j in range(i,len(c_arr)):
-            coeff_right=c_arr[j]
-            T[i,j]=T[j,i]=solverino.calculate_T_entry(coeff_left,coeff_right)
-            S[i,j]=S[j,i]=solverino.calculate_overlap(coeff_left,coeff_right)
-    e,vec=generalized_eigenvector(T,S)
-    print("Eigvec: %f"%e)
-eigvec(c_arr,solverino)
+    for index, x in enumerate(x_arr):
+        mol=gto.Mole()
+        mol.atom=molecule(x)
+        mol.basis = '6-31G'
+        mol.unit= "Bohr"
+        mol.build()
+        solverino=RHF_CISDsolver(mol)
+        eref,coeff,soppel=solverino.calculate_coefficients() #Also sets up the T matrix
+        for i in range(len(c_arr)):
+            coeff_left=c_arr[i]
+            for j in range(i,len(c_arr)):
+                coeff_right=c_arr[j]
+                T[i,j]=T[j,i]=solverino.calculate_T_entry(coeff_left,coeff_right)
+                S[i,j]=S[j,i]=solverino.calculate_overlap(coeff_left,coeff_right)
+        e,vec=generalized_eigenvector(T,S)
+        energies[index]=e
+        energies_reference[index]=eref
+
+    return energies, energies_reference
 
 
+molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
 """
-
-class UHF_CISDsolver(): #Closed-shell only
-    def __init__(self,mol):
-        self.mol=mol
-        if mol.spin==0:
-            mf=scf.RHF(mol)
-            mf.kernel()
-        self.onebody=mol.intor("int1e_kin")+mol.intor("int1e_nuc")
-        self.twobody=mol.intor('int2e',aosym="s1")
-        self.overlap=mol.intor("int1e_ovlp")
-        self.mo_coeff=mf.mo_coeff
-        self.onebody=np.einsum("ki,lj,kl->ij",self.mo_coeff,self.mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
-        self.twobody=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(self.mo_coeff,self.mo_coeff,self.mo_coeff,self.mo_coeff),aosym="s1")
-        self.ne=mol.nelectron
-        self.neh=int(self.ne/2)
-        self.n_occ=self.ne
-        self.num_bas=(self.mo_coeff.shape[0])
-        self.n_unocc=self.num_bas-self.nOCC
-        self.doubles=True
-        self.E_elements=None
-        self.coefficients=None
-    def calculate_coefficients(self,mol):
-        c0=0
-        c1=np.empty((self.neh*2,self.num_bas*2)) #Single excitation coefficients
-        c2=np.empty((self.neh*2,self.neh*2,self.num_bas*2,self.num_bas*2)) #Double excitation coefficients
-        total=1+len(c1.ravel())+len(c2.ravel(()))
-        Tarr=np.zeros((total,total))
-        GS_coefficients=np.arange(self.neh)
-        singlet_coefficients=[]
-        single_permutations=create_singles()
-        double_permutations=create_doubles()
-        for perm in range(len(single_permutations)):
-            temp=np.arange(self.neh)
-            temp[perm[0]]=perm[1]
-            singlet_coefficients.append(temp)
-        for j in range(len(double_permutations)):
-            temp=np.arange(self.neh)
-            temp=np.arange(self.neh)
-    def change_molecule(self,mol):
-        self.__init__(mol)
-    def create_singles(self):
-        permutations=[]
-        #1. Create all possible permutations
-        for i in range(self.n_occ):
-            for j in range(self.n_occ,self.num_bas):
-                permutations.append([[i,j]) #This means: i out, j in!. The zero is there as a "do nothing" operator (now we are operating two permutations...)
-        return permutations
-    def create_doubles(self):
-        if self.doubles==False:
-            return []
-        permutations=[]
-        for j in range(self.n_occ*2):
-            for i in range(self.n_occ*2): #j
-                for a in range(self.n_occ*2,self.num_bas*2):
-                    for b in range(self.n_occ*2,self.num_bas*2): #l
-                        permutations.append([[i,j],[a,b]])
+mol=gto.Mole()
+mol.atom=molecule(1.2)
+mol.basis = '6-31G'
+mol.unit= "Bohr"
+mol.build()
+solverino=RHF_CISDsolver(mol)
+eref,coeff,T_1=solverino.calculate_coefficients()
+print(eref)
+mol=gto.Mole()
+mol.atom=molecule(1.3)
+mol.basis = '6-31G'
+mol.unit= "Bohr"
+mol.build()
+solverino=RHF_CISDsolver(mol)
+eref,coeff1,T_2=solverino.calculate_coefficients()
+print(eref)
+print(np.max(np.abs(coeff1-coeff)))
 """
+sample_x=np.linspace(1,6,6)
+plot_x=np.linspace(1,6,21)
+cisd=CISD_energy_curve(plot_x,"6-31G",molecule)
+hf_curve=energy_curve_RHF(plot_x,"6-31G",molecule)
+
+coeffs,sample_energies=create_sample_coefficients(molecule,sample_x)
+for c in coeffs:
+    print(c)
+
+energies,energies_reference=eigvec(coeffs,plot_x,molecule,printout=False)
+energies_atsamplepoints=eigvec(coeffs,sample_x,molecule,printout=True)
+plt.plot(sample_x,sample_energies,"*",label="samples")
+plt.plot(plot_x,cisd,label="pyscf")
+plt.plot(plot_x,hf_curve,label="Hartree-Fock")
+
+plt.plot(plot_x,energies,label="EVC")
+plt.plot(plot_x,energies_reference,label="shitty CISD")
+plt.legend()
+plt.show()
+print(energies_reference)

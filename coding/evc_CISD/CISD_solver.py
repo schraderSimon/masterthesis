@@ -14,6 +14,7 @@ def swap_cols(arr, frm, to):
     arrny[:,[frm, to]] = arrny[:,[to, frm]]
     return arrny
 def swappistan(matrix):
+    #return matrix
     swapperinos=[]
     for i in range((matrix.shape[1])):
         for j in range(i+1,matrix.shape[1]):
@@ -25,6 +26,9 @@ def swappistan(matrix):
                 if nonzero_i>nonzero_j:
                     matrix=swap_cols(matrix,i,j)
     return matrix
+
+
+@jit
 def cholesky_pivoting(matrix):
     n=len(matrix)
     R=np.zeros((n,n))
@@ -50,6 +54,73 @@ def cholesky_pivoting(matrix):
         matrix[k+1:n,k+1:n]=matrix[k+1:n,k+1:n]-np.outer(R[k,k+1:],R[k,k+1:])
     P=np.eye(n)[:,piv]
     return R,P
+@jit
+def cholesky_coefficientmatrix(matrix):
+    D=2*matrix@matrix.T
+    R,P=cholesky_pivoting(D)
+    PL=P@R.T
+    Cnew=PL[:,:matrix.shape[1]]/np.sqrt(2)
+    return Cnew
+def localize_mocoeff(mol,mo_coeff,mo_occ):
+    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
+    mo=swappistan(mo)
+
+    mo_coeff[:,mo_occ>0]=np.array(mo)
+    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
+    mo=swappistan(mo)
+
+    mo_coeff[:,mo_occ<=0]=np.array(mo)
+
+    return mo_coeff
+
+np.set_printoptions(linewidth=200,precision=5,suppress=True)
+def swap_cols(arr, frm, to):
+    """Swaps the columns of a 2D-array"""
+    arrny=arr.copy()
+    arrny[:,[frm, to]] = arrny[:,[to, frm]]
+    return arrny
+def swappistan(matrix):
+    #return matrix
+    swapperinos=[]
+    for i in range((matrix.shape[1])):
+        for j in range(i+1,matrix.shape[1]):
+            sort_i=np.sort(matrix[:,i])
+            sort_j=np.sort(matrix[:,j])
+            if(np.all(np.abs(sort_i-sort_j)<1e-8)): #If the two columns are equal
+                nonzero_i=np.where(np.abs(matrix[:,i])>=1e-5)[0][0]
+                nonzero_j=np.where(np.abs(matrix[:,j])>=1e-5)[0][0]
+                if nonzero_i>nonzero_j:
+                    matrix=swap_cols(matrix,i,j)
+    return matrix
+
+
+@jit
+def cholesky_pivoting(matrix):
+    n=len(matrix)
+    R=np.zeros((n,n))
+    piv=np.arange(n)
+    for k in range(n):
+        q=np.argmax(np.diag(matrix)[k:])+k
+        if matrix[q,q]<1e-14:
+            break
+        temp=matrix[:,k].copy()
+        matrix[:,k]=matrix[:,q]
+        matrix[:,q]=temp
+        temp=R[:,k].copy()
+        R[:,k]=R[:,q]
+        R[:,q]=temp
+        temp=matrix[k,:].copy()
+        matrix[k,:]=matrix[q,:]
+        matrix[q,:]=temp
+        temp=piv[k]
+        piv[k]=piv[q]
+        piv[q]=temp
+        R[k,k]=np.sqrt(matrix[k,k])
+        R[k,k+1:]=matrix[k,k+1:]/R[k,k]
+        matrix[k+1:n,k+1:n]=matrix[k+1:n,k+1:n]-np.outer(R[k,k+1:],R[k,k+1:])
+    P=np.eye(n)[:,piv]
+    return R,P
+@jit
 def cholesky_coefficientmatrix(matrix):
     D=2*matrix@matrix.T
     R,P=cholesky_pivoting(D)
@@ -117,12 +188,18 @@ def calculate_e1(bra,ket,onebody):
         return onebody[bra.beta[diffloc],ket.beta[diffloc]]
     else:
         energy=0
+        diag_onebody=np.diag(onebody)
+        energy+=np.sum(diag_onebody[bra.alpha])
+        energy+=np.sum(diag_onebody[bra.beta])
+        """
         for i in bra.alpha: #bra.alpha is equal to ket.alpha
             energy+=onebody[i,i]
         for i in bra.beta:  #bra.beta is equal to ket.beta
             energy+=onebody[i,i]
+        """
         return energy
-        def calculate_e2(bra,ket,twobody):
+
+def calculate_e2(bra,ket,twobody):
     diff_alpha=np.sum(bra.alpha!=ket.alpha) #Number of different alpha elements
     diff_beta=np.sum(bra.beta!=ket.beta)
     if diff_alpha+diff_beta>2:
@@ -171,39 +248,41 @@ def calculate_e1(bra,ket,onebody):
         return energy
     else:
         energy=0
-        for m in bra.alpha:
-            for n in ket.alpha:
-                energy+=twobody[m,m,n,n]-twobody[m,n,n,m]
-        for m in bra.alpha:
-            for n in ket.beta:
-                energy+=twobody[m,m,n,n]
-        for m in bra.beta:
-            for n in ket.alpha:
-                energy+=twobody[m,m,n,n]
-        for m in bra.beta:
-            for n in ket.beta:
-                energy+=twobody[m,m,n,n]-twobody[m,n,n,m]
+        energy+=e_doublesum_1(np.array(bra.alpha),np.array(ket.alpha),twobody)
+        energy+=e_doublesum_2(np.array(bra.alpha),np.array(ket.alpha),twobody)
+        energy+=e_doublesum_1(np.array(bra.beta),np.array(ket.beta),twobody)
+        energy+=e_doublesum_2(np.array(bra.beta),np.array(ket.beta),twobody)
+        energy+=e_doublesum_1(np.array(bra.beta),np.array(ket.alpha),twobody)
+        energy+=e_doublesum_1(np.array(bra.alpha),np.array(ket.beta),twobody)
         return 0.5*energy
+@jit(nopython=True)
 def e_doublesum_1(bra,ket,twobody):
     energy=0
     for m in bra:
         for n in ket:
             energy+=twobody[m,m,n,n]
+    return energy
+@jit(nopython=True)
 def e_doublesum_2(bra,ket,twobody):
     energy=0
     for m in bra:
         for n in ket:
             energy-=twobody[m,n,n,m]
+    return energy
 class RHF_CISDsolver(): #Closed-shell only
-    def __init__(self,mol):
+    def __init__(self,mol,mo_coeff=None):
         self.mol=mol
-        mf=scf.RHF(mol)
-        mf.kernel()
+
         self.onebody=mol.intor("int1e_kin")+mol.intor("int1e_nuc")
         self.twobody=mol.intor('int2e',aosym="s1")
         self.overlap=mol.intor("int1e_ovlp")
-        self.mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
-        print(self.mo_coeff)
+        if mo_coeff is None:
+            print("Finding new SL-det")
+            mf=scf.RHF(mol)
+            mf.kernel()
+            self.mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
+        else:
+            self.mo_coeff=self.basischange(mo_coeff,mol.intor("int1e_ovlp"))
         self.onebody=np.einsum("ki,lj,kl->ij",self.mo_coeff,self.mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
         self.twobody=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(self.mo_coeff,self.mo_coeff,self.mo_coeff,self.mo_coeff),aosym="s1")
         self.ne=mol.nelectron
@@ -215,6 +294,14 @@ class RHF_CISDsolver(): #Closed-shell only
         self.energy=None
         self.coeff=None
         self.T=None
+    def basischange(self,C_old,overlap_AOs_newnew):
+        S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
+        S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
+        S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
+        C_newbasis=S_poweronehalf@C_old #Basis change
+        q,r=np.linalg.qr(C_newbasis) #orthonormalise
+        return S_powerminusonehalf@q #change back
+
     def setupT(self):
         all_wfs=self.create_GS()+self.create_singles()+self.create_doubles_samesame()+self.create_doubles_samediff()+self.create_doubles_diffsame()+self.create_doubles_diffdiff()
         T=np.empty((len(all_wfs),len(all_wfs)))
@@ -346,85 +433,89 @@ class RHF_CISDsolver(): #Closed-shell only
                         wf.add_config(alpha4,beta4)
                         wfs.append(wf)
         return wfs
-def create_sample_coefficients(molecule,x_sample):
+def create_sample_coefficients(molecule,basis,x_sample,mo_coeff=None):
     coefficients=[]
     energies=[]
+    print("Sample")
     for x in x_sample:
         mol=gto.Mole()
         mol.atom=molecule(x)
-        mol.basis = '6-31G'
+        mol.basis =basis
         mol.unit= "Bohr"
         mol.build()
-        solverino=RHF_CISDsolver(mol)
-        e,coeff,T=solverino.calculate_coefficients()
+        solverino_1=RHF_CISDsolver(mol,mo_coeff=mo_coeff)
+        e,coeff,T=solverino_1.calculate_coefficients()
         coefficients.append(coeff)
         energies.append(e)
     return coefficients,energies
 
 
-def eigvec(c_arr,x_arr,molecule,printout=False):
-    energies=np.empty(len(x_arr))
+def eigvec(c_arr,x_arr,molecule,basis,printout=False,mo_coeff=None):
+    energies=np.empty((len(x_arr),len(c_arr)))
     energies_reference=np.empty(len(x_arr))
     T=np.empty((len(c_arr),len(c_arr)))
     S=np.empty((len(c_arr),len(c_arr)))
+    print("eigvec")
+    coefs=[]
     for index, x in enumerate(x_arr):
         mol=gto.Mole()
         mol.atom=molecule(x)
-        mol.basis = '6-31G'
+        mol.basis = basis
         mol.unit= "Bohr"
         mol.build()
-        solverino=RHF_CISDsolver(mol)
-        eref,coeff,soppel=solverino.calculate_coefficients() #Also sets up the T matrix
+        solverino_2=RHF_CISDsolver(mol,mo_coeff=mo_coeff)
+        eref,coeff,soppel=solverino_2.calculate_coefficients() #Also sets up the T matrix, so don't remove this linewidth
+        coefs.append(coeff[coefficients_selector])
+        energies_reference[index]=eref
         for i in range(len(c_arr)):
             coeff_left=c_arr[i]
             for j in range(i,len(c_arr)):
                 coeff_right=c_arr[j]
-                T[i,j]=T[j,i]=solverino.calculate_T_entry(coeff_left,coeff_right)
-                S[i,j]=S[j,i]=solverino.calculate_overlap(coeff_left,coeff_right)
-        e,vec=generalized_eigenvector(T,S)
-        energies[index]=e
-        energies_reference[index]=eref
+                T[i,j]=T[j,i]=solverino_2.calculate_T_entry(coeff_left,coeff_right)
+                S[i,j]=S[j,i]=solverino_2.calculate_overlap(coeff_left,coeff_right)
+        for n in range(1,len(c_arr)+1):
+            e,vec=generalized_eigenvector(T[:n,:n],S[:n,:n])
+            energies[index,n-1]=e
 
-    return energies, energies_reference
-
-
-molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
-"""
+    return energies, energies_reference,coefs
+coefficients_selector=np.random.choice(150,replace=False,size=20)
+molecule=lambda x: "H 0 0 0; Li 0 0 %f"%x
+basis="6-31G"
+molname="HF"
+def basischange(C_old,overlap_AOs_newnew):
+    S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
+    S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
+    S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
+    C_newbasis=S_poweronehalf@C_old #Basis change
+    q,r=np.linalg.qr(C_newbasis) #orthonormalise
+    return S_powerminusonehalf@q #change back
 mol=gto.Mole()
-mol.atom=molecule(1.2)
-mol.basis = '6-31G'
+mol.atom=molecule(3)
+mol.basis = basis
 mol.unit= "Bohr"
 mol.build()
-solverino=RHF_CISDsolver(mol)
-eref,coeff,T_1=solverino.calculate_coefficients()
-print(eref)
-mol=gto.Mole()
-mol.atom=molecule(1.3)
-mol.basis = '6-31G'
-mol.unit= "Bohr"
-mol.build()
-solverino=RHF_CISDsolver(mol)
-eref,coeff1,T_2=solverino.calculate_coefficients()
-print(eref)
-print(np.max(np.abs(coeff1-coeff)))
-"""
-sample_x=np.linspace(1,6,6)
-plot_x=np.linspace(1,6,21)
-cisd=CISD_energy_curve(plot_x,"6-31G",molecule)
-hf_curve=energy_curve_RHF(plot_x,"6-31G",molecule)
+mf=scf.RHF(mol)
+mf.kernel()
+mo_coeff_0=mf.mo_coeff
+#mo_coeff_0=None
+sample_x=np.linspace(3,2,1)
+plot_x=np.linspace(2,5,16)
+cisd=CISD_energy_curve(plot_x,basis,molecule)
+hf_curve=energy_curve_RHF(plot_x,basis,molecule)
 
-coeffs,sample_energies=create_sample_coefficients(molecule,sample_x)
-for c in coeffs:
-    print(c)
+coeffs,sample_energies=create_sample_coefficients(molecule,basis,sample_x,mo_coeff=mo_coeff_0)
 
-energies,energies_reference=eigvec(coeffs,plot_x,molecule,printout=False)
-energies_atsamplepoints=eigvec(coeffs,sample_x,molecule,printout=True)
+energies,eref,coeff_calc=eigvec(coeffs,plot_x,molecule,basis,mo_coeff=mo_coeff_0)
+
 plt.plot(sample_x,sample_energies,"*",label="samples")
 plt.plot(plot_x,cisd,label="pyscf")
 plt.plot(plot_x,hf_curve,label="Hartree-Fock")
-
-plt.plot(plot_x,energies,label="EVC")
-plt.plot(plot_x,energies_reference,label="shitty CISD")
+for i in range(len(coeffs)):
+    plt.plot(plot_x,energies[:,i],label="EVC (%d points)"%(i+1))
+plt.plot(plot_x,eref,label="shitty CISD")
 plt.legend()
+plt.tight_layout()
+plt.savefig("%s%s.pdf"%(molname,basis))
 plt.show()
-print(energies_reference)
+plt.plot(plot_x,coeff_calc)
+plt.show()

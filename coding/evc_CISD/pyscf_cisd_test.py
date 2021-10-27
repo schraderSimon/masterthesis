@@ -1,6 +1,8 @@
 from pyscf import gto, scf, ci,lo
 import numpy as np
 import sys
+from numba import jit
+import matplotlib.pyplot as plt
 def swap_cols(arr, frm, to):
     """Swaps the columns of a 2D-array"""
     arrny=arr.copy()
@@ -18,13 +20,14 @@ def swappistan(matrix):
                 if nonzero_i>nonzero_j:
                     matrix=swap_cols(matrix,i,j)
     return matrix
+
 def cholesky_pivoting(matrix):
     n=len(matrix)
     R=np.zeros((n,n))
     piv=np.arange(n)
     for k in range(n):
         q=np.argmax(np.diag(matrix)[k:])+k
-        if matrix[q,q]<1e-14:
+        if matrix[q,q]<1e-10:
             break
         temp=matrix[:,k].copy()
         matrix[:,k]=matrix[:,q]
@@ -43,52 +46,75 @@ def cholesky_pivoting(matrix):
         matrix[k+1:n,k+1:n]=matrix[k+1:n,k+1:n]-np.outer(R[k,k+1:],R[k,k+1:])
     P=np.eye(n)[:,piv]
     return R,P
+
 def cholesky_coefficientmatrix(matrix):
     D=2*matrix@matrix.T
     R,P=cholesky_pivoting(D)
     PL=P@R.T
     Cnew=PL[:,:matrix.shape[1]]/np.sqrt(2)
     return Cnew
+    for i in range(Cnew.shape[1]):
+        if np.sum(Cnew[:,i])<0:
+            Cnew[:,i]=-Cnew[:,i]
+def localize_mocoeff(mol,mo_coeff,mo_occ):
+    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
+    mo=swappistan(mo)
+    #monew=lo.ER(mol,mo)
+    #monew.init_guess=mo
+    #mo=monew.kernel()
+    mo_coeff[:,mo_occ>0]=np.array(mo)
+    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
+    mo=swappistan(mo)
+    #monew=lo.ER(mol,mo)
+    #monew.init_guess=mo
+    #mo=monew.kernel()
+    mo_coeff[:,mo_occ<=0]=np.array(mo)
+
+    return mo_coeff
+
 np.set_printoptions(linewidth=200,precision=5,suppress=True)
-mol = gto.M(
-    atom = 'Li 0 0 0; H 0 0 1.2',  # in Angstrom
-    basis = '6-31G',
-)
-mf1 = scf.RHF(mol).run() # this is UHF
+def molfunc(x):
+    return gto.M(atom = 'Li 0 0 0; H 0 0 %f'%x,unit="Bohr",basis = '6-31G')
+xarray=np.linspace(1,6,50)
+orbital_energies=[]
+PL_matrices=[]
+CI_coefficients=[]
+coefficients_selector=np.random.choice(150,replace=False,size=20);#[1,10,25,33,60,85,100,123,145] #More or less randomized numbers
+def basischange(C_old,overlap_AOs_newnew):
+    S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
+    S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
+    S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
+    C_newbasis=S_poweronehalf@C_old #Basis change
+    q,r=np.linalg.qr(C_newbasis) #orthonormalise
+    return S_powerminusonehalf@q #change back
+mol=molfunc(3)
+mf=scf.RHF(mol).run()
+mo_coeff_0=mf.mo_coeff
 
-#mo = lo.ER(mol, mf1.mo_coeff[:,mf1.mo_occ>0])
-#mo.init_guess = "Random"
-#mo = mo.kernel()
-mo=cholesky_coefficientmatrix( mf1.mo_coeff[:,mf1.mo_occ>0])
-mo=swappistan(mo)
+for xval in xarray:
+    mol=molfunc(xval)
+    mf = scf.RHF(mol).run()
+    energy_mf=mf.mo_energy
+    #PL=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
+    PL=basischange(mo_coeff_0,mol.intor("int1e_ovlp"))
+    orbital_energies.append(energy_mf)
 
-mf1.mo_coeff[:,mf1.mo_occ>0]=np.array(mo)
-mo=cholesky_coefficientmatrix( mf1.mo_coeff[:,mf1.mo_occ<=0])
-mo=swappistan(mo)
+    mf.mo_coeff=PL
+    PL_matrices.append(mf.mo_coeff)
+    myci=ci.CISD(mf).run()
+    CI_coefficients.append(myci.ci[coefficients_selector])
 
-mf1.mo_coeff[:,mf1.mo_occ<=0]=np.array(mo)
-myci1 = ci.CISD(mf1).run() # this is UCISD
-
-ci1=myci1.ci
-mol = gto.M(
-    atom = 'Li 0 0 0; H 0 0 1.3',  # in Angstrom
-    basis = '6-31G',
-)
-mf2 = scf.RHF(mol).run() # this is UHF
-#mf2.mo_coeff=swappistan(mf2.mo_coeff)
-mo=cholesky_coefficientmatrix( mf2.mo_coeff[:,mf2.mo_occ>0])
-mo=swappistan(mo)
-
-mf2.mo_coeff[:,mf2.mo_occ>0]=np.array(mo)
-mo=cholesky_coefficientmatrix( mf2.mo_coeff[:,mf2.mo_occ<=0])
-mo=swappistan(mo)
-
-mf2.mo_coeff[:,mf2.mo_occ<=0]=np.array(mo)
-myci2 = ci.CISD(mf2).run() # this is UCISD
-ci2=myci2.ci
-try:
-    assert(np.all(np.abs(mf2.mo_coeff-mf1.mo_coeff)<1e-5))
-except:
-    print(mf2.mo_coeff-mf1.mo_coeff)
-    #sys.exit(1)
-print("%e"%np.max(np.abs(ci1-ci2)))
+PL_matrices_diff=[]
+vector_norms=[]
+for i in range(len(xarray)-1):
+    PL_matrices_diff.append(PL_matrices[i+1]-PL_matrices[i])
+    vector_norms.append(np.linalg.norm(PL_matrices_diff[-1],axis=0))
+vector_norms=np.array(vector_norms)
+plt.plot(xarray,orbital_energies)
+plt.show()
+for i in range((vector_norms.shape[1])):
+    plt.plot(xarray[:-1],vector_norms[:,i],label="%d"%i)
+plt.legend()
+plt.show()
+plt.plot(xarray,CI_coefficients)
+plt.show()

@@ -4,6 +4,31 @@ from numba import jit
 import numba as nb
 import scipy
 from scipy.linalg import lu, qr,svd
+def cholesky_pivoting(matrix):
+    n=len(matrix)
+    R=np.zeros((n,n))
+    piv=np.arange(n)
+    for k in range(n):
+        q=np.argmax(np.diag(matrix)[k:])+k
+        if matrix[q,q]<1e-14:
+            break
+        temp=matrix[:,k].copy()
+        matrix[:,k]=matrix[:,q]
+        matrix[:,q]=temp
+        temp=R[:,k].copy()
+        R[:,k]=R[:,q]
+        R[:,q]=temp
+        temp=matrix[k,:].copy()
+        matrix[k,:]=matrix[q,:]
+        matrix[q,:]=temp
+        temp=piv[k]
+        piv[k]=piv[q]
+        piv[q]=temp
+        R[k,k]=np.sqrt(matrix[k,k])
+        R[k,k+1:]=matrix[k,k+1:]/R[k,k]
+        matrix[k+1:n,k+1:n]=matrix[k+1:n,k+1:n]-np.outer(R[k,k+1:],R[k,k+1:])
+    P=np.eye(n)[:,piv]
+    return R,P
 def LDU_decomp(X):
     """Singular-Value-based LDU decomposition.
     Input:

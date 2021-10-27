@@ -8,7 +8,7 @@ import scipy
 sys.path.append("../eigenvectorcontinuation/")
 from matrix_operations import *
 from helper_functions import *
-np.set_printoptions(linewidth=200,precision=7,suppress=True)
+np.set_printoptions(linewidth=200,precision=5,suppress=True)
 def swap_cols(arr, frm, to):
     """Swaps the columns of a 2D-array"""
     arrny=arr.copy()
@@ -76,11 +76,11 @@ def localize_mocoeff(mol,mo_coeff,mo_occ):
     mo_coeff[:,mo_occ<=0]=np.array(mo)
     """
     mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
-    #mo=swappistan(mo)
+    mo=swappistan(mo)
 
     mo_coeff[:,mo_occ>0]=np.array(mo)
     mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
-    #mo=swappistan(mo)
+    mo=swappistan(mo)
 
     mo_coeff[:,mo_occ<=0]=np.array(mo)
 
@@ -128,7 +128,7 @@ def basischange(C_old,overlap_AOs_newnew):
     C_newbasis=S_poweronehalf@C_old #Basis change
     q,r=np.linalg.qr(C_newbasis) #orthonormalise
     return S_powerminusonehalf@q #change back
-def offdiagonal_energy(states,indices,states_fallen):
+def offdiagonal_energy(states,indices,states_fallen,onebody,twobody):
     T=np.zeros((len(states),len(states)))
     for i in range(len(states)):
         for j in range(i+1,len(states)):
@@ -215,52 +215,60 @@ def data_creator(neh,num_bas):
 def energy_bitch(default,T):
     return default.T@T@default
 
-molecule=lambda x: "H 0 0 0; H 0 0 %f"%x
+molecule=lambda x: "Li 0 0 0; H 0 0 %f"%x
 mol=make_mol(molecule,3)
 mf=scf.RHF(mol)
 mf.kernel()
 cisd=ci.CISD(mf).run()
 
-mo_coeff=mf.mo_coeff#localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
-mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
-basis_mo_coeff=mo_coeff
-overlap=mol.intor("int1e_ovlp")
-onebody=np.einsum("ki,lj,kl->ij",mo_coeff,mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
-twobody=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(mo_coeff,mo_coeff,mo_coeff,mo_coeff),aosym="s1")
-mo_coeff=basischange(basis_mo_coeff,overlap)
-states,states_fallen,indices=data_creator(int(mol.nelectron/2),(mo_coeff.shape[0]))
-num_bas=(mo_coeff.shape[0])
-diagonal_matrix=diagonal_energy(indices,onebody,twobody,len(indices))+mol.energy_nuc()
-offdiagonals=offdiagonal_energy(states,indices,states_fallen)
-T=offdiagonals+np.diag(diagonal_matrix)
-eigenvalues,eigenvectors=np.linalg.eigh(T)
-reference_excitations=eigenvectors[0]
-print(reference_excitations.T@reference_excitations)
-print(energy_bitch(reference_excitations,T)-eigenvalues[0])
-assert(np.all(np.abs(T-T.T)<1e-10))
-sys.exit(1)
-xvals=np.linspace(2,4,21)
+overlap_matrix_ref=mol.intor("int1e_ovlp")
+occ=mf.mo_coeff[:,:mol.nelectron//2]
+unocc=mf.mo_coeff[:,mol.nelectron//2:]
+
+basis_mo_coeff=basischange(localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ),overlap_matrix_ref)
+occ_bas=basis_mo_coeff[:,:mol.nelectron//2]
+unocc_bas=basis_mo_coeff[:,mol.nelectron//2:]
+
+#sys.exit(1)
+onebody_matrix_ref=np.einsum("ki,lj,kl->ij",basis_mo_coeff,basis_mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
+twobody_matrix_ref=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(basis_mo_coeff,basis_mo_coeff,basis_mo_coeff,basis_mo_coeff),aosym="s1")
+mo_coeff_old=basischange(basis_mo_coeff,overlap_matrix_ref)
+states,states_fallen,indices=data_creator(int(mol.nelectron//2),(basis_mo_coeff.shape[0]))
+num_bas=(basis_mo_coeff.shape[0])
+diagonal_matrix_ref=diagonal_energy(indices,onebody_matrix_ref,twobody_matrix_ref,len(indices))+mol.energy_nuc()
+
+offdiagonal_ref=offdiagonal_energy(states,indices,states_fallen,onebody_matrix_ref,twobody_matrix_ref)
+T=offdiagonal_ref+np.diag(diagonal_matrix_ref)
+eigenvalues_ref,eigenvectors_ref=np.linalg.eigh(T)
+reference_excitations=eigenvectors_ref[:,0]
+assert(np.all(np.abs(eigenvectors_ref[:,0]*eigenvalues_ref[0]-T@eigenvectors_ref[:,0])<1e-10))
+xvals=np.linspace(2,4,11)
 energies=np.zeros_like(xvals)
 energies_default=np.zeros_like(xvals)
 
 for indexerino,x in enumerate(xvals):
     mol=make_mol(molecule,x)
-    overlap=mol.intor("int1e_ovlp")
-    onebody=np.einsum("ki,lj,kl->ij",mo_coeff,mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
-    twobody=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(mo_coeff,mo_coeff,mo_coeff,mo_coeff),aosym="s1")
+    overlap_matrix=mol.intor("int1e_ovlp")
 
-
+    mo_coeff=basischange(basis_mo_coeff,overlap_matrix)
+    onebody_matrix=np.einsum("ki,lj,kl->ij",mo_coeff,mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
+    twobody_matrix=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(mo_coeff,mo_coeff,mo_coeff,mo_coeff),aosym="s1")
     mf=scf.RHF(mol)
     mf.kernel()
     cisd=ci.CISD(mf).run()
-    mo_coeff=basischange(basis_mo_coeff,overlap)
+
     states,states_fallen,indices=data_creator(int(mol.nelectron/2),(mo_coeff.shape[0]))
     num_bas=(mo_coeff.shape[0])
-    diagonal_matrix=diagonal_energy(indices,onebody,twobody,len(indices))+mol.energy_nuc()
-    offdiagonals=offdiagonal_energy(states,indices,states_fallen)
+    diagonal_matrix=diagonal_energy(indices,onebody_matrix,twobody_matrix,len(indices))+mol.energy_nuc()
+    offdiagonals=offdiagonal_energy(states,indices,states_fallen,onebody_matrix,twobody_matrix)
     T=offdiagonals+np.diag(diagonal_matrix)
     eigenvalues,eigenvectors=np.linalg.eigh(T)
     print(eigenvalues[0])
+    print(overlap_matrix-overlap_matrix_ref)
+    #print(onebody_matrix-onebody_matrix_ref)
+    #print(twobody_matrix-twobody_matrix_ref)
+    print(energy_bitch(reference_excitations,T))
+    #print(eigenvectors[:,0]-reference_excitations)
     energies[indexerino]=eigenvalues[0]
     energies_default[indexerino]=energy_bitch(reference_excitations,T)
 plt.plot(xvals,energies,label="Crap-referanse")

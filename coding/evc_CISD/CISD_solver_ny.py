@@ -132,7 +132,6 @@ def state_creator(N_elec_half,N_basis_spatial):
     doubles_beta=[[groundstring,alpha] for alpha in alpha_doubleexcitations]
     doubles_alphabeta=[[alpha,beta] for alpha in alpha_singleexcitations for beta in alpha_singleexcitations]
     allstates=GS+singles_alpha+singles_beta+doubles_alpha+doubles_beta+doubles_alphabeta
-    #allstates=GS+doubles_alpha+doubles_beta+doubles_alphabeta #CID
     return allstates
 def index_creator(states,N_elec_half,N_basis_spatial):
     all_indices=[]
@@ -159,21 +158,12 @@ def offdiagonal_energy(states,indices,states_fallen,onebody,twobody):
                 alpha_left=indices[i][0]
                 beta_left=indices[i][1]
                 if diffalpha==2 and diffbeta==0: #A single "excitation" from one alpha state to another alpha state
-
-
                     m=[x for x in range(num_bas) if states[i][0][x]=="1" and states[j][0][x]=="0"][0]
                     p=[x for x in range(num_bas) if states[i][0][x]=="0" and states[j][0][x]=="1"][0]
-                    #I have now found which ones are different.
                     al=indices[i][0].copy()
                     ar=indices[j][0].copy()
-                    #print("---")
-                    #print(al)
-                    #print(ar)
                     al[np.where(np.array(al)==m)[0][0]]=p
                     parity_here=parity(np.argsort(al))*parity(np.argsort(ar))
-                    #print(al)
-                    #print(ar)
-                    #print(parity_here)
                     e1=onebody[m,p]
                     for n in alpha_left:
                         e2+=twobody[m,p,n,n]
@@ -187,7 +177,6 @@ def offdiagonal_energy(states,indices,states_fallen,onebody,twobody):
                     br=indices[j][1].copy()
                     bl[np.where(np.array(bl)==m)[0][0]]=p
                     parity_here=parity(np.argsort(bl))*parity(np.argsort(br))
-                    #print(parity_here)
                     e1=onebody[m,p]
                     for n in alpha_left:
                         e2+=twobody[m,p,n,n]
@@ -224,23 +213,10 @@ def offdiagonal_energy(states,indices,states_fallen,onebody,twobody):
                     al[np.where(np.array(al)==m)[0][0]]=p
                     bl[np.where(np.array(bl)==n)[0][0]]=q
                     parity_here=parity(np.argsort(bl))*parity(np.argsort(br))*parity(np.argsort(al))*parity(np.argsort(ar))
-                    #print("%d->%d %d->%d"%(m,p,n+num_bas,q+num_bas))
-                    #print(states_fallen[i])
-                    #print(states_fallen[j])
                     e2=twobody[m,p,n,q]
                 T[i,j]=T[j,i]=parity_here*(e1+e2)
     return T
-"""
-4->3 10->9
-1110100000110111010000
-1111000001010111010000
-"""
-"""
-4->3 10->9
-1110100000111110000010
-1111000001011110000010
-"""
-#@jit
+@jit
 def diagonal_energy(indices,onebody,twobody,num_states):
     diagonal_matrix=np.empty(num_states)
     for i in range(num_states):

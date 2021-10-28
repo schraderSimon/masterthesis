@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from pyscf import gto, scf,ao2mo,lo,ci,fci
+from pyscf import gto, scf,ao2mo,lo,ci,fci,cc
 import scipy
 import sys
 from numba import jit
@@ -8,7 +8,26 @@ import scipy
 sys.path.append("../eigenvectorcontinuation/")
 from matrix_operations import *
 from helper_functions import *
+
 np.set_printoptions(linewidth=200,precision=5,suppress=True)
+def parity(permutation):
+    permutation = list(permutation)
+    length = len(permutation)
+    elements_seen = [False] * length
+    cycles = 0
+    for index, already_seen in enumerate(elements_seen):
+        if already_seen:
+            continue
+        cycles += 1
+        current = index
+        while not elements_seen[current]:
+            elements_seen[current] = True
+            current = permutation[current]
+    if((length-cycles) % 2 == 0):
+        return 1
+    else:
+        return -1
+
 def swap_cols(arr, frm, to):
     """Swaps the columns of a 2D-array"""
     arrny=arr.copy()
@@ -93,26 +112,27 @@ def calc_diff_bitstring(a,b):
     ndiffb=bin(difference_beta).count("1") #How many differ
     return ndiffa,ndiffb
 def state_creator(N_elec_half,N_basis_spatial):
-    groundstring="1"*N_elec_half+"0"*(N_basis_spatial-N_elec_half)
+    groundstring="1"*N_elec_half+"0"*(N_basis_spatial-N_elec_half) #Ground state Slater determinant
     alpha_singleexcitations=[]
     for i in range(N_elec_half):
         for j in range(N_elec_half,N_basis_spatial):
-            newstring=groundstring[:i]+"0"+groundstring[i+1:j]+"1"+groundstring[j+1:]
+            newstring=groundstring[:i]+"0"+groundstring[i+1:j]+"1"+groundstring[j+1:] #Take the ith 1 and move it to position j
             alpha_singleexcitations.append(newstring)
     alpha_doubleexcitations=[]
     for i in range(N_elec_half):
         for j in range(i+1,N_elec_half):
             for k in range(N_elec_half,N_basis_spatial):
                 for l in range(k+1,N_basis_spatial):
-                    newstring=groundstring[:i]+"0"+groundstring[i+1:j]+"0"+groundstring[j+1:k]+"1"+groundstring[k+1:l]+"1"+groundstring[l+1:]
+                    newstring=groundstring[:i]+"0"+groundstring[i+1:j]+"0"+groundstring[j+1:k]+"1"+groundstring[k+1:l]+"1"+groundstring[l+1:]#Take the ith & jth 1 and move it to positions k and l
                     alpha_doubleexcitations.append(newstring)
     GS=[[groundstring,groundstring]]
-    singles_alpha=[[alpha,groundstring] for alpha in alpha_singleexcitations]
+    singles_alpha=[[alpha,groundstring] for alpha in alpha_singleexcitations] #All single excitations within alpha
     singles_beta=[[groundstring,alpha] for alpha in alpha_singleexcitations]
     doubles_alpha=[[alpha,groundstring] for alpha in alpha_doubleexcitations]
     doubles_beta=[[groundstring,alpha] for alpha in alpha_doubleexcitations]
     doubles_alphabeta=[[alpha,beta] for alpha in alpha_singleexcitations for beta in alpha_singleexcitations]
     allstates=GS+singles_alpha+singles_beta+doubles_alpha+doubles_beta+doubles_alphabeta
+    #allstates=GS+doubles_alpha+doubles_beta+doubles_alphabeta #CID
     return allstates
 def index_creator(states,N_elec_half,N_basis_spatial):
     all_indices=[]
@@ -129,9 +149,6 @@ def basischange_alt(C_old,overlap_AOs_newnew):
     return C_new
 def offdiagonal_energy(states,indices,states_fallen,onebody,twobody):
     T=np.zeros((len(states),len(states)))
-    for state in states:
-        print(state)
-    print("Start loop")
     for i in range(len(states)):
         for j in range(i+1,len(states)):
             diffalpha,diffbeta=calc_diff_bitstring(states_fallen[i],states_fallen[j])
@@ -142,11 +159,21 @@ def offdiagonal_energy(states,indices,states_fallen,onebody,twobody):
                 alpha_left=indices[i][0]
                 beta_left=indices[i][1]
                 if diffalpha==2 and diffbeta==0: #A single "excitation" from one alpha state to another alpha state
+
+
                     m=[x for x in range(num_bas) if states[i][0][x]=="1" and states[j][0][x]=="0"][0]
                     p=[x for x in range(num_bas) if states[i][0][x]=="0" and states[j][0][x]=="1"][0]
-                    print("%d->%d"%(m,p))
-                    print(states_fallen[i])
-                    print(states_fallen[j])
+                    #I have now found which ones are different.
+                    al=indices[i][0].copy()
+                    ar=indices[j][0].copy()
+                    #print("---")
+                    #print(al)
+                    #print(ar)
+                    al[np.where(np.array(al)==m)[0][0]]=p
+                    parity_here=parity(np.argsort(al))*parity(np.argsort(ar))
+                    #print(al)
+                    #print(ar)
+                    #print(parity_here)
                     e1=onebody[m,p]
                     for n in alpha_left:
                         e2+=twobody[m,p,n,n]
@@ -156,6 +183,11 @@ def offdiagonal_energy(states,indices,states_fallen,onebody,twobody):
                 elif diffbeta==2 and diffalpha==0:
                     m=[x for x in range(num_bas) if states[i][1][x]=="1" and states[j][1][x]=="0"][0]
                     p=[x for x in range(num_bas) if states[i][1][x]=="0" and states[j][1][x]=="1"][0]
+                    bl=indices[i][1].copy()
+                    br=indices[j][1].copy()
+                    bl[np.where(np.array(bl)==m)[0][0]]=p
+                    parity_here=parity(np.argsort(bl))*parity(np.argsort(br))
+                    #print(parity_here)
                     e1=onebody[m,p]
                     for n in alpha_left:
                         e2+=twobody[m,p,n,n]
@@ -163,28 +195,51 @@ def offdiagonal_energy(states,indices,states_fallen,onebody,twobody):
                         e2+=twobody[m,p,n,n]
                         e2-=twobody[m,n,n,p]
                 elif diffalpha==4:
+                    al=indices[i][0].copy()
+                    ar=indices[j][0].copy()
                     m,n=[x for x in range(num_bas) if states[i][0][x]=="1" and states[j][0][x]=="0"]
                     p,q=[x for x in range(num_bas) if states[i][0][x]=="0" and states[j][0][x]=="1"]
+                    al[np.where(np.array(al)==m)[0][0]]=p
+                    al[np.where(np.array(al)==n)[0][0]]=q
+                    parity_here=parity(np.argsort(al))*parity(np.argsort(ar))
                     e2=twobody[m,p,n,q]-twobody[m,q,n,p]
-                    #print("%d->%d %d->%d"%(m,p,n,q))
-                    #print(states_fallen[i])
-                    #print(states_fallen[j])
                 elif diffbeta==4:
+                    bl=indices[i][1].copy()
+                    br=indices[j][1].copy()
                     m,n=[x for x in range(num_bas) if states[i][1][x]=="1" and states[j][1][x]=="0"]
                     p,q=[x for x in range(num_bas) if states[i][1][x]=="0" and states[j][1][x]=="1"]
+                    bl[np.where(np.array(bl)==m)[0][0]]=p
+                    bl[np.where(np.array(bl)==n)[0][0]]=q
+                    parity_here=parity(np.argsort(bl))*parity(np.argsort(br))
                     e2=twobody[m,p,n,q]-twobody[m,q,n,p]
                 elif diffalpha==2 and diffbeta==2:
+                    al=indices[i][0].copy()
+                    ar=indices[j][0].copy()
+                    bl=indices[i][1].copy()
+                    br=indices[j][1].copy()
                     m=[x for x in range(num_bas) if states[i][0][x]=="1" and states[j][0][x]=="0"][0]
                     n=[x for x in range(num_bas) if states[i][1][x]=="1" and states[j][1][x]=="0"][0]
                     p=[x for x in range(num_bas) if states[i][0][x]=="0" and states[j][0][x]=="1"][0]
                     q=[x for x in range(num_bas) if states[i][1][x]=="0" and states[j][1][x]=="1"][0]
+                    al[np.where(np.array(al)==m)[0][0]]=p
+                    bl[np.where(np.array(bl)==n)[0][0]]=q
+                    parity_here=parity(np.argsort(bl))*parity(np.argsort(br))*parity(np.argsort(al))*parity(np.argsort(ar))
                     #print("%d->%d %d->%d"%(m,p,n+num_bas,q+num_bas))
                     #print(states_fallen[i])
                     #print(states_fallen[j])
                     e2=twobody[m,p,n,q]
-                T[i,j]=T[j,i]=e1+e2
-    print("End loop")
+                T[i,j]=T[j,i]=parity_here*(e1+e2)
     return T
+"""
+4->3 10->9
+1110100000110111010000
+1111000001010111010000
+"""
+"""
+4->3 10->9
+1110100000111110000010
+1111000001011110000010
+"""
 #@jit
 def diagonal_energy(indices,onebody,twobody,num_states):
     diagonal_matrix=np.empty(num_states)
@@ -204,7 +259,7 @@ def diagonal_energy(indices,onebody,twobody,num_states):
                 energy2+=twobody[a,a,b,b]
         for a in beta:
             for b in alpha:
-                energy2+=twobody[b,b,a,a]
+                energy2+=twobody[a,a,b,b]
         for a in beta:
             for b in beta:
                 energy2+=twobody[a,a,b,b]
@@ -230,7 +285,7 @@ def data_creator(neh,num_bas):
 def energy_bitch(default,T):
     return default.T@T@default
 
-molecule=lambda x: "H 0 0 0; Li 0 0 %f"%x
+molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
 mol=make_mol(molecule,1.5)
 mf=scf.RHF(mol)
 mf.kernel()
@@ -274,25 +329,34 @@ eigenvalues_ref,eigenvectors_ref=np.linalg.eigh(T)
 reference_excitations=eigenvectors_ref[:,0]
 assert(np.all(np.abs(eigenvectors_ref[:,0]*eigenvalues_ref[0]-T@eigenvectors_ref[:,0])<1e-10))
 
-xvals=np.linspace(3,6,10)
+xvals=np.linspace(1,4,16)
 energies=np.zeros_like(xvals)
 energies_default=np.zeros_like(xvals)
 energies_pyscf=np.zeros_like(xvals)
+energies_cc=np.zeros_like(xvals)
 
 for indexerino,x in enumerate(xvals):
     mol=make_mol(molecule,x)
     overlap_matrix=mol.intor("int1e_ovlp")
-    #mo_coeff=basischange_alt(basis_mo_coeff,overlap_matrix)
+
     mf=scf.RHF(mol)
     mf.kernel()
-    #mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
-    mo_coeff=mf.mo_coeff #Canonical orbitals
-    cisd=ci.CISD(mf).run()
-    #fcisolver=fci.FCI(mf)
-    energies_pyscf[indexerino]=cisd.e_tot
+    mo_coeff=basischange_alt(basis_mo_coeff,overlap_matrix)
+    #mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ) #Correct
+    #mo_coeff=mf.mo_coeff #Canonical orbitals #Correct
+    mf=scf.UHF(mol)
+    mf.kernel()
+    cisd=ci.CISD(mf)
+    cisd.kernel()
+    cisd_energy=cisd.e_tot
+    mycc=cc.CCSD(mf).run()
+    e_cc=mycc.e_tot
+    energies_pyscf[indexerino]=cisd_energy#cisd.e_tot
     onebody_matrix=np.einsum("ki,lj,kl->ij",mo_coeff,mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
     twobody_matrix=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(mo_coeff,mo_coeff,mo_coeff,mo_coeff),aosym="s1")
     states,states_fallen,indices=data_creator(int(mol.nelectron/2),(mo_coeff.shape[0]))
+    """Check if some states are redundant"""
+    assert(len(states_fallen)==len(set(states_fallen)))
     num_bas=(mo_coeff.shape[0])
     diagonal_matrix=diagonal_energy(indices,onebody_matrix,twobody_matrix,len(indices))+mol.energy_nuc()
     offdiagonals=offdiagonal_energy(states,indices,states_fallen,onebody_matrix,twobody_matrix)
@@ -300,15 +364,15 @@ for indexerino,x in enumerate(xvals):
     eigenvalues,eigenvectors=np.linalg.eigh(T)
     energies[indexerino]=eigenvalues[0]
     energies_default[indexerino]=energy_bitch(reference_excitations,T)
+    energies_cc[indexerino]=e_cc
     print("E_EVC: %.5f"%energy_bitch(reference_excitations,T))
     print("Own CISD: %.5f"%eigenvalues[0])
-    print("pyscf cisd: %.5f"%cisd.e_tot)
-    #print("pyscf fci: %.5f"%fcisolver.kernel()[0])
-    print("Diagonal elements")
-    print(T)
+    print("pyscf cisd: %.5f"%cisd_energy)
+    #print("pyscf fci: %.5f"%e_fci)
 plt.plot(xvals,energies,label="Crap-referanse")
 plt.plot(xvals,energies_default,label="Default")
 plt.plot(xvals,energies_pyscf,label="pyscf")
+plt.plot(xvals,energies_cc,label="CC")
 
 plt.legend()
 plt.show()

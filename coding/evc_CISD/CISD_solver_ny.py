@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from pyscf import gto, scf,ao2mo,lo,ci
+from pyscf import gto, scf,ao2mo,lo,ci,fci
 import scipy
 import sys
 from numba import jit
@@ -121,54 +121,69 @@ def index_creator(states,N_elec_half,N_basis_spatial):
         betas_occ=[i for i in range(len(state[1])) if int(state[1][i])==1]
         all_indices.append([alphas_occ,betas_occ])
     return all_indices
-def basischange(C_old,overlap_AOs_newnew):
-    S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
-    S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
+def basischange_alt(C_old,overlap_AOs_newnew):
+    S=np.einsum("mi,vj,mv->ij",C_old,C_old,overlap_AOs_newnew)
+    S_eig,S_U=np.linalg.eigh(S)
     S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-    C_newbasis=S_poweronehalf@C_old #Basis change
-    q,r=np.linalg.qr(C_newbasis) #orthonormalise
-    return S_powerminusonehalf@q #change back
+    C_new=np.einsum("ij,mj->mi",S_powerminusonehalf,C_old)
+    return C_new
 def offdiagonal_energy(states,indices,states_fallen,onebody,twobody):
     T=np.zeros((len(states),len(states)))
+    for state in states:
+        print(state)
+    print("Start loop")
     for i in range(len(states)):
         for j in range(i+1,len(states)):
             diffalpha,diffbeta=calc_diff_bitstring(states_fallen[i],states_fallen[j])
             state_difference=diffalpha+diffbeta
-            #print("i=%d,j=%d,differences=%d"%(i,j,state_difference))
             if (state_difference<=4): #Only then, nonzero contribution
                 e1=0
                 e2=0
                 alpha_left=indices[i][0]
                 beta_left=indices[i][1]
-                if diffalpha==2 and diffbeta==0:
-                    nate=[x for x in range(num_bas) if states[i][0][x] != states[j][0][x]]
-                    x=nate[0]
-                    outy=nate[0]; iny=nate[1]
-                    e1=onebody[outy,iny]
-                    for k in alpha_left:
-                        e2+=twobody[iny,outy,k,k]
-                        e2-=twobody[iny,k,k,outy]
-                    for k in beta_left:
-                        e2+=twobody[iny,outy,k,k]
+                if diffalpha==2 and diffbeta==0: #A single "excitation" from one alpha state to another alpha state
+                    m=[x for x in range(num_bas) if states[i][0][x]=="1" and states[j][0][x]=="0"][0]
+                    p=[x for x in range(num_bas) if states[i][0][x]=="0" and states[j][0][x]=="1"][0]
+                    print("%d->%d"%(m,p))
+                    print(states_fallen[i])
+                    print(states_fallen[j])
+                    e1=onebody[m,p]
+                    for n in alpha_left:
+                        e2+=twobody[m,p,n,n]
+                        e2-=twobody[m,n,n,p]
+                    for n in beta_left:
+                        e2+=twobody[m,p,n,n]
                 elif diffbeta==2 and diffalpha==0:
-                    outy,iny=[x for x in range(num_bas) if states[i][1][x] != states[j][1][x]]
-                    e1=onebody[outy,iny]
-                    for k in alpha_left:
-                        e2+=twobody[iny,outy,k,k]
-                    for k in beta_left:
-                        e2+=twobody[iny,outy,k,k]
-                        e2-=twobody[iny,k,k,outy]
+                    m=[x for x in range(num_bas) if states[i][1][x]=="1" and states[j][1][x]=="0"][0]
+                    p=[x for x in range(num_bas) if states[i][1][x]=="0" and states[j][1][x]=="1"][0]
+                    e1=onebody[m,p]
+                    for n in alpha_left:
+                        e2+=twobody[m,p,n,n]
+                    for n in beta_left:
+                        e2+=twobody[m,p,n,n]
+                        e2-=twobody[m,n,n,p]
                 elif diffalpha==4:
-                    out1,out2,in1,in2=[x for x in range(num_bas) if states[i][0][x] != states[j][0][x]]
-                    e2=twobody[out1,in1,out2,in2]-twobody[out1,out2,in1,in2]
+                    m,n=[x for x in range(num_bas) if states[i][0][x]=="1" and states[j][0][x]=="0"]
+                    p,q=[x for x in range(num_bas) if states[i][0][x]=="0" and states[j][0][x]=="1"]
+                    e2=twobody[m,p,n,q]-twobody[m,q,n,p]
+                    #print("%d->%d %d->%d"%(m,p,n,q))
+                    #print(states_fallen[i])
+                    #print(states_fallen[j])
                 elif diffbeta==4:
-                    out1,out2,in1,in2=[x for x in range(num_bas) if states[i][1][x] != states[j][1][x]]
-                    e2=twobody[out1,in1,out2,in2]-twobody[out1,out2,in1,in2]
+                    m,n=[x for x in range(num_bas) if states[i][1][x]=="1" and states[j][1][x]=="0"]
+                    p,q=[x for x in range(num_bas) if states[i][1][x]=="0" and states[j][1][x]=="1"]
+                    e2=twobody[m,p,n,q]-twobody[m,q,n,p]
                 elif diffalpha==2 and diffbeta==2:
-                    outalpha,inalpha=[x for x in range(num_bas) if states[i][0][x] != states[j][0][x]]
-                    outbeta,inbeta=[x for x in range(num_bas) if states[i][1][x] != states[j][1][x]]
-                    e2=twobody[inalpha,outalpha,inbeta,outbeta]
+                    m=[x for x in range(num_bas) if states[i][0][x]=="1" and states[j][0][x]=="0"][0]
+                    n=[x for x in range(num_bas) if states[i][1][x]=="1" and states[j][1][x]=="0"][0]
+                    p=[x for x in range(num_bas) if states[i][0][x]=="0" and states[j][0][x]=="1"][0]
+                    q=[x for x in range(num_bas) if states[i][1][x]=="0" and states[j][1][x]=="1"][0]
+                    #print("%d->%d %d->%d"%(m,p,n+num_bas,q+num_bas))
+                    #print(states_fallen[i])
+                    #print(states_fallen[j])
+                    e2=twobody[m,p,n,q]
                 T[i,j]=T[j,i]=e1+e2
+    print("End loop")
     return T
 #@jit
 def diagonal_energy(indices,onebody,twobody,num_states):
@@ -215,24 +230,40 @@ def data_creator(neh,num_bas):
 def energy_bitch(default,T):
     return default.T@T@default
 
-molecule=lambda x: "Li 0 0 0; H 0 0 %f"%x
-mol=make_mol(molecule,3)
+molecule=lambda x: "H 0 0 0; Li 0 0 %f"%x
+mol=make_mol(molecule,1.5)
 mf=scf.RHF(mol)
 mf.kernel()
 cisd=ci.CISD(mf).run()
 
 overlap_matrix_ref=mol.intor("int1e_ovlp")
-occ=mf.mo_coeff[:,:mol.nelectron//2]
-unocc=mf.mo_coeff[:,mol.nelectron//2:]
-
-basis_mo_coeff=basischange(localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ),overlap_matrix_ref)
+#print("Pre-change")
+#print(localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ))
+basis_mo_coeff=basischange_alt(localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ),overlap_matrix_ref)
+#basis_mo_coeff=basischange_alt(mf.mo_coeff,overlap_matrix_ref)
+#print("Post-change")
+#print(basis_mo_coeff)
 occ_bas=basis_mo_coeff[:,:mol.nelectron//2]
 unocc_bas=basis_mo_coeff[:,mol.nelectron//2:]
+bitcherino=basischange_alt(basis_mo_coeff,overlap_matrix_ref)
+
+try:
+
+    assert(np.all(np.abs(basis_mo_coeff-bitcherino)<1e-10)), "They are somehow different???"
+except:
+    print("They are different")
+    print("Occupied density matrix difference")
+    occ=mf.mo_coeff[:,:mol.nelectron//2]
+    unocc=mf.mo_coeff[:,mol.nelectron//2:]
+    occ_bitch=bitcherino[:,:mol.nelectron//2]
+    unocc_bitch=bitcherino[:,mol.nelectron//2:]
+    print(occ@occ.T-occ_bitch@occ_bitch.T)
+    print("Unocc difference")
+    print(unocc@unocc.T-unocc_bitch@unocc_bitch.T)
 
 #sys.exit(1)
 onebody_matrix_ref=np.einsum("ki,lj,kl->ij",basis_mo_coeff,basis_mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
 twobody_matrix_ref=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(basis_mo_coeff,basis_mo_coeff,basis_mo_coeff,basis_mo_coeff),aosym="s1")
-mo_coeff_old=basischange(basis_mo_coeff,overlap_matrix_ref)
 states,states_fallen,indices=data_creator(int(mol.nelectron//2),(basis_mo_coeff.shape[0]))
 num_bas=(basis_mo_coeff.shape[0])
 diagonal_matrix_ref=diagonal_energy(indices,onebody_matrix_ref,twobody_matrix_ref,len(indices))+mol.energy_nuc()
@@ -242,36 +273,42 @@ T=offdiagonal_ref+np.diag(diagonal_matrix_ref)
 eigenvalues_ref,eigenvectors_ref=np.linalg.eigh(T)
 reference_excitations=eigenvectors_ref[:,0]
 assert(np.all(np.abs(eigenvectors_ref[:,0]*eigenvalues_ref[0]-T@eigenvectors_ref[:,0])<1e-10))
-xvals=np.linspace(2,4,11)
+
+xvals=np.linspace(3,6,10)
 energies=np.zeros_like(xvals)
 energies_default=np.zeros_like(xvals)
+energies_pyscf=np.zeros_like(xvals)
 
 for indexerino,x in enumerate(xvals):
     mol=make_mol(molecule,x)
     overlap_matrix=mol.intor("int1e_ovlp")
-
-    mo_coeff=basischange(basis_mo_coeff,overlap_matrix)
-    onebody_matrix=np.einsum("ki,lj,kl->ij",mo_coeff,mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
-    twobody_matrix=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(mo_coeff,mo_coeff,mo_coeff,mo_coeff),aosym="s1")
+    #mo_coeff=basischange_alt(basis_mo_coeff,overlap_matrix)
     mf=scf.RHF(mol)
     mf.kernel()
+    #mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
+    mo_coeff=mf.mo_coeff #Canonical orbitals
     cisd=ci.CISD(mf).run()
-
+    #fcisolver=fci.FCI(mf)
+    energies_pyscf[indexerino]=cisd.e_tot
+    onebody_matrix=np.einsum("ki,lj,kl->ij",mo_coeff,mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
+    twobody_matrix=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(mo_coeff,mo_coeff,mo_coeff,mo_coeff),aosym="s1")
     states,states_fallen,indices=data_creator(int(mol.nelectron/2),(mo_coeff.shape[0]))
     num_bas=(mo_coeff.shape[0])
     diagonal_matrix=diagonal_energy(indices,onebody_matrix,twobody_matrix,len(indices))+mol.energy_nuc()
     offdiagonals=offdiagonal_energy(states,indices,states_fallen,onebody_matrix,twobody_matrix)
     T=offdiagonals+np.diag(diagonal_matrix)
     eigenvalues,eigenvectors=np.linalg.eigh(T)
-    print(eigenvalues[0])
-    print(overlap_matrix-overlap_matrix_ref)
-    #print(onebody_matrix-onebody_matrix_ref)
-    #print(twobody_matrix-twobody_matrix_ref)
-    print(energy_bitch(reference_excitations,T))
-    #print(eigenvectors[:,0]-reference_excitations)
     energies[indexerino]=eigenvalues[0]
     energies_default[indexerino]=energy_bitch(reference_excitations,T)
+    print("E_EVC: %.5f"%energy_bitch(reference_excitations,T))
+    print("Own CISD: %.5f"%eigenvalues[0])
+    print("pyscf cisd: %.5f"%cisd.e_tot)
+    #print("pyscf fci: %.5f"%fcisolver.kernel()[0])
+    print("Diagonal elements")
+    print(T)
 plt.plot(xvals,energies,label="Crap-referanse")
 plt.plot(xvals,energies_default,label="Default")
+plt.plot(xvals,energies_pyscf,label="pyscf")
+
 plt.legend()
 plt.show()

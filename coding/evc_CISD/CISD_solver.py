@@ -1,288 +1,172 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from pyscf import gto, scf,ao2mo,lo
+from pyscf import gto, scf,ao2mo,lo,ci,fci,cc
 import scipy
 import sys
 from numba import jit
+import scipy
 sys.path.append("../eigenvectorcontinuation/")
 from matrix_operations import *
 from helper_functions import *
+from scipy.optimize import minimize
 np.set_printoptions(linewidth=200,precision=5,suppress=True)
-def swap_cols(arr, frm, to):
-    """Swaps the columns of a 2D-array"""
-    arrny=arr.copy()
-    arrny[:,[frm, to]] = arrny[:,[to, frm]]
-    return arrny
-def swappistan(matrix):
-    #return matrix
-    swapperinos=[]
-    for i in range((matrix.shape[1])):
-        for j in range(i+1,matrix.shape[1]):
-            sort_i=np.sort(matrix[:,i])
-            sort_j=np.sort(matrix[:,j])
-            if(np.all(np.abs(sort_i-sort_j)<1e-8)): #If the two columns are equal
-                nonzero_i=np.where(np.abs(matrix[:,i])>=1e-5)[0][0]
-                nonzero_j=np.where(np.abs(matrix[:,j])>=1e-5)[0][0]
-                if nonzero_i>nonzero_j:
-                    matrix=swap_cols(matrix,i,j)
-    return matrix
+def similarize_1(MO_tochange,MO_ref,f,dev):
+    num_bas=len(MO_tochange[0,:])
+    for i in range(num_bas):
+        for j in range(i+1,num_bas):
+            x1=MO_ref[:,i]
+            x2=MO_ref[:,j]
+            y1=MO_tochange[:,i]
+            y2=MO_tochange[:,j]
+            before=f(0,y1,y2,x1,x2)
+            alpha=minimize(f,0,args=(y1,y2,x1,x2)).x[0]#,jac=dev,method="BFGS").x[0]#,jac=derivative_of_function).x[0]
+            after=f(alpha,y1,y2,x1,x2)
+            sa=np.sin(alpha)
+            ca=np.cos(alpha)
+            y1_new=ca*MO_tochange[:,i]-sa*MO_tochange[:,j]
+            y2_new=sa*MO_tochange[:,i]+ca*MO_tochange[:,j]
+            if before<after:
+                print("You made it worse")
+
+            MO_tochange[:,i]=y1_new
+            MO_tochange[:,j]=y2_new
+    return MO_tochange
+def similarize(MO_tochange,MO_ref,f,dev):
+    num_bas=len(MO_tochange[0,:])
+    for i in range(num_bas):
+        for j in range(i+1,num_bas):
+            x1=MO_ref[:,i]
+            x2=MO_ref[:,j]
+            y1=MO_tochange[:,i]
+            y2=MO_tochange[:,j]
+            before=f(0,y1,y2,x1,x2)
+            alpha=minimize(f,0,args=(y1,y2,x1,x2)).x[0]#,jac=dev,method="BFGS").x[0]#,jac=derivative_of_function).x[0]
+            after=f(alpha,y1,y2,x1,x2)
+            sa=np.sin(alpha)
+            ca=np.cos(alpha)
+            y1_new=(ca*y1+sa*y2-x1)
+            y2_new=(sa*y1-ca*y2-x2)
+            after=f(0,y1_new,y2_new,x1,x2)
+            if before<after:
+                print(alpha)
+                print(f(0,y1,y2,x1,x2,printerino=True))
+                print(f(0,y1_new,y2_new,x1,x2,printerino=True))
+                print(f(alpha,y1,y2,x1,x2,printerino=True))
+                print("You made it worse")
+                sys.exit(1)
+            MO_tochange[:,i]=y1_new
+            MO_tochange[:,j]=y2_new
+    return MO_tochange
+
+def orbital_dissimilarity(alpha,y1,y2,x1,x2,printerino=False):
+    ca=np.cos(alpha)
+    sa=np.sin(alpha)
+    first=np.sum((ca*y1+sa*y2-x1)**2)
+    second=np.sum((sa*y1-ca*y2-x2)**2)
+    if printerino:
+        print(first)
+        print(second)
+    return first+second
+def orbital_dissimilarity_dev(alpha,y1,y2,x1,x2):
+    ca=np.cos(alpha)
+    sa=np.sin(alpha)
+    first=np.sum((ca*y1+sa*y2-x1)*(-sa*y1+ca*y2))
+    second=np.sum((sa*y1-ca*y2-x2)*((ca*y1+sa*y2)))
+    return first+second
+def orbital_dissimilarity_1(alpha,y1,y2,x1,x2):
+    ca=np.cos(alpha)
+    sa=np.sin(alpha)
+    first=np.sum((ca*y1-sa*y2-x1)**2)
+    second=np.sum((sa*y1+ca*y2-x2)**2)
+    return first+second
+def orbital_dissimilarity_dev_1(alpha,y1,y2,x1,x2):
+    ca=np.cos(alpha)
+    sa=np.sin(alpha)
+    first=np.sum((ca*y1-sa*y2-x1)*(-sa*y1-ca*y2))
+    second=np.sum((sa*y1+ca*y2-x2)*((ca*y1-sa*y2)))
+    return first+second
 
 
-@jit
-def cholesky_pivoting(matrix):
-    n=len(matrix)
-    R=np.zeros((n,n))
-    piv=np.arange(n)
-    for k in range(n):
-        q=np.argmax(np.diag(matrix)[k:])+k
-        if matrix[q,q]<1e-14:
-            break
-        temp=matrix[:,k].copy()
-        matrix[:,k]=matrix[:,q]
-        matrix[:,q]=temp
-        temp=R[:,k].copy()
-        R[:,k]=R[:,q]
-        R[:,q]=temp
-        temp=matrix[k,:].copy()
-        matrix[k,:]=matrix[q,:]
-        matrix[q,:]=temp
-        temp=piv[k]
-        piv[k]=piv[q]
-        piv[q]=temp
-        R[k,k]=np.sqrt(matrix[k,k])
-        R[k,k+1:]=matrix[k,k+1:]/R[k,k]
-        matrix[k+1:n,k+1:n]=matrix[k+1:n,k+1:n]-np.outer(R[k,k+1:],R[k,k+1:])
-    P=np.eye(n)[:,piv]
-    return R,P
-@jit
-def cholesky_coefficientmatrix(matrix):
-    D=2*matrix@matrix.T
-    R,P=cholesky_pivoting(D)
-    PL=P@R.T
-    Cnew=PL[:,:matrix.shape[1]]/np.sqrt(2)
-    return Cnew
-def localize_mocoeff(mol,mo_coeff,mo_occ):
+def localize_mocoeff(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
+
     mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
     mo=swappistan(mo)
+    if previous_mo_coeff is not None:
+        premo=previous_mo_coeff[:,mo_occ>0]
+        #mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
+        mo=similarize_1(mo,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
+        for i in range(len(mo[0,:])):
+            if np.sum(np.abs(mo[:,i]-premo[:,i])**2)>np.sum(np.abs(mo[:,i]+premo[:,i])**2):
+                mo[:,i]=-mo[:,i]
+    mo_coeff[:,mo_occ>0]=np.array(mo)
+    mo_unocc=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
+    mo_unocc=swappistan(mo_unocc)
+
+    if previous_mo_coeff is not None:
+        premo=previous_mo_coeff[:,mo_occ<=0]
+        print("Norm before: %f"%np.sum(np.abs((mo_unocc-premo))**2))
+        mo_unocc=similarize(mo_unocc,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
+        #mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
+        for i in range(len(mo_unocc[0,:])):
+            if np.sum(np.abs(mo_unocc[:,i]-premo[:,i])**2)>np.sum(np.abs(mo_unocc[:,i]+premo[:,i])**2):
+                mo_unocc[:,i]=-mo_unocc[:,i]
+        print("Norm after: %f"%np.sum(np.abs((mo_unocc-premo))**2))
+    mo_coeff[:,mo_occ<=0]=np.array(mo_unocc)
+
+    return mo_coeff
+
+"""
+def localize_mocoeff(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
+
+    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
+    mo=swappistan(mo)
+    if previous_mo_coeff is not None:
+        previous_mo=previous_mo_coeff[:,mo_occ>0]
+        diff=mo-previous_mo
+        #Do the magic and swap columns and rows
+        col_norm=np.sum(np.abs(diff),axis=0)
+        colnorm_descendingargs=np.argsort(col_norm)[::-1]
+        colnorm_sorted=col_norm[colnorm_descendingargs]
+        if colnorm_sorted[0]>0.9:
+            mo=swap_cols(mo,colnorm_descendingargs[0],colnorm_descendingargs[1])
 
     mo_coeff[:,mo_occ>0]=np.array(mo)
     mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
     mo=swappistan(mo)
-
+    if previous_mo_coeff is not None:
+        previous_mo=previous_mo_coeff[:,mo_occ<=0]
+        diff=mo-previous_mo
+        #Do the magic and swap columns and rows
+        col_norm=np.sum(np.abs(diff),axis=0)
+        #print(np.abs(diff))
+        #print(col_norm)
+        colnorm_descendingargs=np.argsort(col_norm)[::-1]
+        colnorm_sorted=col_norm[colnorm_descendingargs]
+        if colnorm_sorted[0]>1:
+            mo=swap_cols(mo,colnorm_descendingargs[0],colnorm_descendingargs[1])
     mo_coeff[:,mo_occ<=0]=np.array(mo)
 
     return mo_coeff
+"""
+def calc_diff_bitstring(a,b):
+    difference_alpha=int(a[:len(a)//2],2)^int(b[:len(b)//2],2)
+    difference_beta=int(a[len(a)//2:],2)^int(b[len(b)//2:],2)
+    ndiffa=bin(difference_alpha).count("1") #How many differ
+    ndiffb=bin(difference_beta).count("1") #How many differ
+    return ndiffa,ndiffb
 
-np.set_printoptions(linewidth=200,precision=5,suppress=True)
-def swap_cols(arr, frm, to):
-    """Swaps the columns of a 2D-array"""
-    arrny=arr.copy()
-    arrny[:,[frm, to]] = arrny[:,[to, frm]]
-    return arrny
-def swappistan(matrix):
-    #return matrix
-    swapperinos=[]
-    for i in range((matrix.shape[1])):
-        for j in range(i+1,matrix.shape[1]):
-            sort_i=np.sort(matrix[:,i])
-            sort_j=np.sort(matrix[:,j])
-            if(np.all(np.abs(sort_i-sort_j)<1e-8)): #If the two columns are equal
-                nonzero_i=np.where(np.abs(matrix[:,i])>=1e-5)[0][0]
-                nonzero_j=np.where(np.abs(matrix[:,j])>=1e-5)[0][0]
-                if nonzero_i>nonzero_j:
-                    matrix=swap_cols(matrix,i,j)
-    return matrix
-
-
-@jit
-def cholesky_pivoting(matrix):
-    n=len(matrix)
-    R=np.zeros((n,n))
-    piv=np.arange(n)
-    for k in range(n):
-        q=np.argmax(np.diag(matrix)[k:])+k
-        if matrix[q,q]<1e-14:
-            break
-        temp=matrix[:,k].copy()
-        matrix[:,k]=matrix[:,q]
-        matrix[:,q]=temp
-        temp=R[:,k].copy()
-        R[:,k]=R[:,q]
-        R[:,q]=temp
-        temp=matrix[k,:].copy()
-        matrix[k,:]=matrix[q,:]
-        matrix[q,:]=temp
-        temp=piv[k]
-        piv[k]=piv[q]
-        piv[q]=temp
-        R[k,k]=np.sqrt(matrix[k,k])
-        R[k,k+1:]=matrix[k,k+1:]/R[k,k]
-        matrix[k+1:n,k+1:n]=matrix[k+1:n,k+1:n]-np.outer(R[k,k+1:],R[k,k+1:])
-    P=np.eye(n)[:,piv]
-    return R,P
-@jit
-def cholesky_coefficientmatrix(matrix):
-    D=2*matrix@matrix.T
-    R,P=cholesky_pivoting(D)
-    PL=P@R.T
-    Cnew=PL[:,:matrix.shape[1]]/np.sqrt(2)
-    return Cnew
-def localize_mocoeff(mol,mo_coeff,mo_occ):
-    """
-    mo = lo.ER(mol, mo_coeff[:,mo_occ>0])
-    mo.init_guess = None
-    mo = mo.kernel()
-    mo=swappistan(mo)
-    mo_coeff[:,mo_occ>0]=np.array(mo)
-    mo = lo.ER(mol, mo_coeff[:,mo_occ<=0])
-    mo.init_guess = None
-    mo = mo.kernel()
-    mo=swappistan(mo)
-    mo_coeff[:,mo_occ<=0]=np.array(mo)
-    """
-    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
-    mo=swappistan(mo)
-
-    mo_coeff[:,mo_occ>0]=np.array(mo)
-    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
-    mo=swappistan(mo)
-
-    mo_coeff[:,mo_occ<=0]=np.array(mo)
-
-    return mo_coeff
-
-class SL_det():
-    def __init__(self,alpha_string,beta_string):
-        self.alpha=alpha_string
-        self.beta=beta_string
-class permutation_wf():
-    def __init__(self,number_determinants):
-        self.prefactor=1/np.sqrt(number_determinants)
-        self.determinants=[]
-    def add_determinant(self,determinant):
-        self.determinants.append(determinant)
-    def add_config(self,alpha_string,beta_string):
-        self.determinants.append(SL_det(alpha_string,beta_string))
-
-
-def energy_between_wfs(bra,ket,onebody,twobody):
-    e1=0
-    e2=0
-    prefac=bra.prefactor*ket.prefactor
-    for bra_SL in bra.determinants:
-        for ket_SL in ket.determinants:
-            e1+=prefac*calculate_e1(bra_SL,ket_SL,onebody)
-            e2+=prefac*calculate_e2(bra_SL,ket_SL,twobody)
-    return e1+e2
-
-def calculate_e1(bra,ket,onebody):
-    diff_alpha=np.sum(bra.alpha!=ket.alpha) #Number of different alpha elements
-    diff_beta=np.sum(bra.beta!=ket.beta)
-    if diff_alpha+diff_beta>1:
-        return 0
-    elif diff_alpha==1:
-        diffloc=np.where(bra.alpha!=ket.alpha)[0][0] #The index where the elements are different
-        return onebody[bra.alpha[diffloc],ket.alpha[diffloc]] #Return the energy at that point
-    elif diff_beta==1:
-        diffloc=np.where(bra.beta!=ket.beta)[0][0]
-        return onebody[bra.beta[diffloc],ket.beta[diffloc]]
-    else:
-        energy=0
-        diag_onebody=np.diag(onebody)
-        energy+=np.sum(diag_onebody[bra.alpha])
-        energy+=np.sum(diag_onebody[bra.beta])
-        """
-        for i in bra.alpha: #bra.alpha is equal to ket.alpha
-            energy+=onebody[i,i]
-        for i in bra.beta:  #bra.beta is equal to ket.beta
-            energy+=onebody[i,i]
-        """
-        return energy
-
-def calculate_e2(bra,ket,twobody):
-    diff_alpha=np.sum(bra.alpha!=ket.alpha) #Number of different alpha elements
-    diff_beta=np.sum(bra.beta!=ket.beta)
-    if diff_alpha+diff_beta>2:
-        return 0
-    elif diff_alpha==2:
-        diffloc=np.where(bra.alpha!=ket.alpha)[0]
-        m=bra.alpha[diffloc[0]]
-        n=bra.alpha[diffloc[1]]
-        p=ket.alpha[diffloc[0]]
-        q=ket.alpha[diffloc[1]]
-        return twobody[m,p,n,q]-twobody[m,q,n,p]
-    elif diff_beta==2:
-        diffloc=np.where(bra.beta!=ket.beta)[0]
-        m=bra.beta[diffloc[0]]
-        n=bra.beta[diffloc[1]]
-        p=ket.beta[diffloc[0]]
-        q=ket.beta[diffloc[1]]
-        return twobody[m,p,n,q]-twobody[m,q,n,p]
-    elif diff_alpha==1 and diff_beta==1:
-        diffloc_alpha=np.where(bra.alpha!=ket.alpha)[0]
-        diffloc_beta=np.where(bra.beta!=ket.beta)[0]
-        m=bra.alpha[diffloc_alpha[0]]
-        n=bra.beta[diffloc_beta[0]]
-        p=ket.alpha[diffloc_alpha[0]]
-        q=ket.beta[diffloc_beta[0]]
-        return twobody[m,p,n,q]
-    elif diff_alpha==1:
-        diffloc_alpha=np.where(bra.alpha!=ket.alpha)[0]
-        m=bra.alpha[diffloc_alpha[0]]
-        p=ket.alpha[diffloc_alpha[0]]
-        energy=0
-        for n in bra.alpha:
-            energy+=twobody[m,p,n,n]-twobody[m,n,n,p]
-        for n in bra.beta:
-            energy+=twobody[m,p,n,n]
-        return energy
-    elif diff_beta==1:
-        diffloc_beta=np.where(bra.beta!=ket.beta)[0]
-        m=bra.beta[diffloc_beta[0]]
-        p=ket.beta[diffloc_beta[0]]
-        energy=0
-        for n in bra.alpha:
-            energy+=twobody[m,p,n,n]
-        for n in bra.beta:
-            energy+=twobody[m,p,n,n]-twobody[m,n,n,p]
-        return energy
-    else:
-        energy=0
-        energy+=e_doublesum_1(np.array(bra.alpha),np.array(ket.alpha),twobody)
-        energy+=e_doublesum_2(np.array(bra.alpha),np.array(ket.alpha),twobody)
-        energy+=e_doublesum_1(np.array(bra.beta),np.array(ket.beta),twobody)
-        energy+=e_doublesum_2(np.array(bra.beta),np.array(ket.beta),twobody)
-        energy+=e_doublesum_1(np.array(bra.beta),np.array(ket.alpha),twobody)
-        energy+=e_doublesum_1(np.array(bra.alpha),np.array(ket.beta),twobody)
-        return 0.5*energy
-@jit(nopython=True)
-def e_doublesum_1(bra,ket,twobody):
-    energy=0
-    for m in bra:
-        for n in ket:
-            energy+=twobody[m,m,n,n]
-    return energy
-@jit(nopython=True)
-def e_doublesum_2(bra,ket,twobody):
-    energy=0
-    for m in bra:
-        for n in ket:
-            energy-=twobody[m,n,n,m]
-    return energy
-class RHF_CISDsolver(): #Closed-shell only
-    def __init__(self,mol,mo_coeff=None):
+class RHF_CISDsolver():
+    def __init__(self,mol,mo_coeff=None,previous_mo_coeff=None):
         self.mol=mol
-
-        self.onebody=mol.intor("int1e_kin")+mol.intor("int1e_nuc")
-        self.twobody=mol.intor('int2e',aosym="s1")
         self.overlap=mol.intor("int1e_ovlp")
         if mo_coeff is None:
-            print("Finding new SL-det")
+            print("Finding a new SL-det")
             mf=scf.RHF(mol)
             mf.kernel()
-            self.mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
+            self.mo_coeff=mf.mo_coeff
+            self.mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ,previous_mo_coeff)
         else:
-            self.mo_coeff=self.basischange(mo_coeff,mol.intor("int1e_ovlp"))
+            self.mo_coeff=self.basischange(mo_coeff,self.overlap)
         self.onebody=np.einsum("ki,lj,kl->ij",self.mo_coeff,self.mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
         self.twobody=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(self.mo_coeff,self.mo_coeff,self.mo_coeff,self.mo_coeff),aosym="s1")
         self.ne=mol.nelectron
@@ -290,232 +174,294 @@ class RHF_CISDsolver(): #Closed-shell only
         self.n_occ=self.neh
         self.num_bas=(self.mo_coeff.shape[0])
         self.n_unocc=self.num_bas-self.n_occ
-        self.doubles=True
         self.energy=None
         self.coeff=None
         self.T=None
+        self.data_creator()
     def basischange(self,C_old,overlap_AOs_newnew):
-        S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
-        S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
+        S=np.einsum("mi,vj,mv->ij",C_old,C_old,overlap_AOs_newnew)
+        S_eig,S_U=np.linalg.eigh(S)
         S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-        C_newbasis=S_poweronehalf@C_old #Basis change
-        q,r=np.linalg.qr(C_newbasis) #orthonormalise
-        return S_powerminusonehalf@q #change back
+        C_new=np.einsum("ij,mj->mi",S_powerminusonehalf,C_old)
+        return C_new
+    def data_creator(self):
+        neh=self.neh
+        num_bas=self.num_bas
+        states=self.state_creator()
+        self.states=states
+        states_fallen=[state[0]+state[1] for state in states]
+        indices=np.array(self.index_creator())
 
-    def setupT(self):
-        all_wfs=self.create_GS()+self.create_singles()+self.create_doubles_samesame()+self.create_doubles_samediff()+self.create_doubles_diffsame()+self.create_doubles_diffdiff()
-        T=np.empty((len(all_wfs),len(all_wfs)))
-        for i in range(len(T)):
-            for j in range(i,len(T)):
-                T[j,i]=T[i,j]=energy_between_wfs(all_wfs[i],all_wfs[j],self.onebody,self.twobody)
-                if (i==j):
-                    T[i,j]+=self.mol.energy_nuc() #Add nuc. repulsion to diagonal
-        self.T=T
-    def calculate_coefficients(self):
+        self.num_states=len(states)
+        self.states_fallen=states_fallen
+        self.indices=indices
+    def index_creator(self):
+        all_indices=[]
+        for state in self.states:
+            alphas_occ=[i for i in range(len(state[0])) if int(state[0][i])==1]
+            betas_occ=[i for i in range(len(state[1])) if int(state[1][i])==1]
+            all_indices.append([alphas_occ,betas_occ])
+        return all_indices
+    def state_creator(self):
+        neh=self.neh
+        groundstring="1"*neh+"0"*(self.n_unocc) #Ground state Slater determinant
+        alpha_singleexcitations=[]
+        for i in range(neh):
+            for j in range(neh,self.num_bas):
+                newstring=groundstring[:i]+"0"+groundstring[i+1:j]+"1"+groundstring[j+1:] #Take the ith 1 and move it to position j
+                alpha_singleexcitations.append(newstring)
+        alpha_doubleexcitations=[]
+        for i in range(neh):
+            for j in range(i+1,neh):
+                for k in range(neh,self.num_bas):
+                    for l in range(k+1,self.num_bas):
+                        newstring=groundstring[:i]+"0"+groundstring[i+1:j]+"0"+groundstring[j+1:k]+"1"+groundstring[k+1:l]+"1"+groundstring[l+1:]#Take the ith & jth 1 and move it to positions k and l
+                        alpha_doubleexcitations.append(newstring)
+        GS=[[groundstring,groundstring]]
+        singles_alpha=[[alpha,groundstring] for alpha in alpha_singleexcitations] #All single excitations within alpha
+        singles_beta=[[groundstring,alpha] for alpha in alpha_singleexcitations]
+        doubles_alpha=[[alpha,groundstring] for alpha in alpha_doubleexcitations]
+        doubles_beta=[[groundstring,alpha] for alpha in alpha_doubleexcitations]
+        doubles_alphabeta=[[alpha,beta] for alpha in alpha_singleexcitations for beta in alpha_singleexcitations]
+        allstates=GS+singles_alpha+singles_beta+doubles_alpha+doubles_beta+doubles_alphabeta
+        return allstates
+    def index_creator(self):
+        all_indices=[]
+        for state in self.states:
+            alphas_occ=[i for i in range(len(state[0])) if int(state[0][i])==1]
+            betas_occ=[i for i in range(len(state[1])) if int(state[1][i])==1]
+            all_indices.append([alphas_occ,betas_occ])
+        return all_indices
+    def make_T(self):
+        self.T=np.diag(self.diagonal_energy()+self.mol.energy_nuc())
+        self.T+=self.offdiagonal_energy()
+    def solve_T(self):
         if self.T is None:
-            self.setupT()
-        energy,eigenvector=np.linalg.eigh(self.T)
-        idx = energy.argsort()[::1] #Order by size (non-absolute)
-        energy = energy[idx]
-        eigenvector = eigenvector[:,idx]
-        lowest_eigenvalue=energy[0]
-        lowest_eigenvector=eigenvector[:,0]
-        lowest_eigenvector=lowest_eigenvector*np.sign(lowest_eigenvector[0])
-        self.coeff=lowest_eigenvector
-        return lowest_eigenvalue,lowest_eigenvector, self.T
-    def calculate_energy(self,coeff=None,T=None):
-        if coeff is None:
-            coeff=self.coeff
-            T=self.T
-        return coeff.T@T@coeff
-    def calculate_T_entry(self,coeff_left,coeff_right,T=None):
-        if T is None:
-            T=self.T
-        if self.T is None:
-            self.setupT()
-            T=self.T
-        return coeff_left.T@T@coeff_right
-    def calculate_overlap(self,coeff_left,coeff_right):
-        return coeff_left.T@coeff_right
-    def change_molecule(self,mol):
-        self.__init__(mol)
-    def create_GS(self):
-        wfs=[]
-        wf=permutation_wf(1)
-        wf.add_config(np.arange(self.neh),np.arange(self.neh))
-        wfs.append(wf)
-        return wfs
-    def create_singles(self):
-        wfs=[]
-        #1. Create all possible permutations
-        for i in range(self.n_occ):
-            for j in range(self.n_occ,self.num_bas):
-                alpha1=np.arange(self.neh)
-                beta1=np.arange(self.neh)
-                beta1[i]=j #Replace i with j
-                wf=permutation_wf(2)
-                wf.add_config(alpha1,beta1)
-                wf.add_config(beta1,alpha1)
-                wfs.append(wf)
-        return wfs
-    def create_doubles_samesame(self):
-        wfs=[]
-        for i in range(self.n_occ):
-            for a in range(self.n_occ,self.num_bas):
-                beta1=np.arange(self.neh)
-                beta1[i]=a #Replace i with a
-                wf=permutation_wf(1)
-                wf.add_config(beta1,beta1)
-                wfs.append(wf)
-        return wfs
-    def create_doubles_samediff(self):
-        wfs=[]
-        for i in range(self.n_occ):
-            for a in range(self.n_occ,self.num_bas):
-                for b in range(a+1,self.num_bas):
-                    alpha1=np.arange(self.neh)
-                    alpha2=np.arange(self.neh)
-                    beta1=np.arange(self.neh)
-                    beta2=np.arange(self.neh)
-                    alpha1[i]=a
-                    alpha2[i]=b
-                    beta1[i]=b
-                    beta2[i]=a
-                    wf=permutation_wf(2)
-                    wf.add_config(alpha1,beta1)
-                    wf.add_config(alpha2,beta2)
-                    wfs.append(wf)
-        return wfs
-    def create_doubles_diffsame(self):
-        wfs=[]
-        for i in range(self.n_occ):
-            for j in range(i+1,self.n_occ):
-                for a in range(self.n_occ,self.num_bas):
-                    alpha1=np.arange(self.neh)
-                    alpha2=np.arange(self.neh)
-                    beta1=np.arange(self.neh)
-                    beta2=np.arange(self.neh)
-                    alpha1[i]=a
-                    alpha2[j]=a
-                    beta1[j]=a
-                    beta2[i]=a
-                    wf=permutation_wf(2)
-                    wf.add_config(alpha1,beta1)
-                    wf.add_config(alpha2,beta2)
-                    wfs.append(wf)
-        return wfs
-    def create_doubles_diffdiff(self):
-        wfs=[]
-        for i in range(self.n_occ):
-            for j in range(self.n_occ):
-                if(j==i):
-                    continue
-                for a in range(self.n_occ,self.num_bas):
-                    for b in range(a+1,self.num_bas):
-                        if(a==b):
-                            continue
-                        alpha1=np.arange(self.neh)
-                        alpha2=np.arange(self.neh)
-                        beta1=np.arange(self.neh)
-                        beta2=np.arange(self.neh)
-                        alpha3=np.arange(self.neh)
-                        alpha4=np.arange(self.neh)
-                        beta3=np.arange(self.neh)
-                        beta4=np.arange(self.neh)
-                        alpha1[i]=a; alpha1[j]=b
-                        alpha2[i]=a; beta2[j]=b
-                        alpha3[j]=b; beta3[i]=a
-                        beta4[i]=a; beta4[j]=b
-                        wf=permutation_wf(4)
-                        wf.add_config(alpha1,beta1)
-                        wf.add_config(alpha2,beta2)
-                        wf.add_config(alpha3,beta4)
-                        wf.add_config(alpha4,beta4)
-                        wfs.append(wf)
-        return wfs
-def create_sample_coefficients(molecule,basis,x_sample,mo_coeff=None):
-    coefficients=[]
-    energies=[]
-    print("Sample")
-    for x in x_sample:
-        mol=gto.Mole()
-        mol.atom=molecule(x)
-        mol.basis =basis
-        mol.unit= "Bohr"
-        mol.build()
-        solverino_1=RHF_CISDsolver(mol,mo_coeff=mo_coeff)
-        e,coeff,T=solverino_1.calculate_coefficients()
-        coefficients.append(coeff)
-        energies.append(e)
-    return coefficients,energies
+            self.make_T()
+        self.energy,self.eigenvector=np.linalg.eigh(self.T)
+        return self.energy[0],self.eigenvector[:,0]
+    def offdiagonal_energy(self):
+        states=self.states
+        indices=self.indices
+        states_fallen=self.states_fallen
+        onebody=self.onebody
+        twobody=self.twobody
+        num_bas=self.num_bas
+        T=np.zeros((len(states),len(states)))
+        for i in range(len(states)):
+            for j in range(i+1,len(states)):
+                diffalpha,diffbeta=calc_diff_bitstring(states_fallen[i],states_fallen[j])
+                state_difference=diffalpha+diffbeta
+                if (state_difference<=4): #Only then, nonzero contribution
+                    e1=0
+                    e2=0
+                    alpha_left=indices[i][0]
+                    beta_left=indices[i][1]
+                    if diffalpha==2 and diffbeta==0: #A single "excitation" from one alpha state to another alpha state
+                        m=[x for x in range(num_bas) if states[i][0][x]=="1" and states[j][0][x]=="0"][0]
+                        p=[x for x in range(num_bas) if states[i][0][x]=="0" and states[j][0][x]=="1"][0]
+                        al=indices[i][0].copy()
+                        ar=indices[j][0].copy()
+                        al[np.where(np.array(al)==m)[0][0]]=p
+                        parity_here=parity(np.argsort(al))*parity(np.argsort(ar))
+                        e1=onebody[m,p]
+                        for n in alpha_left:
+                            e2+=twobody[m,p,n,n]
+                            e2-=twobody[m,n,n,p]
+                        for n in beta_left:
+                            e2+=twobody[m,p,n,n]
+                    elif diffbeta==2 and diffalpha==0:
+                        m=[x for x in range(num_bas) if states[i][1][x]=="1" and states[j][1][x]=="0"][0]
+                        p=[x for x in range(num_bas) if states[i][1][x]=="0" and states[j][1][x]=="1"][0]
+                        bl=indices[i][1].copy()
+                        br=indices[j][1].copy()
+                        bl[np.where(np.array(bl)==m)[0][0]]=p
+                        parity_here=parity(np.argsort(bl))*parity(np.argsort(br))
+                        e1=onebody[m,p]
+                        for n in alpha_left:
+                            e2+=twobody[m,p,n,n]
+                        for n in beta_left:
+                            e2+=twobody[m,p,n,n]
+                            e2-=twobody[m,n,n,p]
+                    elif diffalpha==4:
+                        al=indices[i][0].copy()
+                        ar=indices[j][0].copy()
+                        m,n=[x for x in range(num_bas) if states[i][0][x]=="1" and states[j][0][x]=="0"]
+                        p,q=[x for x in range(num_bas) if states[i][0][x]=="0" and states[j][0][x]=="1"]
+                        al[np.where(np.array(al)==m)[0][0]]=p
+                        al[np.where(np.array(al)==n)[0][0]]=q
+                        parity_here=parity(np.argsort(al))*parity(np.argsort(ar))
+                        e2=twobody[m,p,n,q]-twobody[m,q,n,p]
+                    elif diffbeta==4:
+                        bl=indices[i][1].copy()
+                        br=indices[j][1].copy()
+                        m,n=[x for x in range(num_bas) if states[i][1][x]=="1" and states[j][1][x]=="0"]
+                        p,q=[x for x in range(num_bas) if states[i][1][x]=="0" and states[j][1][x]=="1"]
+                        bl[np.where(np.array(bl)==m)[0][0]]=p
+                        bl[np.where(np.array(bl)==n)[0][0]]=q
+                        parity_here=parity(np.argsort(bl))*parity(np.argsort(br))
+                        e2=twobody[m,p,n,q]-twobody[m,q,n,p]
+                    elif diffalpha==2 and diffbeta==2:
+                        al=indices[i][0].copy()
+                        ar=indices[j][0].copy()
+                        bl=indices[i][1].copy()
+                        br=indices[j][1].copy()
+                        m=[x for x in range(num_bas) if states[i][0][x]=="1" and states[j][0][x]=="0"][0]
+                        n=[x for x in range(num_bas) if states[i][1][x]=="1" and states[j][1][x]=="0"][0]
+                        p=[x for x in range(num_bas) if states[i][0][x]=="0" and states[j][0][x]=="1"][0]
+                        q=[x for x in range(num_bas) if states[i][1][x]=="0" and states[j][1][x]=="1"][0]
+                        al[np.where(np.array(al)==m)[0][0]]=p
+                        bl[np.where(np.array(bl)==n)[0][0]]=q
+                        parity_here=parity(np.argsort(bl))*parity(np.argsort(br))*parity(np.argsort(al))*parity(np.argsort(ar))
+                        e2=twobody[m,p,n,q]
+                    T[i,j]=T[j,i]=parity_here*(e1+e2)
+        return T
+    def diagonal_energy(self):
+        num_states=self.num_states
+        indices=self.indices
+        onebody=self.onebody
+        twobody=self.twobody
+        diagonal_matrix=np.empty(num_states)
+        for i in range(num_states):
+            alpha=indices[i][0]
+            beta=indices[i][1]
+            onebody_alpha=np.sum(np.diag(onebody)[alpha])
+            onebody_beta=np.sum(np.diag(onebody)[beta])
+            energy2=0
+            #Equation 2.175 from Szabo, Ostlund
+            for a in alpha:
+                for b in alpha:
+                    energy2+=twobody[a,a,b,b]
+                    energy2-=twobody[a,b,b,a]
+            for a in alpha:
+                for b in beta:
+                    energy2+=twobody[a,a,b,b]
+            for a in beta:
+                for b in alpha:
+                    energy2+=twobody[a,a,b,b]
+            for a in beta:
+                for b in beta:
+                    energy2+=twobody[a,a,b,b]
+                    energy2-=twobody[a,b,b,a]
+            energy2*=0.5
+            diagonal_matrix[i]=onebody_alpha+onebody_beta+energy2
+        return diagonal_matrix
+def make_mol(molecule,x,basis="6-31G"):
+    mol=gto.Mole()
+    mol.atom=molecule(x)
+    mol.basis = basis
+    mol.unit= "Bohr"
+    mol.build()
+    return mol
+def create_reference_determinant(mol):
+    mf=scf.RHF(mol)
+    mf.kernel()
+    mo_coeff_converted=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
+    return mo_coeff_converted
+def evc(T,states):
+    T_subspace=np.zeros((len(states),len(states)))
+    S_subspace=np.zeros_like(T_subspace)
+
+    for i in range(len(states)):
+        for j in range(i,len(states)):
+            T_subspace[j,i]=T_subspace[i,j]=states[i]@T@states[j]
+            S_subspace[i,j]=S_subspace[j,i]=states[i]@states[j]
+    e,vec=generalized_eigenvector(T_subspace,S_subspace)
+    return e,vec
 
 
-def eigvec(c_arr,x_arr,molecule,basis,printout=False,mo_coeff=None):
-    energies=np.empty((len(x_arr),len(c_arr)))
-    energies_reference=np.empty(len(x_arr))
-    T=np.empty((len(c_arr),len(c_arr)))
-    S=np.empty((len(c_arr),len(c_arr)))
-    print("eigvec")
-    coefs=[]
-    for index, x in enumerate(x_arr):
-        mol=gto.Mole()
-        mol.atom=molecule(x)
-        mol.basis = basis
-        mol.unit= "Bohr"
-        mol.build()
-        solverino_2=RHF_CISDsolver(mol,mo_coeff=mo_coeff)
-        eref,coeff,soppel=solverino_2.calculate_coefficients() #Also sets up the T matrix, so don't remove this linewidth
-        coefs.append(coeff[coefficients_selector])
-        energies_reference[index]=eref
-        for i in range(len(c_arr)):
-            coeff_left=c_arr[i]
-            for j in range(i,len(c_arr)):
-                coeff_right=c_arr[j]
-                T[i,j]=T[j,i]=solverino_2.calculate_T_entry(coeff_left,coeff_right)
-                S[i,j]=S[j,i]=solverino_2.calculate_overlap(coeff_left,coeff_right)
-        for n in range(1,len(c_arr)+1):
-            e,vec=generalized_eigenvector(T[:n,:n],S[:n,:n])
-            energies[index,n-1]=e
-
-    return energies, energies_reference,coefs
-coefficients_selector=np.random.choice(150,replace=False,size=20)
 molecule=lambda x: "H 0 0 0; Li 0 0 %f"%x
+#molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
+
 basis="6-31G"
-molname="HF"
-def basischange(C_old,overlap_AOs_newnew):
-    S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
-    S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
-    S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-    C_newbasis=S_poweronehalf@C_old #Basis change
-    q,r=np.linalg.qr(C_newbasis) #orthonormalise
-    return S_powerminusonehalf@q #change back
-mol=gto.Mole()
-mol.atom=molecule(3)
-mol.basis = basis
-mol.unit= "Bohr"
-mol.build()
-mf=scf.RHF(mol)
-mf.kernel()
-mo_coeff_0=mf.mo_coeff
-#mo_coeff_0=None
-sample_x=np.linspace(3,2,1)
-plot_x=np.linspace(2,5,16)
-cisd=CISD_energy_curve(plot_x,basis,molecule)
-hf_curve=energy_curve_RHF(plot_x,basis,molecule)
+molecule_name="LIH"
+mol=make_mol(molecule,2,basis)
+ref_x=[2,2.5,3]
+energy_refx=[]
+x_sol=np.linspace(2,5,31)
+energies_EVC=np.zeros(len(x_sol))
+energies_ref=np.zeros(len(x_sol))
+reference_determinant=create_reference_determinant(mol)
+reference_solutions=[]
+for x in ref_x:
+    print(x)
+    mol=make_mol(molecule,x,basis)
+    solver=RHF_CISDsolver(mol,previous_mo_coeff=reference_determinant)
+    energy,sol=solver.solve_T()
+    energy_refx.append(energy)
+    reference_solutions.append(sol)
+allstates=np.zeros(len(reference_solutions[0]))
+for state in reference_solutions:
+    allstates+=np.abs(state)
+counter=0
+allstates/=len(reference_solutions)
+for index in range(len(allstates)):
+    destroyer=1e-10
+    if allstates[index]<destroyer and allstates[index]>1e-13:
+        counter+=1
+        for state in reference_solutions:
+            state[index]=0
+for state in reference_solutions:
+    norm=state.T@state
+    print(norm)
+    state=state/norm #Renormalize
+print(counter,len(reference_solutions[0]),counter/len(reference_solutions[0]))
+excitation_operators=[]
+mo_coeffs=[]
 
-coeffs,sample_energies=create_sample_coefficients(molecule,basis,sample_x,mo_coeff=mo_coeff_0)
 
-energies,eref,coeff_calc=eigvec(coeffs,plot_x,molecule,basis,mo_coeff=mo_coeff_0)
+mol=make_mol(molecule,x_sol[0],basis)
+solver=RHF_CISDsolver(mol,previous_mo_coeff=reference_determinant)
+#solver=RHF_CISDsolver(mol,reference_determinant)
+solver.make_T()
+e_corr,sol0=solver.solve_T()
+excitation_operators.append(sol0*np.sign(np.max(sol0)))
+mo_coeffs.append(solver.mo_coeff)
+e,sol=evc(solver.T,reference_solutions)
+energies_EVC[0]=e
+energies_ref[0]=e_corr
+for i,x in enumerate(x_sol):
+    if i==0:
+        continue
+    print(i)
+    mol=make_mol(molecule,x,basis)
+    #solver=RHF_CISDsolver(mol,reference_determinant)
+    solver=RHF_CISDsolver(mol,previous_mo_coeff=reference_determinant)
+    solver.make_T()
+    e_corr,sol0=solver.solve_T()
+    excitation_operators.append(sol0*np.sign(sol0[0]))
+    mo_coeffs.append(solver.mo_coeff)
+    e,sol=evc(solver.T,reference_solutions)
+    energies_EVC[i]=e
+    energies_ref[i]=e_corr
+diff_norms=[0]
+diff_coeffs=[0]
+for i in range(1,len(mo_coeffs)):
+    diff_coeffs.append(np.sum(np.abs(mo_coeffs[i]-mo_coeffs[i-1])))
+    diff_exc1=np.sqrt(np.sum(np.abs(excitation_operators[i]-excitation_operators[i-1])**2))
+    diff_exc2=np.sqrt(np.sum(np.abs(excitation_operators[i]+excitation_operators[i-1])**2))
+    diff_norms.append(np.min([diff_exc1,diff_exc2]))
+fig,ax=plt.subplots(nrows=3,ncols=1,sharex=True)
+fig.suptitle("%s (%s)"%(molecule_name,basis))
+ax[0].plot(x_sol,energies_EVC,label="EVC")
+ax[0].plot(x_sol,energies_ref,label="CISD")
+ax[0].plot(ref_x,energy_refx,"*",label="Sample points")
 
-plt.plot(sample_x,sample_energies,"*",label="samples")
-plt.plot(plot_x,cisd,label="pyscf")
-plt.plot(plot_x,hf_curve,label="Hartree-Fock")
-for i in range(len(coeffs)):
-    plt.plot(plot_x,energies[:,i],label="EVC (%d points)"%(i+1))
-plt.plot(plot_x,eref,label="shitty CISD")
-plt.legend()
+ax[0].legend(loc='upper left')
+
+plt.xlabel("Internuclear distance (Bohr)")
+ax[0].set_ylabel("Energy")
+ax[1].plot(x_sol,diff_norms,label="Norm exc. coefficients (absolute value)")
+ax[1].set_title("Norm change in (correct) excitation operators")
+ax[2].plot(x_sol,diff_coeffs,label="Norm MO coefficients")
+ax[2].set_title("Norm change in MO coefficients")
 plt.tight_layout()
-plt.savefig("%s%s.pdf"%(molname,basis))
+if reference_determinant is None:
+    filename="%s_%s_NONE.pdf"%(molecule_name,basis)
+else:
+    filename="%s_%s.pdf"%(molecule_name,basis)
+plt.savefig(filename)
 plt.show()
-plt.plot(plot_x,coeff_calc)
-plt.show()
+for i,mo_coeff in enumerate(mo_coeffs):
+    print(x_sol[i])
+    print(mo_coeff)

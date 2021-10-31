@@ -8,7 +8,7 @@ import scipy
 sys.path.append("../eigenvectorcontinuation/")
 from matrix_operations import *
 from helper_functions import *
-from scipy.optimize import minimize
+from scipy.optimize import minimize, minimize_scalar
 np.set_printoptions(linewidth=200,precision=5,suppress=True)
 def similarize_1(MO_tochange,MO_ref,f,dev):
     num_bas=len(MO_tochange[0,:])
@@ -19,15 +19,12 @@ def similarize_1(MO_tochange,MO_ref,f,dev):
             y1=MO_tochange[:,i]
             y2=MO_tochange[:,j]
             before=f(0,y1,y2,x1,x2)
-            alpha=minimize(f,0,args=(y1,y2,x1,x2)).x[0]#,jac=dev,method="BFGS").x[0]#,jac=derivative_of_function).x[0]
+            alpha=minimize_scalar(f,bounds=(0,2*np.pi),args=(y1,y2,x1,x2)).x#[0]#,jac=dev,method="BFGS").x[0]#,jac=derivative_of_function).x[0]
             after=f(alpha,y1,y2,x1,x2)
             sa=np.sin(alpha)
             ca=np.cos(alpha)
             y1_new=ca*MO_tochange[:,i]-sa*MO_tochange[:,j]
             y2_new=sa*MO_tochange[:,i]+ca*MO_tochange[:,j]
-            if before<after:
-                print("You made it worse")
-
             MO_tochange[:,i]=y1_new
             MO_tochange[:,j]=y2_new
     return MO_tochange
@@ -39,33 +36,31 @@ def similarize(MO_tochange,MO_ref,f,dev):
             x2=MO_ref[:,j]
             y1=MO_tochange[:,i]
             y2=MO_tochange[:,j]
-            before=f(0,y1,y2,x1,x2)
-            alpha=minimize(f,0,args=(y1,y2,x1,x2)).x[0]#,jac=dev,method="BFGS").x[0]#,jac=derivative_of_function).x[0]
-            after=f(alpha,y1,y2,x1,x2)
+            power=1
+            before=np.sum(np.abs(y1-x1)**power)+np.sum(np.abs(y2-x2)**power)
+            alpha=minimize_scalar(f,bounds=(0,2*np.pi),args=(y1,y2,x1,x2)).x#[0]#,jac=dev,method="BFGS").x[0]#,jac=derivative_of_function).x[0]
             sa=np.sin(alpha)
             ca=np.cos(alpha)
-            y1_new=(ca*y1+sa*y2-x1)
-            y2_new=(sa*y1-ca*y2-x2)
-            after=f(0,y1_new,y2_new,x1,x2)
+            y1_new=(ca*y1+sa*y2)
+            y2_new=(sa*y1-ca*y2)
+            after=np.sum(np.abs(y1_new-x1)**power)+np.sum(np.abs(y2_new-x2)**power)
             if before<after:
-                print(alpha)
-                print(f(0,y1,y2,x1,x2,printerino=True))
-                print(f(0,y1_new,y2_new,x1,x2,printerino=True))
-                print(f(alpha,y1,y2,x1,x2,printerino=True))
-                print("You made it worse")
-                sys.exit(1)
-            MO_tochange[:,i]=y1_new
-            MO_tochange[:,j]=y2_new
+                MO_tochange[:,i]=y1
+                MO_tochange[:,j]=y2
+            else:
+                MO_tochange[:,i]=y1_new
+                MO_tochange[:,j]=y2_new
     return MO_tochange
 
 def orbital_dissimilarity(alpha,y1,y2,x1,x2,printerino=False):
     ca=np.cos(alpha)
     sa=np.sin(alpha)
-    first=np.sum((ca*y1+sa*y2-x1)**2)
-    second=np.sum((sa*y1-ca*y2-x2)**2)
+    power=1
+    first=np.sum(np.abs(ca*y1+sa*y2-x1)**power)
+    second=np.sum(np.abs(sa*y1-ca*y2-x2)**power)
     if printerino:
-        print(first)
-        print(second)
+        print(y1,ca*y1+sa*y2)
+        print(y2,sa*y1-ca*y2)
     return first+second
 def orbital_dissimilarity_dev(alpha,y1,y2,x1,x2):
     ca=np.cos(alpha)
@@ -76,8 +71,9 @@ def orbital_dissimilarity_dev(alpha,y1,y2,x1,x2):
 def orbital_dissimilarity_1(alpha,y1,y2,x1,x2):
     ca=np.cos(alpha)
     sa=np.sin(alpha)
-    first=np.sum((ca*y1-sa*y2-x1)**2)
-    second=np.sum((sa*y1+ca*y2-x2)**2)
+    power=1
+    first=np.sum(np.abs(ca*y1-sa*y2-x1)**power)
+    second=np.sum(np.abs(sa*y1+ca*y2-x2)**power)
     return first+second
 def orbital_dissimilarity_dev_1(alpha,y1,y2,x1,x2):
     ca=np.cos(alpha)
@@ -88,66 +84,51 @@ def orbital_dissimilarity_dev_1(alpha,y1,y2,x1,x2):
 
 
 def localize_mocoeff(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
-
+    #Occupied
+    #mo=mo_coeff[:,mo_occ>0]
     mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
     mo=swappistan(mo)
+
     if previous_mo_coeff is not None:
         premo=previous_mo_coeff[:,mo_occ>0]
-        #mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
+        #print("Norm before: %f"%np.sum(np.abs((mo-premo))**2))
         mo=similarize_1(mo,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
+        mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
+        mo=similarize_1(mo,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
+        mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
+        mo=similarize_1(mo,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
+        mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
         for i in range(len(mo[0,:])):
-            if np.sum(np.abs(mo[:,i]-premo[:,i])**2)>np.sum(np.abs(mo[:,i]+premo[:,i])**2):
+            if np.sum(np.abs(mo[:,i]-premo[:,i]))>np.sum(np.abs(mo[:,i]+premo[:,i])):
                 mo[:,i]=-mo[:,i]
+        #print("Norm after: %f"%np.sum(np.abs((mo-premo))**2))
+
     mo_coeff[:,mo_occ>0]=np.array(mo)
+
+    #Unoccupied
+    #mo_unocc=mo_coeff[:,mo_occ<=0]
     mo_unocc=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
     mo_unocc=swappistan(mo_unocc)
+    #print(mo_unocc)
 
     if previous_mo_coeff is not None:
         premo=previous_mo_coeff[:,mo_occ<=0]
-        print("Norm before: %f"%np.sum(np.abs((mo_unocc-premo))**2))
+        print("Norm before: %f"%np.sum(np.abs((mo_unocc-premo))))
+        mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
         mo_unocc=similarize(mo_unocc,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
-        #mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
+        mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
+        mo_unocc=similarize(mo_unocc,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
+        mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
+        mo_unocc=similarize(mo_unocc,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
         for i in range(len(mo_unocc[0,:])):
-            if np.sum(np.abs(mo_unocc[:,i]-premo[:,i])**2)>np.sum(np.abs(mo_unocc[:,i]+premo[:,i])**2):
+            if np.sum(np.abs(mo_unocc[:,i]-premo[:,i]))>np.sum(np.abs(mo_unocc[:,i]+premo[:,i])):
                 mo_unocc[:,i]=-mo_unocc[:,i]
-        print("Norm after: %f"%np.sum(np.abs((mo_unocc-premo))**2))
+        print("Norm after: %f"%np.sum(np.abs((mo_unocc-premo))))
+
     mo_coeff[:,mo_occ<=0]=np.array(mo_unocc)
-
+    #print(mo_unocc)
     return mo_coeff
 
-"""
-def localize_mocoeff(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
-
-    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
-    mo=swappistan(mo)
-    if previous_mo_coeff is not None:
-        previous_mo=previous_mo_coeff[:,mo_occ>0]
-        diff=mo-previous_mo
-        #Do the magic and swap columns and rows
-        col_norm=np.sum(np.abs(diff),axis=0)
-        colnorm_descendingargs=np.argsort(col_norm)[::-1]
-        colnorm_sorted=col_norm[colnorm_descendingargs]
-        if colnorm_sorted[0]>0.9:
-            mo=swap_cols(mo,colnorm_descendingargs[0],colnorm_descendingargs[1])
-
-    mo_coeff[:,mo_occ>0]=np.array(mo)
-    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
-    mo=swappistan(mo)
-    if previous_mo_coeff is not None:
-        previous_mo=previous_mo_coeff[:,mo_occ<=0]
-        diff=mo-previous_mo
-        #Do the magic and swap columns and rows
-        col_norm=np.sum(np.abs(diff),axis=0)
-        #print(np.abs(diff))
-        #print(col_norm)
-        colnorm_descendingargs=np.argsort(col_norm)[::-1]
-        colnorm_sorted=col_norm[colnorm_descendingargs]
-        if colnorm_sorted[0]>1:
-            mo=swap_cols(mo,colnorm_descendingargs[0],colnorm_descendingargs[1])
-    mo_coeff[:,mo_occ<=0]=np.array(mo)
-
-    return mo_coeff
-"""
 def calc_diff_bitstring(a,b):
     difference_alpha=int(a[:len(a)//2],2)^int(b[:len(b)//2],2)
     difference_beta=int(a[len(a)//2:],2)^int(b[len(b)//2:],2)
@@ -166,7 +147,8 @@ class RHF_CISDsolver():
             self.mo_coeff=mf.mo_coeff
             self.mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ,previous_mo_coeff)
         else:
-            self.mo_coeff=self.basischange(mo_coeff,self.overlap)
+            self.mo_coeff=mo_coeff
+            #self.mo_coeff=self.basischange(mo_coeff,self.overlap)
         self.onebody=np.einsum("ki,lj,kl->ij",self.mo_coeff,self.mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
         self.twobody=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(self.mo_coeff,self.mo_coeff,self.mo_coeff,self.mo_coeff),aosym="s1")
         self.ne=mol.nelectron
@@ -370,19 +352,66 @@ def evc(T,states):
     return e,vec
 
 
-molecule=lambda x: "H 0 0 0; Li 0 0 %f"%x
+molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
 #molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
-
+reference_determinant=None
 basis="6-31G"
-molecule_name="LIH"
-mol=make_mol(molecule,2,basis)
-ref_x=[2,2.5,3]
+molecule_name="HF"
+x_sol=np.linspace(1.2,4.8,37)
+
+ref_x_index=[0,1,2,3,4]
+ref_x=[x_sol[ref_x_index]][0]
+print(ref_x)
 energy_refx=[]
-x_sol=np.linspace(2,5,31)
 energies_EVC=np.zeros(len(x_sol))
 energies_ref=np.zeros(len(x_sol))
-reference_determinant=create_reference_determinant(mol)
+#reference_determinant=create_reference_determinant(mol)
+
+#Step 1: Find the Slater-determinants
+all_determinants=[]
 reference_solutions=[]
+excitation_operators=[]
+mo_coeffs=[]
+for index, x in enumerate(x_sol):
+    mol=make_mol(molecule,x,basis)
+    mf=scf.RHF(mol)
+    mf.kernel()
+    #all_determinants.append(mf.mo_coeff)
+    all_determinants.append(localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ))
+for i, x in enumerate(x_sol):
+    if i==0:
+        continue
+    all_determinants[i]=localize_mocoeff(mol,all_determinants[i],mf.mo_occ,all_determinants[i-1])
+for i in ref_x_index:
+    x=x_sol[i]
+    print(x)
+    mol=make_mol(molecule,x,basis)
+    solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i])
+    energy,sol=solver.solve_T()
+    energy_refx.append(energy)
+    reference_solutions.append(sol)
+
+for i,x in enumerate(x_sol):
+    print(i)
+    mol=make_mol(molecule,x,basis)
+    #solver=RHF_CISDsolver(mol,reference_determinant)
+    solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i])
+    solver.make_T()
+    e_corr,sol0=solver.solve_T()
+    excitation_operators.append(sol0*np.sign(sol0[0]))
+    mo_coeffs.append(solver.mo_coeff)
+    e,sol=evc(solver.T,reference_solutions)
+    energies_EVC[i]=e
+    energies_ref[i]=e_corr
+diff_norms=[0]
+diff_coeffs=[0]
+for i in range(1,len(mo_coeffs)):
+    diff_coeffs.append(np.sum(np.abs(mo_coeffs[i]-mo_coeffs[i-1])))
+    diff_exc1=np.sum(np.abs(excitation_operators[i]-excitation_operators[i-1]))
+    diff_exc2=np.sum(np.abs(excitation_operators[i]+excitation_operators[i-1]))
+    diff_norms.append(np.min([diff_exc1,diff_exc2]))
+
+"""
 for x in ref_x:
     print(x)
     mol=make_mol(molecule,x,basis)
@@ -406,8 +435,7 @@ for state in reference_solutions:
     print(norm)
     state=state/norm #Renormalize
 print(counter,len(reference_solutions[0]),counter/len(reference_solutions[0]))
-excitation_operators=[]
-mo_coeffs=[]
+
 
 
 mol=make_mol(molecule,x_sol[0],basis)
@@ -441,6 +469,7 @@ for i in range(1,len(mo_coeffs)):
     diff_exc1=np.sqrt(np.sum(np.abs(excitation_operators[i]-excitation_operators[i-1])**2))
     diff_exc2=np.sqrt(np.sum(np.abs(excitation_operators[i]+excitation_operators[i-1])**2))
     diff_norms.append(np.min([diff_exc1,diff_exc2]))
+"""
 fig,ax=plt.subplots(nrows=3,ncols=1,sharex=True)
 fig.suptitle("%s (%s)"%(molecule_name,basis))
 ax[0].plot(x_sol,energies_EVC,label="EVC")

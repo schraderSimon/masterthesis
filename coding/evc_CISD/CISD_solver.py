@@ -92,12 +92,9 @@ def localize_mocoeff(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
     if previous_mo_coeff is not None:
         premo=previous_mo_coeff[:,mo_occ>0]
         #print("Norm before: %f"%np.sum(np.abs((mo-premo))**2))
-        mo=similarize_1(mo,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
-        mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
-        mo=similarize_1(mo,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
-        mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
-        mo=similarize_1(mo,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
-        mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
+        for i in range(5):
+            mo=similarize_1(mo,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
+            mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
         for i in range(len(mo[0,:])):
             if np.sum(np.abs(mo[:,i]-premo[:,i]))>np.sum(np.abs(mo[:,i]+premo[:,i])):
                 mo[:,i]=-mo[:,i]
@@ -114,12 +111,9 @@ def localize_mocoeff(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
     if previous_mo_coeff is not None:
         premo=previous_mo_coeff[:,mo_occ<=0]
         print("Norm before: %f"%np.sum(np.abs((mo_unocc-premo))))
-        mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
-        mo_unocc=similarize(mo_unocc,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
-        mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
-        mo_unocc=similarize(mo_unocc,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
-        mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
-        mo_unocc=similarize(mo_unocc,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
+        for i in range(5):
+            mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
+            mo_unocc=similarize(mo_unocc,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
         for i in range(len(mo_unocc[0,:])):
             if np.sum(np.abs(mo_unocc[:,i]-premo[:,i]))>np.sum(np.abs(mo_unocc[:,i]+premo[:,i])):
                 mo_unocc[:,i]=-mo_unocc[:,i]
@@ -137,7 +131,7 @@ def calc_diff_bitstring(a,b):
     return ndiffa,ndiffb
 
 class RHF_CISDsolver():
-    def __init__(self,mol,mo_coeff=None,previous_mo_coeff=None):
+    def __init__(self,mol,mo_coeff=None,previous_mo_coeff=None,nonzeros=None):
         self.mol=mol
         self.overlap=mol.intor("int1e_ovlp")
         if mo_coeff is None:
@@ -159,6 +153,7 @@ class RHF_CISDsolver():
         self.energy=None
         self.coeff=None
         self.T=None
+        self.nonzeros=nonzeros
         self.data_creator()
     def basischange(self,C_old,overlap_AOs_newnew):
         S=np.einsum("mi,vj,mv->ij",C_old,C_old,overlap_AOs_newnew)
@@ -170,11 +165,13 @@ class RHF_CISDsolver():
         neh=self.neh
         num_bas=self.num_bas
         states=self.state_creator()
-        self.states=states
-        states_fallen=[state[0]+state[1] for state in states]
+        if self.nonzeros is not None:
+            self.states=[states[i] for i in self.nonzeros]
+        else:
+            self.states=states
+        states_fallen=[state[0]+state[1] for state in self.states]
         indices=np.array(self.index_creator())
-
-        self.num_states=len(states)
+        self.num_states=len(self.states)
         self.states_fallen=states_fallen
         self.indices=indices
     def index_creator(self):
@@ -340,14 +337,15 @@ def create_reference_determinant(mol):
     mf.kernel()
     mo_coeff_converted=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
     return mo_coeff_converted
-def evc(T,states):
+def evc(T,states,nonzeros=None):
     T_subspace=np.zeros((len(states),len(states)))
     S_subspace=np.zeros_like(T_subspace)
-
+    if nonzeros is None:
+        nonzeros=np.arange(len(states[0]))
     for i in range(len(states)):
         for j in range(i,len(states)):
-            T_subspace[j,i]=T_subspace[i,j]=states[i]@T@states[j]
-            S_subspace[i,j]=S_subspace[j,i]=states[i]@states[j]
+            T_subspace[j,i]=T_subspace[i,j]=states[i][nonzeros]@T@states[j][nonzeros]
+            S_subspace[i,j]=S_subspace[j,i]=states[i][nonzeros]@states[j][nonzeros]
     e,vec=generalized_eigenvector(T_subspace,S_subspace)
     return e,vec
 
@@ -355,7 +353,7 @@ def evc(T,states):
 molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
 #molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
 reference_determinant=None
-basis="6-31G"
+basis="cc-pVDZ"
 molecule_name="HF"
 x_sol=np.linspace(1.2,4.8,37)
 
@@ -391,16 +389,38 @@ for i in ref_x_index:
     energy_refx.append(energy)
     reference_solutions.append(sol)
 
+allstates=np.zeros(len(reference_solutions[0]))
+nonzeros=[]
+for state in reference_solutions:
+    allstates+=np.abs(state)
+counter=0
+allstates/=len(reference_solutions)
+for index in range(len(allstates)):
+    destroyer=1e-3
+    if allstates[index]<destroyer:# and allstates[index]>1e-13:
+        counter+=1
+        for state in reference_solutions:
+            state[index]=0
+    else:
+        nonzeros.append(index)
+for state in reference_solutions:
+    norm=state.T@state
+    print(norm)
+    state=state/norm #Renormalize
+print(counter,len(allstates[allstates>1e-13]),counter/len(allstates[allstates>1e-13]))
+
+
+
 for i,x in enumerate(x_sol):
     print(i)
     mol=make_mol(molecule,x,basis)
     #solver=RHF_CISDsolver(mol,reference_determinant)
-    solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i])
+    solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i],nonzeros=nonzeros)
     solver.make_T()
     e_corr,sol0=solver.solve_T()
     excitation_operators.append(sol0*np.sign(sol0[0]))
     mo_coeffs.append(solver.mo_coeff)
-    e,sol=evc(solver.T,reference_solutions)
+    e,sol=evc(solver.T,reference_solutions,nonzeros)
     energies_EVC[i]=e
     energies_ref[i]=e_corr
 diff_norms=[0]

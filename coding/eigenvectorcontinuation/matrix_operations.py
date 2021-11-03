@@ -4,6 +4,22 @@ from numba import jit
 import numba as nb
 import scipy
 from scipy.linalg import lu, qr,svd
+from helper_functions import *
+def swappistan(matrix):
+    #return matrix
+    swapperinos=[]
+    for i in range((matrix.shape[1])):
+        for j in range(i+1,matrix.shape[1]):
+            sort_i=np.sort(matrix[:,i])
+            sort_j=np.sort(matrix[:,j])
+            if(np.all(np.abs(sort_i-sort_j)<1e-8)): #If the two columns are equal
+                nonzero_i=np.where(np.abs(matrix[:,i])>=1e-5)[0][0]
+                nonzero_j=np.where(np.abs(matrix[:,j])>=1e-5)[0][0]
+                if nonzero_i>nonzero_j:
+                    matrix=swap_cols(matrix,i,j)
+    return matrix
+
+@jit
 def cholesky_pivoting(matrix):
     n=len(matrix)
     R=np.zeros((n,n))
@@ -29,6 +45,13 @@ def cholesky_pivoting(matrix):
         matrix[k+1:n,k+1:n]=matrix[k+1:n,k+1:n]-np.outer(R[k,k+1:],R[k,k+1:])
     P=np.eye(n)[:,piv]
     return R,P
+@jit
+def cholesky_coefficientmatrix(matrix):
+    D=2*matrix@matrix.T
+    R,P=cholesky_pivoting(D)
+    PL=P@R.T
+    Cnew=PL[:,:matrix.shape[1]]/np.sqrt(2)
+    return Cnew
 def LDU_decomp(X):
     """Singular-Value-based LDU decomposition.
     Input:

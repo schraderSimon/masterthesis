@@ -136,20 +136,13 @@ class eigvecsolver_RHF():
                 T[i,j]=energy_total
                 T[j,i]=energy_total
         return S,T
-    def basischange(self,C_old,overlap_AOs_newnew):
-        S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
-        S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
-        S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-        C_newbasis=S_poweronehalf@C_old #Basis change
-        q,r=np.linalg.qr(C_newbasis) #orthonormalise
-        return S_powerminusonehalf@q #change back
-
-    def basischange_alt(self,C_old,overlap_AOs_newnew):
-        S=self.getdeterminant_matrix(overlap_AOs_newnew,C_old,C_old)
+    def basischange(C_old,overlap_AOs_newnew):
+        S=np.einsum("mi,vj,mv->ij",C_old,C_old,overlap_AOs_newnew)
         S_eig,S_U=np.linalg.eigh(S)
-        S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
         S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-        return S_powerminusonehalf@C_old
+        C_new=np.einsum("ij,mj->mi",S_powerminusonehalf,C_old)
+        return C_new
+
 class eigvecsolver_RHF_singles(eigvecsolver_RHF):
 
     def create_singles(self,expansion_coefficients):

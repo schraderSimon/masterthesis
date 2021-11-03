@@ -92,7 +92,7 @@ def localize_mocoeff(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
     if previous_mo_coeff is not None:
         premo=previous_mo_coeff[:,mo_occ>0]
         #print("Norm before: %f"%np.sum(np.abs((mo-premo))**2))
-        for i in range(5):
+        for i in range(10):
             mo=similarize_1(mo,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
             mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
         for i in range(len(mo[0,:])):
@@ -111,7 +111,7 @@ def localize_mocoeff(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
     if previous_mo_coeff is not None:
         premo=previous_mo_coeff[:,mo_occ<=0]
         print("Norm before: %f"%np.sum(np.abs((mo_unocc-premo))))
-        for i in range(5):
+        for i in range(10):
             mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
             mo_unocc=similarize(mo_unocc,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
         for i in range(len(mo_unocc[0,:])):
@@ -142,7 +142,7 @@ class RHF_CISDsolver():
             self.mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ,previous_mo_coeff)
         else:
             self.mo_coeff=mo_coeff
-            #self.mo_coeff=self.basischange(mo_coeff,self.overlap)
+            self.mo_coeff=self.basischange(mo_coeff,self.overlap)
         self.onebody=np.einsum("ki,lj,kl->ij",self.mo_coeff,self.mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
         self.twobody=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(self.mo_coeff,self.mo_coeff,self.mo_coeff,self.mo_coeff),aosym="s1")
         self.ne=mol.nelectron
@@ -350,18 +350,18 @@ def evc(T,states,nonzeros=None):
     return e,vec
 
 
-molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
+molecule=lambda x: "N 0 0 0; N 0 0 %f"%x
 #molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
 reference_determinant=None
-basis="cc-pVDZ"
-molecule_name="HF"
-x_sol=np.linspace(1.2,4.8,37)
+basis="6-31G"
+molecule_name="N2"
+x_sol=np.linspace(1.2,4.5,34)
 
-ref_x_index=[0,1,2,3,4]
+ref_x_index=[0,4,8,12,16,33]
 ref_x=[x_sol[ref_x_index]][0]
 print(ref_x)
 energy_refx=[]
-energies_EVC=np.zeros(len(x_sol))
+energies_EVC=np.zeros((len(x_sol),len(ref_x_index)))
 energies_ref=np.zeros(len(x_sol))
 #reference_determinant=create_reference_determinant(mol)
 
@@ -374,7 +374,6 @@ for index, x in enumerate(x_sol):
     mol=make_mol(molecule,x,basis)
     mf=scf.RHF(mol)
     mf.kernel()
-    #all_determinants.append(mf.mo_coeff)
     all_determinants.append(localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ))
 for i, x in enumerate(x_sol):
     if i==0:
@@ -396,7 +395,7 @@ for state in reference_solutions:
 counter=0
 allstates/=len(reference_solutions)
 for index in range(len(allstates)):
-    destroyer=1e-3
+    destroyer=10**(-3.5)
     if allstates[index]<destroyer:# and allstates[index]>1e-13:
         counter+=1
         for state in reference_solutions:
@@ -420,8 +419,9 @@ for i,x in enumerate(x_sol):
     e_corr,sol0=solver.solve_T()
     excitation_operators.append(sol0*np.sign(sol0[0]))
     mo_coeffs.append(solver.mo_coeff)
-    e,sol=evc(solver.T,reference_solutions,nonzeros)
-    energies_EVC[i]=e
+    for j in range(1,len(reference_solutions)+1):
+        e,sol=evc(solver.T,reference_solutions[:j],nonzeros)
+        energies_EVC[i,j-1]=e
     energies_ref[i]=e_corr
 diff_norms=[0]
 diff_coeffs=[0]
@@ -431,72 +431,13 @@ for i in range(1,len(mo_coeffs)):
     diff_exc2=np.sum(np.abs(excitation_operators[i]+excitation_operators[i-1]))
     diff_norms.append(np.min([diff_exc1,diff_exc2]))
 
-"""
-for x in ref_x:
-    print(x)
-    mol=make_mol(molecule,x,basis)
-    solver=RHF_CISDsolver(mol,previous_mo_coeff=reference_determinant)
-    energy,sol=solver.solve_T()
-    energy_refx.append(energy)
-    reference_solutions.append(sol)
-allstates=np.zeros(len(reference_solutions[0]))
-for state in reference_solutions:
-    allstates+=np.abs(state)
-counter=0
-allstates/=len(reference_solutions)
-for index in range(len(allstates)):
-    destroyer=1e-10
-    if allstates[index]<destroyer and allstates[index]>1e-13:
-        counter+=1
-        for state in reference_solutions:
-            state[index]=0
-for state in reference_solutions:
-    norm=state.T@state
-    print(norm)
-    state=state/norm #Renormalize
-print(counter,len(reference_solutions[0]),counter/len(reference_solutions[0]))
-
-
-
-mol=make_mol(molecule,x_sol[0],basis)
-solver=RHF_CISDsolver(mol,previous_mo_coeff=reference_determinant)
-#solver=RHF_CISDsolver(mol,reference_determinant)
-solver.make_T()
-e_corr,sol0=solver.solve_T()
-excitation_operators.append(sol0*np.sign(np.max(sol0)))
-mo_coeffs.append(solver.mo_coeff)
-e,sol=evc(solver.T,reference_solutions)
-energies_EVC[0]=e
-energies_ref[0]=e_corr
-for i,x in enumerate(x_sol):
-    if i==0:
-        continue
-    print(i)
-    mol=make_mol(molecule,x,basis)
-    #solver=RHF_CISDsolver(mol,reference_determinant)
-    solver=RHF_CISDsolver(mol,previous_mo_coeff=reference_determinant)
-    solver.make_T()
-    e_corr,sol0=solver.solve_T()
-    excitation_operators.append(sol0*np.sign(sol0[0]))
-    mo_coeffs.append(solver.mo_coeff)
-    e,sol=evc(solver.T,reference_solutions)
-    energies_EVC[i]=e
-    energies_ref[i]=e_corr
-diff_norms=[0]
-diff_coeffs=[0]
-for i in range(1,len(mo_coeffs)):
-    diff_coeffs.append(np.sum(np.abs(mo_coeffs[i]-mo_coeffs[i-1])))
-    diff_exc1=np.sqrt(np.sum(np.abs(excitation_operators[i]-excitation_operators[i-1])**2))
-    diff_exc2=np.sqrt(np.sum(np.abs(excitation_operators[i]+excitation_operators[i-1])**2))
-    diff_norms.append(np.min([diff_exc1,diff_exc2]))
-"""
 fig,ax=plt.subplots(nrows=3,ncols=1,sharex=True)
 fig.suptitle("%s (%s)"%(molecule_name,basis))
 ax[0].plot(x_sol,energies_EVC,label="EVC")
 ax[0].plot(x_sol,energies_ref,label="CISD")
 ax[0].plot(ref_x,energy_refx,"*",label="Sample points")
 
-ax[0].legend(loc='upper left')
+ax[0].legend(loc='upper left',handletextpad=0.1)
 
 plt.xlabel("Internuclear distance (Bohr)")
 ax[0].set_ylabel("Energy")

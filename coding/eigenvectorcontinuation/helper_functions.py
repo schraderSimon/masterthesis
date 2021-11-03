@@ -28,6 +28,11 @@ def swap_cols(arr, frm, to):
     arrny=arr.copy()
     arrny[:,[frm, to]] = arrny[:,[to, frm]]
     return arrny
+def swap_rows(arr, frm, to):
+    """Swaps the rows of a 2D-array"""
+    arrny=arr.copy()
+    arrny[[frm, to],:] = arrny[[to, frm],:]
+    return arrny
 
 def energy_curve_UHF(xvals,basis_type,molecule):
     energies=[]

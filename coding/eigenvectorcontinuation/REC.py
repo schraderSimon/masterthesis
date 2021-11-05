@@ -38,6 +38,8 @@ class eigvecsolver_RHF():
             HF_coefficients.append(expansion_coefficients_mol)
         self.HF_coefficients=HF_coefficients
         self.nMO_h=HF_coefficients[0].shape[0] #Number of molecular orbitals divided by two (for each spin)
+        self.num_bas=self.nMO_h
+        self.n_unocc=self.num_bas-self.ne_h
     def build_molecule(self,x):
         """Create a molecule object with parameter x"""
 
@@ -70,6 +72,24 @@ class eigvecsolver_RHF():
             energy_array[index]=eigval
             eigvec_array.append(eigvec)
         return energy_array,eigvec_array
+
+    def getdeterminant_matrix(self,AO_overlap,HF_coefficients_left,HF_coefficients_right):
+        determinant_matrix=np.einsum("ab,ai,bj->ij",AO_overlap,HF_coefficients_left,HF_coefficients_right)
+        return determinant_matrix
+
+    def biorthogonalize(self,C_w,C_x,AO_overlap):
+        """Biorthogonalizes the problem
+        Input: The left and right Slater determinants (in forms of coefficient matrixes)
+        Returns: The diagonal matrix (as array) D, the new basises for C_w and C_x.
+        """
+        S=self.getdeterminant_matrix(AO_overlap,C_w,C_x);
+        Linv,D,Uinv=LDU_decomp(S,overwrite_a=True)
+        C_w=C_w@Linv
+        C_x=C_x@Uinv.T
+        return D,C_w,C_x
+    def getoverlap(self,determinant_matrix):
+        overlap=np.linalg.det(determinant_matrix)**2
+        return overlap
     def calculate_overlap_to_HF(self,xc_array):
         energies,eigvecs=self.calculate_energies(xc_array) #get energies and eigenvalues
         overlap_to_HF=np.zeros(len(energies))
@@ -84,64 +104,100 @@ class eigvecsolver_RHF():
             "re-calculate HF coefficients"
             overlaps=np.zeros(len(self.sample_points))
             for i in range(len(self.sample_points)):
-                conv_sol=self.basischange(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:self.number_electronshalf]
+                conv_sol=self.basischange(self.HF_coefficients[i][:,:self.number_electronshalf],mol_xc.intor("int1e_ovlp"))
                 determinant_matrix=self.getdeterminant_matrix(overlap_basis,true_HF_coeffmatrix,conv_sol)
                 overlap=self.getoverlap(determinant_matrix)
                 overlaps[i]=overlap
             overlap_to_HF[index]=np.dot(overlaps,eigvecs[index])
         return overlap_to_HF
-    def getdeterminant_matrix(self,AO_overlap,HF_coefficients_left,HF_coefficients_right):
-        determinant_matrix=np.einsum("ab,ai,bj->ij",AO_overlap,HF_coefficients_left,HF_coefficients_right)
-        return determinant_matrix
-    def getoverlap(self,determinant_matrix):
-        overlap=np.linalg.det(determinant_matrix)**2
-        return overlap
-    def onebody_energy(self,energy_basis_1e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
-        Hamiltonian_SLbasis=np.einsum("ki,lj,kl->ij",HF_coefficients_left,HF_coefficients_right,energy_basis_1e)
-        energy_1e=0
-        for k in range(self.number_electronshalf):
-            determinant_matrix_energy=determinant_matrix.copy() #Re-initiate Energy matrix
-            for l in range(self.number_electronshalf):
-                    determinant_matrix_energy[l,k]=Hamiltonian_SLbasis[l,k]
-            energy_contribution=np.linalg.det(determinant_matrix_energy)*np.linalg.det(determinant_matrix)
-            energy_1e+=energy_contribution
-        energy_1e*=2 #Beta spin part
-        return energy_1e
-
-    def twobody_energy(self,energy_basis_2e,HF_coefficients_left,HF_coefficients_right,determinant_matrix):
-        MO_eri=ao2mo.get_mo_eri(energy_basis_2e,(HF_coefficients_left,HF_coefficients_right,HF_coefficients_left,HF_coefficients_right))
-        energy_2e=0
-        n=int(self.number_electronshalf*2)
-        nh=self.number_electronshalf
-        G1s,G2s=get_antisymm_element_separated_RHF(MO_eri,int(n))
-        M1s,M2s=second_order_adj_matrix_blockdiag_separated_RHF(determinant_matrix)
-        energy_2e=2*np.trace(dot_nb(M1s,G1s))+np.trace(dot_nb(M2s,G2s))
-        return energy_2e
     def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
         number_electronshalf=self.number_electronshalf
         overlap_basis=mol_xc.intor("int1e_ovlp")
         energy_basis_1e=mol_xc.intor("int1e_kin")+mol_xc.intor("int1e_nuc")
         energy_basis_2e=mol_xc.intor('int2e',aosym="s1")
-        S=np.zeros((len(self.HF_coefficients),len(self.HF_coefficients)))
-        T=np.zeros((len(self.HF_coefficients),len(self.HF_coefficients)))
+        Smat=np.zeros((len(self.HF_coefficients),len(self.HF_coefficients)))
+        Tmat=np.zeros((len(self.HF_coefficients),len(self.HF_coefficients)))
         for i in range(len(self.HF_coefficients)):
             for j in range(i,len(self.HF_coefficients)):
-                determinant_matrix=self.getdeterminant_matrix(overlap_basis,new_HF_coefficients[i],new_HF_coefficients[j])
-                overlap=self.getoverlap(determinant_matrix)
-                S[i,j]=S[j,i]=overlap
-                nuc_repulsion_energy=mol_xc.energy_nuc()*overlap
-                energy_1e=self.onebody_energy(energy_basis_1e,new_HF_coefficients[i],new_HF_coefficients[j],determinant_matrix)
-                energy_2e=self.twobody_energy(energy_basis_2e,new_HF_coefficients[i],new_HF_coefficients[j],determinant_matrix)
-                energy_total=energy_2e+energy_1e+nuc_repulsion_energy
-                T[i,j]=energy_total
-                T[j,i]=energy_total
-        return S,T
-    def basischange(C_old,overlap_AOs_newnew):
-        S=np.einsum("mi,vj,mv->ij",C_old,C_old,overlap_AOs_newnew)
-        S_eig,S_U=np.linalg.eigh(S)
+                D,C_w,C_x=self.biorthogonalize(new_HF_coefficients[i],new_HF_coefficients[j],overlap_basis)
+                D_tilde=D[np.abs(D)>1e-15]
+                S_tilde=np.prod(D_tilde)**2 #Squared because this is RHF.
+                S=np.prod(D)**2
+                Smat[i,j]=Smat[j,i]=S
+                energy=self.energy_func(C_w,C_x,energy_basis_1e,energy_basis_2e,D)*S_tilde
+                #energy_naive=self.energy_func_naive(C_w,C_x,energy_basis_1e,energy_basis_2e,D)*S_tilde
+                #print(energy-energy_naive)
+                nuc_repulsion_energy=mol_xc.energy_nuc()*S
+                Tmat[i,j]=Tmat[j,i]=energy+nuc_repulsion_energy
+        return Smat,Tmat
+    def energy_func_naive(self,C_w,C_x,onebodyp,twobodyp,D):
+        twobody=ao2mo.get_mo_eri(twobodyp,(C_w,C_x,C_w,C_x),aosym="s1") #Works well and seems to me to be the correct one.
+        onebody=np.einsum("ki,lj,kl->ij",C_w,C_x,onebodyp)
+        alpha=np.arange(5)
+        beta=np.arange(5)
+        onebodydivD=np.diag(onebody)/D
+        onebody_alpha=np.sum(onebodydivD)
+        onebody_beta=np.sum(onebodydivD)
+        energy2=0
+        #Equation 2.175 from Szabo, Ostlund
+        for a in alpha:
+            for b in alpha:
+                e_contr=(twobody[a,a,b,b]-twobody[a,b,b,a])/(D[a]*D[b])
+                energy2+=e_contr
+        for a in alpha:
+            for b in beta:
+                e_contr=twobody[a,a,b,b]/(D[a]*D[b])
+                energy2+=e_contr
+        for a in beta:
+            for b in alpha:
+                e_contr=twobody[a,a,b,b]/(D[a]*D[b])
+                energy2+=e_contr
+        for a in beta:
+            for b in beta:
+                e_contr=(twobody[a,a,b,b]-twobody[a,b,b,a])/(D[a]*D[b])
+                energy2+=e_contr
+        energy2*=0.5
+        return onebody_alpha+onebody_beta+energy2
+    def energy_func(self,C_w,C_x,onebody,twobody,D):
+        number_of_zeros=len(D[np.abs(D)<1e-15])*2
+        zero_indices=np.where(np.abs(D)<1e-15)
+        if number_of_zeros>2:
+            return 0
+        else:
+            P_s=[]
+            for i in range(self.number_electronshalf):
+                P_s.append(np.einsum("m,v->mv",C_w[:,i],C_x[:,i]))
+            P=P_s
+            for i in range(self.number_electronshalf):
+                P[i]=P[i]/D[i]
+            W=np.sum(P,axis=0)
+            if number_of_zeros==2:
+                print("Bæmp")
+                H1=0
+                i=zero_indices[0][0]
+                J_contr=np.einsum("ms,ms->",P_s[i],np.einsum("vt,msvt->ms",P_s[i],twobody))
+                K_contr=np.einsum("ms,ms->",P_s[i],np.einsum("vt,mtvs->ms",P_s[i],twobody))
+                H2=J_contr-K_contr
+            elif number_of_zeros==0:
+                J_contr=4*np.einsum("sm,ms->",W,np.einsum("tv,msvt->ms",W,twobody))
+                K_contr=2*np.einsum("sm,ms->",W,np.einsum("tv,mtvs->ms",W,twobody))
+                H2=0.5*(J_contr-K_contr)
+                H1=2*np.einsum("mv,mv->",W,onebody)
+            return H2+H1
+    def basischange(self,C_old,overlap_AOs_newnew):
+        S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
+        S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
         S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-        C_new=np.einsum("ij,mj->mi",S_powerminusonehalf,C_old)
-        return C_new
+        C_newbasis=S_poweronehalf@C_old #Basis change
+        q,r=np.linalg.qr(C_newbasis) #orthonormalise
+        return S_powerminusonehalf@q #change back
+
+    def basischange_alt(self,C_old,overlap_AOs_newnew):
+        S=self.getdeterminant_matrix(overlap_AOs_newnew,C_old,C_old)
+        S_eig,S_U=np.linalg.eigh(S)
+        S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
+        S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
+        return S_powerminusonehalf@C_old
 
 class eigvecsolver_RHF_singles(eigvecsolver_RHF):
 
@@ -636,84 +692,64 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF):
                                 energy_2e+=eri_of_interest*det
         return energy_2e
 class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
-    def create_singles(self,expansion_coefficients):
-        """
-        Here, I create all possible singles within the basis set, and then return the basis set.
-        To get the correct, spin-adapted singles, the following things need to be done:
-        I need to couple the spacial singles with the spacial ground state...
-        ...and then couple the spacial ground state with a single, such that the correct CAS is created.
-        """
-        basisset_size=len(expansion_coefficients[0][:,0])
-        n_occ=self.number_electronshalf
-        n_unocc=basisset_size-n_occ
-        permutations=[]
-        #1. Create all possible permutations
-        for i in range(n_occ):
-            for j in range(n_occ,basisset_size):
-                permutations.append([[0,i],[0,j]]) #This means: i out, j in!. The zero is there as a "do nothing" operator (now we are operating two permutations...)
-        return permutations
-    def create_double_fromsame_tosame(self,expansion_coefficients):
-        if self.doubles==False:
-            return []
-        basisset_size=len(expansion_coefficients[0][:,0])
-        n_occ=self.number_electronshalf
-        n_unocc=basisset_size-n_occ
-        permutations=[]
-        #1. Create all possible permutations
-        for i in range(n_occ):
-            for j in range(n_occ,basisset_size):
-                permutations.append([[i,i],[j,j]])
-        return permutations
-
-    def create_double_fromsame_todiff(self,expansion_coefficients):
-        if self.doubles==False:
-            return []
-        basisset_size=len(expansion_coefficients[0][:,0])
-        n_occ=self.number_electronshalf
-        n_unocc=basisset_size-n_occ
-        permutations=[]
-        for i in range(n_occ):
-            for l in range(n_occ,basisset_size):
-                for k in range(n_occ,l):
-                    permutations.append([[i,i],[k,l]])
-        return permutations
-    def create_double_fromdiff_tosame(self,expansion_coefficients):
-        if self.doubles==False:
-            return []
-        basisset_size=len(expansion_coefficients[0][:,0])
-        n_occ=self.number_electronshalf
-        n_unocc=basisset_size-n_occ
-        permutations=[]
-        for i in range(n_occ):
-            for j in range(i):
-                for l in range(n_occ,basisset_size):
-                    permutations.append([[i,j],[l,l]])
-        return permutations
-    def create_double_fromdiff_todiff(self,expansion_coefficients):
-        if self.doubles==False:
-            return []
-        basisset_size=len(expansion_coefficients[0][:,0])
-        n_occ=self.number_electronshalf
-        n_unocc=basisset_size-n_occ
-        permutations=[]
-        for j in range(n_occ):
-            for i in range(0,j):
-                for l in range(n_occ,basisset_size):
-                    for k in range(n_occ,l):
-                        permutations.append([[i,j],[k,l]])
-        return permutations
+    def data_creator(self):
+        neh=self.number_electronshalf
+        num_bas=self.num_bas
+        states=self.state_creator()
+        try:
+            self.nonzeros
+        except:
+            self.nonzeros=None
+        if self.nonzeros is not None:
+            self.states=[states[i] for i in self.nonzeros]
+        else:
+            self.states=states
+        states_fallen=[state[0]+state[1] for state in self.states]
+        indices=np.array(self.index_creator())
+        self.num_states=len(self.states)
+        self.states_fallen=states_fallen
+        self.indices=indices
+    def state_creator(self):
+        neh=self.number_electronshalf
+        groundstring="1"*neh+"0"*(self.n_unocc) #Ground state Slater determinant
+        alpha_singleexcitations=[]
+        for i in range(neh):
+            for j in range(neh,self.num_bas):
+                newstring=groundstring[:i]+"0"+groundstring[i+1:j]+"1"+groundstring[j+1:] #Take the ith 1 and move it to position j
+                alpha_singleexcitations.append(newstring)
+        alpha_doubleexcitations=[]
+        for i in range(neh):
+            for j in range(i+1,neh):
+                for k in range(neh,self.num_bas):
+                    for l in range(k+1,self.num_bas):
+                        newstring=groundstring[:i]+"0"+groundstring[i+1:j]+"0"+groundstring[j+1:k]+"1"+groundstring[k+1:l]+"1"+groundstring[l+1:]#Take the ith & jth 1 and move it to positions k and l
+                        alpha_doubleexcitations.append(newstring)
+        GS=[[groundstring,groundstring]]
+        singles_alpha=[[alpha,groundstring] for alpha in alpha_singleexcitations] #All single excitations within alpha
+        singles_beta=[[groundstring,alpha] for alpha in alpha_singleexcitations]
+        doubles_alpha=[[alpha,groundstring] for alpha in alpha_doubleexcitations]
+        doubles_beta=[[groundstring,alpha] for alpha in alpha_doubleexcitations]
+        doubles_alphabeta=[[alpha,beta] for alpha in alpha_singleexcitations for beta in alpha_singleexcitations]
+        allstates=GS+singles_alpha+singles_beta+doubles_alpha+doubles_beta+doubles_alphabeta
+        return allstates
+    def index_creator(self):
+        all_indices=[]
+        for state in self.states:
+            alphas_occ=[i for i in range(len(state[0])) if int(state[0][i])==1]
+            betas_occ=[i for i in range(len(state[1])) if int(state[1][i])==1]
+            all_indices.append([alphas_occ,betas_occ])
+        return all_indices
     def calculate_energies(self,xc_array,doubles=True):
-        self.doubles=doubles #Wether we only want singles, or also doubles. Also serves as a "check" to compare to the other method!!
+        self.data_creator()
         """Calculates the molecule's energy"""
         energy_array=np.zeros(len(xc_array))
         eigval_array=[]
         self.all_new_HF_coefficients=[]
-        outfile=open("temp_energies_len_xc=%d.csv"%len(xc_array),"a")
         for index,xc in enumerate(xc_array):
             mol_xc=self.build_molecule(xc)
             new_HF_coefficients=[]
             for i in range(len(self.sample_points)):
-                new_HF_coefficients.append(self.basischange(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:]) #Actually take the WHOLE thing.
+                new_HF_coefficients.append(self.basischange(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))) #Actually take the WHOLE thing.
                 #new_HF_coefficients.append(self.basischange(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:self.number_electronshalf])
             self.all_new_HF_coefficients.append(new_HF_coefficients)
             S,T=self.calculate_ST_matrices(mol_xc,new_HF_coefficients)
@@ -723,350 +759,193 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
                 eigval=float('NaN')
                 eigvec=float('NaN')
             energy_array[index]=eigval
-            outfile.write("%f,"%(eigval))
 
             eigval_array.append(eigvec)
-        outfile.write("\n")
-        outfile.close()
         return energy_array,eigval_array
-    def calculate_basises(self,mol_xc,n_HF_coef):
+    def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
         number_electronshalf=self.number_electronshalf
-        neh=number_electronshalf
+        overlap_basis=mol_xc.intor("int1e_ovlp")
         energy_basis_1e=mol_xc.intor("int1e_kin")+mol_xc.intor("int1e_nuc")
         energy_basis_2e=mol_xc.intor('int2e',aosym="s1")
-        e1_slbasis=[]
-        e2_slbasis=[]
-        for i in range(len(self.HF_coefficients)): #Calculate e1-basis and e2-basis for all combinations of determinants
-            temp_1=[]
-            temp_2=[]
-            for k in range(len(self.HF_coefficients)):
-                temp_1.append(np.einsum("ki,lj,kl->ij",n_HF_coef[i],n_HF_coef[k],energy_basis_1e))
-                basis=ao2mo.get_mo_eri(energy_basis_2e,(n_HF_coef[i],n_HF_coef[k],n_HF_coef[i],n_HF_coef[k]),aosym="s1")
-                temp_2.append(basis)
-            e1_slbasis.append(temp_1)
-            e2_slbasis.append(temp_2)
-        return e1_slbasis, e2_slbasis
-    def wv_finder(self,index):
-        number_electronshalf=self.number_electronshalf
-        neh=number_electronshalf
-        state=[]
-        if index<self.first: #Just the ground state
-            alpha=[[0,0],[0,0]]
-            beta=[[0,0],[0,0]]
-            state.append([1,alpha,beta])
-        elif index<self.single:
-            alpha_0=self.all_permutations[index]
-            alpha_1=[[0,0],[0,0]]
-            beta_1=self.all_permutations[index]
-            beta_0=[[0,0],[0,0]]
-            state.append([1/np.sqrt(2),alpha_0,beta_0])
-            state.append([1/np.sqrt(2),alpha_1,beta_1])
-        elif index<self.double_ss:
-            alpha=self.all_permutations[index]
-            beta=self.all_permutations[index]
-            state.append([1,alpha,beta])
-        elif index<self.double_sd:
-            outs,ins=self.all_permutations[index]
-            a,a=outs
-            r,s = ins
-            alpha_0=[[0,a],[0,r]]
-            alpha_1=[[0,a],[0,s]]
-            beta_0=[[0,a],[0,s]]
-            beta_1=[[0,a],[0,r]]
-            state.append([1/np.sqrt(2),alpha_0,beta_0])
-            state.append([1/np.sqrt(2),alpha_1,beta_1])
-        elif index<self.double_ds:
-            outs,ins=self.all_permutations[index]
-            a,b=outs
-            r,r=ins
-            alpha_0=[[0,b],[0,r]]
-            alpha_1=[[0,a],[0,r]]
-            beta_0=[[0,a],[0,r]]
-            beta_1=[[0,a],[0,r]]
-            state.append([1/np.sqrt(2),alpha_0,beta_0])
-            state.append([1/np.sqrt(2),alpha_1,beta_1])
-        elif index<self.double_dd_1:
-            outs,ins=self.all_permutations[index]
-            a,b=outs
-            r,s=ins
-            alpha_0=[[a,b],[r,s]]
-            beta_0=[[0,0],[0,0]]
-            state.append([2/np.sqrt(12),alpha_0,beta_0])
-            beta_1=[[a,b],[r,s]]
-            alpha_1=[[0,0],[0,0]]
-            state.append([2/np.sqrt(12),alpha_1,beta_1])
-            alpha_2=[[0,b],[0,r]]
-            beta_2=[[0,a],[0,s]]
-            state.append([-1/np.sqrt(12),alpha_2,beta_2])
-            alpha_3=[[0,b],[0,s]]
-            beta_3=[[0,a],[0,r]]
-            state.append([1/np.sqrt(12),alpha_3,beta_3])
-            alpha_4=[[0,a],[0,r]]
-            beta_4=[[0,b],[0,s]]
-            state.append([1/np.sqrt(12),alpha_4,beta_4])
-            alpha_5=[[0,a],[0,s]]
-            beta_5=[[0,b],[0,r]]
-            state.append([-1/np.sqrt(12),alpha_5,beta_5])
-        elif index<self.double_dd_2:
-            outs,ins=self.all_permutations[index]
-            a,b=outs
-            r,s=ins
-            alpha_0=[[0,b],[0,r]]
-            beta_0=[[0,a],[0,s]]
-            state.append([0.5,alpha_0,beta_0])
-            alpha_1=[[0,b],[0,s]]
-            beta_1=[[0,a],[0,r]]
-            state.append([0.5,alpha_1,beta_1])
-            alpha_2=[[0,a],[0,r]]
-            beta_2=[[0,b],[0,s]]
-            state.append([0.5,alpha_2,beta_2])
-            alpha_3=[[0,a],[0,s]]
-            beta_3=[[0,b],[0,r]]
-            state.append([0.5,alpha_3,beta_3])
-        return state
-    def calculate_ST_matrices(self,mol_xc,n_HF_coef):
-        number_electronshalf=self.number_electronshalf
-        neh=number_electronshalf
-        overlap_basis=mol_xc.intor("int1e_ovlp")
-        self.permutations_s=self.create_singles(n_HF_coef)
-        #print(self.permutations_s)
-
-        self.permutations_d_samesame=self.create_double_fromsame_tosame(n_HF_coef)
-        self.permutations_d_samediff=self.create_double_fromsame_todiff(n_HF_coef)
-        self.permutations_d_diffsame=self.create_double_fromdiff_tosame(n_HF_coef)
-        self.permutations_d_diffdiff_1=self.create_double_fromdiff_todiff(n_HF_coef)
-        self.permutations_d_diffdiff_2=self.create_double_fromdiff_todiff(n_HF_coef)
-        len_all_permutations=1+len(self.permutations_s)+len(self.permutations_d_samesame)+len(self.permutations_d_samediff)+len(self.permutations_d_diffsame)+2*len(self.permutations_d_diffdiff_1)
-        self.first=1
-        self.single=self.first+len(self.permutations_s)
-        self.double_ss=self.single+len(self.permutations_d_samesame)
-        self.double_sd=self.double_ss+len(self.permutations_d_samediff)
-        self.double_ds=self.double_sd+len(self.permutations_d_diffsame)
-        self.double_dd_1=self.double_ds+len(self.permutations_d_diffdiff_1)
-        self.double_dd_2=self.double_dd_1+len(self.permutations_d_diffdiff_2)
-        self.all_permutations=[[[0,0],[0,0]]]+self.permutations_s+self.permutations_d_samesame+self.permutations_d_samediff+self.permutations_d_diffsame+self.permutations_d_diffdiff_1+self.permutations_d_diffdiff_2
-        print("first: %d"%self.first)
-        print("single: %d,%d"%(len(self.permutations_s),self.single))
-        print("double_ss: %d,%d"%(len(self.permutations_d_samesame),self.double_ss))
-        print("double_sd: %d,%d"%(len(self.permutations_d_samediff),self.double_sd))
-        print("double_ds: %d,%d"%(len(self.permutations_d_diffsame),self.double_ds))
-        print("double_dd1: %d,%d"%(len(self.permutations_d_diffdiff_1),self.double_dd_1))
-        print("double_dd2: %d, %d"%(len(self.permutations_d_diffdiff_2),self.double_dd_2))
-        print("Total: %d"%len(self.all_permutations))
-        #sys.exit(1)
-        number_matrix_elements=len(n_HF_coef)*len_all_permutations
-        S=np.zeros((number_matrix_elements,number_matrix_elements))
-        T=np.zeros((number_matrix_elements,number_matrix_elements))
-        e1_slbasis,e2_slbasis=self.calculate_basises(mol_xc,n_HF_coef)
+        Smat=np.zeros((len(self.HF_coefficients),len(self.HF_coefficients)))
+        Tmat=np.zeros((len(self.HF_coefficients),len(self.HF_coefficients)))
+        n_HF_coef=len(new_HF_coefficients)
+        num_states=len(self.states)
+        number_matrix_elements=n_HF_coef*num_states
+        Smat=np.zeros((number_matrix_elements,number_matrix_elements))
+        Tmat=np.zeros((number_matrix_elements,number_matrix_elements))
         for c1 in range(number_matrix_elements): #For each matrix element
-            i=c1//len_all_permutations # The number of the HF determinant
-            j=c1%len_all_permutations #Number of the excitation
-            bras=self.wv_finder(j)
-            for c2 in range(c1,number_matrix_elements):
-                k=c2//len_all_permutations
-                l=c2%len_all_permutations
-                kets=self.wv_finder(l)
-                overlap=0
-                energy=0
-                for bra in bras:
-                    for ket in kets:
-                        prefac=bra[0]*ket[0]
-                        swaps_bra_alpha=list(bra[1])
-                        swaps_bra_beta=list(bra[2])
-                        swaps_ket_alpha=list(ket[1])
-                        swaps_ket_beta=list(ket[2])
-                        overlap_part, energy_part=self.overlap_and_energy(n_HF_coef[i],n_HF_coef[k],overlap_basis,e1_slbasis[i][k],e2_slbasis[i][k],swaps_bra_alpha,swaps_bra_beta,swaps_ket_alpha,swaps_ket_beta)
-                        overlap+=prefac*overlap_part
-                        energy+=prefac*energy_part
-                energy+=overlap*mol_xc.energy_nuc()
-                S[c1,c2]=S[c2,c1]=overlap
-                T[c1,c2]=T[c2,c1]=energy
             print("%d/%d"%(c1,number_matrix_elements))
+            i=c1//num_states # The number of the HF determinant
+            j=c1%num_states #Number of the excitation
+            C_w_a=new_HF_coefficients[i][:,self.indices[j][0]]
+            C_w_b=new_HF_coefficients[i][:,self.indices[j][1]]
+            for c2 in range(c1,number_matrix_elements):
+                k=c2//num_states
+                l=c2%num_states
+                C_x_a=new_HF_coefficients[k]
+                C_x_a=C_x_a[:,self.indices[l][0]]
+                C_x_b=new_HF_coefficients[k][:,self.indices[l][1]]
 
-        print("Done one")
-        print(S)
-        print(T)
-        return S,T
-    def overlap_and_energy(self,coefs_bra,coefs_ket,overlap_basis,onebody,twobody,swaps_bra_alpha,swaps_bra_beta,swaps_ket_alpha,swaps_ket_beta,threshold=1e-16):
-        #First step: Calculate the determiants for alpha and beta
-        neh=self.number_electronshalf
-        alpha_bra_indices=np.arange(neh); alpha_bra_indices[swaps_bra_alpha[0]]=swaps_bra_alpha[1]
-        beta_bra_indices=np.arange(neh); beta_bra_indices[swaps_bra_beta[0]]=swaps_bra_beta[1]
-        alpha_ket_indices=np.arange(neh);alpha_ket_indices[swaps_ket_alpha[0]]=swaps_ket_alpha[1]
-        beta_ket_indices=np.arange(neh);beta_ket_indices[swaps_ket_beta[0]]=swaps_ket_beta[1]
-        coefs_bra_alpha=coefs_bra[:,alpha_bra_indices]
-        coefs_bra_beta=coefs_bra[:,beta_bra_indices]
-        coefs_ket_alpha=coefs_ket[:,alpha_ket_indices]
-        coefs_ket_beta=coefs_ket[:,beta_ket_indices]
+                D_a,C_w_a,C_x_a=self.biorthogonalize(C_w_a,C_x_a,overlap_basis)
+                D_b,C_w_b,C_x_b=self.biorthogonalize(C_w_b,C_x_b,overlap_basis)
+                D_tilde_a=D_a[np.abs(D_a)>1e-12]
+                D_tilde_b=D_b[np.abs(D_b)>1e-12]
+                S_tilde=np.prod(D_tilde_a)*np.prod(D_tilde_b) #Squared because this is RHF.
+                S=np.prod(D_a)*np.prod(D_b)
+                Smat[c1,c2]=Smat[c2,c1]=S
+                energy=self.energy_func(C_w_a,C_w_b,C_x_a,C_x_b,energy_basis_1e,energy_basis_2e,D_a,D_b,c1,c2)*S_tilde
+                nuc_repulsion_energy=mol_xc.energy_nuc()*S
+                Tmat[c1,c2]=Tmat[c2,c1]=energy+nuc_repulsion_energy
+        print(np.max(np.abs(Tmat)))
+        return Smat,Tmat
+    def energy_func_naive(self,C_w_a,C_w_b,C_x_a,C_x_b,onebodyp,twobodyp,D_a,D_b,c1,c2):
+        number_of_zeros_alpha=len(D_a[np.abs(D_a)<1e-12])
+        number_of_zeros_beta=len(D_a[np.abs(D_b)<1e-12])
+        number_of_zeros=number_of_zeros_alpha+number_of_zeros_beta
+        twobody_aaaa=ao2mo.get_mo_eri(twobodyp,(C_w_a,C_x_a,C_w_a,C_x_a),aosym="s1")
+        twobody_bbbb=ao2mo.get_mo_eri(twobodyp,(C_w_b,C_x_b,C_w_b,C_x_b),aosym="s1")
+        twobody_aabb=ao2mo.get_mo_eri(twobodyp,(C_w_a,C_x_a,C_w_b,C_x_b),aosym="s1")
+        twobody_bbaa=ao2mo.get_mo_eri(twobodyp,(C_w_b,C_x_b,C_w_a,C_x_a),aosym="s1")
+        onebody_alpha=np.einsum("ki,lj,kl->ij",C_w_a,C_x_a,onebodyp)
+        onebody_beta=np.einsum("ki,lj,kl->ij",C_w_b,C_x_b,onebodyp)
+        alpha=np.arange(self.number_electronshalf)
+        beta=np.arange(self.number_electronshalf)
 
-        detmat_alpha=self.getdeterminant_matrix(overlap_basis,coefs_bra_alpha,coefs_ket_alpha)
-        detmat_beta=self.getdeterminant_matrix(overlap_basis,coefs_bra_beta,coefs_ket_beta)
-        determinant_matrix=[detmat_alpha,detmat_beta]
-        #Next step: Calculate LdR to see if we are done.
-        Linv_a,da,Rinv_a=LDU_decomp(detmat_alpha)#,threshold=threshold) #Alpha LdR decomposition
-        Linv_b,db,Rinv_b=LDU_decomp(detmat_beta)#,threshold=threshold) #Beta LdR decomposition
+        #Equation 2.175 from Szabo, Ostlund
 
-        num_singularities_left=len(da[np.abs(da)<threshold])
-        num_singularities_right=len(db[np.abs(db)<threshold])
-        num_singularities=num_singularities_left+num_singularities_right
-        if num_singularities>=3: ###THIS IS WRONG, THIS SHOULD BE 3 !!!
-            #Everything is zero, das ist gut :)
-            return (0,0)
-        #Calculate the "perturbed basis" for eri
-        H2=self.twobody_energy(determinant_matrix,twobody,alpha_bra_indices,beta_bra_indices,alpha_ket_indices,beta_ket_indices) #Need to write this function
-        if num_singularities==2:
-            overlap=0
-            energy=H2
-            pass
-        H1=self.onebody_energy(determinant_matrix,onebody,alpha_bra_indices,beta_bra_indices,alpha_ket_indices,beta_ket_indices)
-        if num_singularities==1:
-            overlap=0
-            energy=H1+H2
-            pass
-        if num_singularities==0:
-            overlap=np.prod(da)*np.prod(db)
-            energy=H1+H2
-        return overlap,energy
-    def onebody_energy(self,determinant_matrix,SLbasis,alpha_bra_indices,beta_bra_indices,alpha_ket_indices,beta_ket_indices):
-        """Unlike the previous method, the left and right coefficients are now the WHOLE set (occ+unocc). The SLbasis is also the whole (for the corresponding system). The permutations contain all information
-        about the construction of the coefficients.
-        """
-
-        neh=self.number_electronshalf
-        Hamiltonian_SLbasis_alpha=SLbasis[np.ix_(alpha_bra_indices,alpha_ket_indices)]
-        Hamiltonian_SLbasis_beta=SLbasis[np.ix_(beta_bra_indices,beta_ket_indices)]
-        energy_1e=0
-        determinant_matrix_alpha=determinant_matrix[0]
-        determinant_matrix_beta=determinant_matrix[1]
-        for k in range(neh):
-            determinant_matrix_energy_alpha=determinant_matrix_alpha.copy() #Re-initiate Energy matrix
-            for l in range(neh):
-                    determinant_matrix_energy_alpha[l,k]=Hamiltonian_SLbasis_alpha[l,k]
-            energy_contribution=np.linalg.det(determinant_matrix_energy_alpha)*np.linalg.det(determinant_matrix_beta)
-            energy_1e+=energy_contribution
-        for k in range(neh):
-            determinant_matrix_energy_beta=determinant_matrix_beta.copy() #Re-initiate Energy matrix
-            for l in range(neh):
-                    determinant_matrix_energy_beta[l,k]=Hamiltonian_SLbasis_beta[l,k]
-            energy_contribution=np.linalg.det(determinant_matrix_energy_beta)*np.linalg.det(determinant_matrix_alpha)
-            energy_1e+=energy_contribution
-        return energy_1e
-    def twobody_energy(self,determinant_matrix,eribasis,alpha_bra_indices,beta_bra_indices,alpha_ket_indices,beta_ket_indices):
-        def case2():
-            eri_MO_bbaa=eribasis[np.ix_(beta_bra_indices,beta_ket_indices,alpha_bra_indices,alpha_ket_indices)]
-            d=np.concatenate((da,db))
-            La=Linv_a.T
-            Lb=Linv_b.T
-            Ra=Rinv_a.T
-            Rb=Rinv_b.T
-            if num_singularities_right==2:
-                i_index=n-2
-                j_index=n-1
-                k_index=n-2
-                l_index=n-1
-            elif num_singularities_left==2:
-                i_index=nh-2
-                j_index=nh-1
-                k_index=nh-2
-                l_index=nh-1
-            elif num_singularities_left==1 and num_singularities_right==1:
-                i_index=nh-1
-                j_index=n-1
-                k_index=nh-1
-                l_index=n-1
-            L=scipy.linalg.block_diag(La,Lb)
-            R=scipy.linalg.block_diag(Ra,Rb)
-            last_column_R2=second_order_compound_col(R,l=l_index,k=k_index)
-            last_row_L2=second_order_compound_row(L,j=j_index,i=i_index)
-            nonzero_d=d[np.abs(d)>1e-10]
-            d_val=np.prod(nonzero_d)
-            adjugate_2S=np.outer(last_column_R2,last_row_L2)*d_val
-            G=get_antisymm_element_full(eri_MO_aaaa,eri_MO_bbbb,eri_MO_aabb,eri_MO_bbaa,n)
-            energy_2e=np.trace(dot_nb(adjugate_2S,G))
-            return energy_2e
-        def case1():
-            nonlocal num_singularities_right #accesses the outer function's variable
-            nonlocal num_singularities_left
-            if num_singularities_left==1: #Left matrix is "almost non-invertible"
-                try:
-                    nonzero_row,nonzero_col=cofactor_index(determinant_matrix[0])
-                except TypeError:
-                    print("something went wrong finding the cofactor")
-                    num_singularities_left=2
-                    return case2()
-                determinant_0_new=determinant_matrix[0].copy()
-                determinant_0_new[nonzero_row,nonzero_col]=determinant_0_new[nonzero_row,nonzero_col]+2
-                M1_1,M2_1,M3_1=second_order_adj_matrix_blockdiag_separated(determinant_0_new,determinant_matrix[1])
-                determinant_0_new[nonzero_row,nonzero_col]=determinant_0_new[nonzero_row,nonzero_col]-4
-                M1_2,M2_2,M3_2=second_order_adj_matrix_blockdiag_separated(determinant_0_new,determinant_matrix[1])
-                M1s=0.5*(M1_1+M1_2)
-                M2s=0.5*(M2_1+M2_2)
-                M3s=0.5*(M3_1+M3_2)
-            elif num_singularities_right==1:
-                try:
-                    nonzero_row,nonzero_col=cofactor_index(determinant_matrix[1])
-                except TypeError:
-                    print("something went wrong finding the cofactor")
-
-                    num_singularities_right=2
-                    return case2()
-                determinant_1_new=determinant_matrix[1].copy()
-                determinant_1_new[nonzero_row,nonzero_col]=determinant_1_new[nonzero_row,nonzero_col]+2
-                M1_1,M2_1,M3_1=second_order_adj_matrix_blockdiag_separated(determinant_matrix[0],determinant_1_new)
-                determinant_1_new[nonzero_row,nonzero_col]=determinant_1_new[nonzero_row,nonzero_col]-4
-                M1_2,M2_2,M3_2=second_order_adj_matrix_blockdiag_separated(determinant_matrix[0],determinant_1_new)
-                M1s=0.5*(M1_1+M1_2)
-                M2s=0.5*(M2_1+M2_2)
-                M3s=0.5*(M3_1+M3_2)
-            M1s=0.5*(M1_1+M1_2)
-            M2s=0.5*(M2_1+M2_2)
-            M3s=0.5*(M3_1+M3_2)
-            G1s,G2s,G3s=get_antisymm_element_separated(eri_MO_aaaa,eri_MO_bbbb,eri_MO_aabb,n)
-            energy_2e=np.trace(dot_nb(M1s,G1s))+np.trace(dot_nb(M2s,G2s))+np.trace(dot_nb(M3s,G3s))
-            return energy_2e
-        def case0():
-            G1s,G2s,G3s=get_antisymm_element_separated(eri_MO_aaaa,eri_MO_bbbb,eri_MO_aabb,n)
-            try:
-                M1s,M2s,M3s=second_order_adj_matrix_blockdiag_separated(determinant_matrix[0],determinant_matrix[1])
-            except np.linalg.LinAlgError:
-                nonlocal num_singularities_right #accesses the outer function's variable
-                nonlocal num_singularities_left
-                if abs(prod_a)<abs(prod_b):
-                    num_singularities_left=1
-                else:
-                    num_singularities_right=1
-                return case1()
-            energy_2e=np.trace(dot_nb(M1s,G1s))+np.trace(dot_nb(M2s,G2s))+np.trace(dot_nb(M3s,G3s))
-            return energy_2e
-        #return self.twobody_energy_alt(determinant_matrix,eribasis,permutations_left,permutations_right)
-        threshold=1e-7
-        Linv_a,da,Rinv_a=LDU_decomp(determinant_matrix[0])#,threshold=threshold) #Alpha LdR decomposition
-        Linv_b,db,Rinv_b=LDU_decomp(determinant_matrix[1])#,threshold=threshold) #Beta LdR decomposition
-        neh=self.number_electronshalf
-        num_singularities_left=len(da[np.abs(da)<threshold])
-        prod_a=np.prod(da[np.abs(da)>threshold])
-        num_singularities_right=len(db[np.abs(db)<threshold])
-        prod_b=np.prod(db[np.abs(db)>threshold])
-        num_singularities=num_singularities_left+num_singularities_right
-        if num_singularities>=3:
+        if number_of_zeros>2:
             return 0
+        zero_indices_alpha=np.where(np.abs(D_a)<1e-12)
+        zero_indices_beta=np.where(np.abs(D_b)<1e-12)
+        H1=0; H2=0
+        if number_of_zeros==2:
+            if number_of_zeros_alpha==2:
+                i=zero_indices_alpha[0][0]
+                j=zero_indices_alpha[0][1]
+                H2=twobody_aaaa[i,i,j,j]-twobody_aaaa[i,j,j,i]
+            elif number_of_zeros_beta==2:
+                i=zero_indices_beta[0][0]
+                j=zero_indices_beta[0][1]
+                H2=twobody_bbbb[i,i,j,j]-twobody_bbbb[i,j,j,i]
+            else:
+                i=zero_indices_alpha[0][0]
+                j=zero_indices_beta[0][0]
+                H2=twobody_aabb[i,i,j,j]
 
-        neh=self.number_electronshalf
-        n=int(self.number_electronshalf*2)
-        nh=self.number_electronshalf
-        eri_MO_aaaa=eribasis[np.ix_(alpha_bra_indices,alpha_ket_indices,alpha_bra_indices,alpha_ket_indices)]
-        eri_MO_aabb=eribasis[np.ix_(alpha_bra_indices,alpha_ket_indices,beta_bra_indices,beta_ket_indices)]
-        eri_MO_bbbb=eribasis[np.ix_(beta_bra_indices,beta_ket_indices,beta_bra_indices,beta_ket_indices)]
-        energy_2e=0
-        if num_singularities==1:
-            energy_2e=case1()
+        elif number_of_zeros_alpha==1:
+            i=zero_indices_alpha[0][0]
+            H1=onebody_alpha[i,i]
+            for j in alpha:
+                if i==j:
+                    continue
+                H2+=(twobody_aaaa[i,i,j,j]-twobody_aaaa[i,j,j,i])/D_a[j]
+            for j in beta:
+                H2+=twobody_aabb[i,i,j,j]/D_b[j]
+        elif number_of_zeros_beta==1:
 
-        elif num_singularities==2:
-            energy_2e=case2()
-        else:
-            energy_2e=case0()
+            i=zero_indices_beta[0][0]
+            H1=onebody_beta[i,i]
+            for j in beta:
+                if i==j:
+                    continue
+                H2+=(twobody_bbbb[i,i,j,j]-twobody_bbbb[i,j,j,i])/D_b[j]
+            for j in alpha:
+                H2+=twobody_bbaa[i,i,j,j]/D_a[j]
 
-        return energy_2e
+        elif number_of_zeros==0:
+            onebody_alphav=np.sum(np.diag(onebody_alpha)/D_a)
+            onebody_betav=np.sum(np.diag(onebody_beta)/D_b)
+            energy2=0
+            for a in alpha:
+                for b in alpha:
+                    e_contr=(twobody_aaaa[a,a,b,b]-twobody_aaaa[a,b,b,a])#/(D_a[a]*D_a[b])
+                    energy2+=e_contr
+            for a in alpha:
+                for b in beta:
+                    e_contr=twobody_aabb[a,a,b,b]#/(D_a[a]*D_b[b])
+                    energy2+=e_contr
+            for a in beta:
+                for b in alpha:
+                    e_contr=twobody_bbaa[a,a,b,b]#/(D_b[a]*D_a[b])
+                    energy2+=e_contr
+            for a in beta:
+                for b in beta:
+                    e_contr=(twobody_bbbb[a,a,b,b]-twobody_bbbb[a,b,b,a])#/(D_b[a]*D_b[b])
+                    energy2+=e_contr
+            energy2*=0.5
+            H1=onebody_alphav+onebody_betav
+            H2=energy2
+        return H2+H1
+    def energy_func(self,C_w_a,C_w_b,C_x_a,C_x_b,onebody,twobody,D_a,D_b,c1=0,c2=0):
+        number_of_zeros_alpha=len(D_a[np.abs(D_a)<1e-12])
+        number_of_zeros_beta=len(D_a[np.abs(D_b)<1e-12])
+        number_of_zeros=number_of_zeros_alpha+number_of_zeros_beta
+        if number_of_zeros>2:
+            return 0
+        zero_indices_alpha=np.where(np.abs(D_a)<1e-12)
+        zero_indices_beta=np.where(np.abs(D_b)<1e-12)
+        P_s_a=[]
+        for i in range(self.number_electronshalf):
+            P_s_a.append(np.einsum("m,v->mv",C_w_a[:,i],C_x_a[:,i]))
+        P_s_b=[]
+        for i in range(self.number_electronshalf):
+            P_s_b.append(np.einsum("m,v->mv",C_w_b[:,i],C_x_b[:,i]))
+        P_a=P_s_a.copy()
+        for i in range(self.number_electronshalf):
+            if np.abs(D_a[i])>1e-12:
+                P_a[i]=P_a[i]/D_a[i]
+            else:
+                P_a[i]=0*P_a[i] # No contribution to W as we can ignore the summation over i
+        W_a=np.sum(P_a,axis=0)
+        P_b=P_s_b.copy()
+        for i in range(self.number_electronshalf):
+            if np.abs(D_b[i])>1e-12:
+                P_b[i]=P_b[i]/D_b[i]
+            else:
+                P_b[i]=0*P_b[i] # No contribution to W as we can ignore the summation over i
+        W_b=np.sum(P_b,axis=0)
+        H1=H2=0
+        if number_of_zeros==2:
+            if number_of_zeros_alpha==2:
+                i=zero_indices_alpha[0][0]
+                j=zero_indices_alpha[0][1]
+                J_contr=np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,msvt->ms",P_s_a[j],twobody,optimize=True),optimize=True)
+                K_contr=np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,mtvs->ms",P_s_a[j],twobody,optimize=True),optimize=True)
+                H2=J_contr-K_contr
+            elif number_of_zeros_beta==2:
+                i=zero_indices_beta[0][0]
+                j=zero_indices_beta[0][1]
+                J_contr=np.einsum("sm,ms->",P_s_b[i],np.einsum("tv,msvt->ms",P_s_b[j],twobody,optimize=True),optimize=True)
+                K_contr=np.einsum("sm,ms->",P_s_b[i],np.einsum("tv,mtvs->ms",P_s_b[j],twobody,optimize=True),optimize=True)
+                H2=J_contr-K_contr
+            else:
+                i=zero_indices_alpha[0][0]
+                j=zero_indices_beta[0][0]
+                J_contr=np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,msvt->ms",P_s_b[j],twobody,optimize=True),optimize=True)
+                H2=J_contr
+        elif number_of_zeros_alpha==1:
+            i=zero_indices_alpha[0][0]
+            H1=np.einsum("mv,mv->",P_s_a[i],onebody)
+            J_contr=np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,msvt->ms",W_a+W_b,twobody,optimize=True),optimize=True)#+np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,msvt->ms",W_b,twobody))
+            K_contr=np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,mtvs->ms",W_a,twobody,optimize=True),optimize=True)
+            H2=J_contr-K_contr
+        elif number_of_zeros_beta==1:
+
+            i=zero_indices_beta[0][0]
+            H1=np.einsum("mv,mv->",P_s_b[i],onebody)
+            J_contr=np.einsum("sm,ms->",P_s_b[i],np.einsum("tv,msvt->ms",W_a+W_b,twobody,optimize=True))#+np.einsum("sm,ms->",P_s_b[i],np.einsum("tv,msvt->ms",W_b,twobody))
+            K_contr=np.einsum("sm,ms->",P_s_b[i],np.einsum("tv,mtvs->ms",W_b,twobody,optimize=True),optimize=True)
+            H2=J_contr-K_contr
+
+        elif number_of_zeros==0:
+            W=W_a+W_b
+            J_a_a=np.einsum("sm,ms->",W,np.einsum("tv,msvt->ms",W,twobody,optimize=True),optimize=True)
+            J_contr=J_a_a
+            K_contr=np.einsum("sm,ms->",W_a,np.einsum("tv,mtvs->ms",W_a,twobody,optimize=True),optimize=True)+np.einsum("sm,ms->",W_b,np.einsum("tv,mtvs->ms",W_b,twobody,optimize=True),optimize=True)
+            H2=0.5*(J_contr-K_contr)
+            H1=np.einsum("mv,mv->",W,onebody,optimize=True)
+        return H2+H1
 class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
     def __init__(self,sample_coefficients,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0,symmetry=False):
         """Initiate the solver.

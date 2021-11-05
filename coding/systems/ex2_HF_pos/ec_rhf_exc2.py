@@ -9,7 +9,7 @@ from matrix_operations import *
 from helper_functions import *
 import numpy as np
 import matplotlib.pyplot as plt
-np.set_printoptions(linewidth=300,precision=2,suppress=True)
+np.set_printoptions(linewidth=200,precision=2,suppress=True)
 fig, axy = plt.subplots(1,1,figsize=(8.27,(8.27/2)),sharex=True,sharey=True)
 ax=[axy]
 basis="6-31G"
@@ -17,10 +17,9 @@ sample_x=[]
 #sample_x.append(np.linspace(2.75,3.0,5))
 
 sample_x.append(np.linspace(2.0,3.0,2))
-xc_array=np.linspace(1.5,3.0,8)
-xc_array=np.concatenate((xc_array,[5.0]))
-molecule=lambda x: """H 0 0 0; F 0 0 %f"""%x
-molecule_name=r"Hydrogen"
+xc_array=np.linspace(2.0,4.0,5)
+molecule=lambda x: """H 0 0 0; Li 0 0 %f"""%x
+molecule_name=r"Nananananannananana"
 '''
 basis="6-31G"
 molecule_name="BeH2"

@@ -139,7 +139,7 @@ class RHF_CISDsolver():
             mf=scf.RHF(mol)
             mf.kernel()
             self.mo_coeff=mf.mo_coeff
-            self.mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ,previous_mo_coeff)
+            #self.mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ,previous_mo_coeff) #I will not do this here for a while :)
         else:
             self.mo_coeff=mo_coeff
             self.mo_coeff=self.basischange(mo_coeff,self.overlap)
@@ -174,13 +174,7 @@ class RHF_CISDsolver():
         self.num_states=len(self.states)
         self.states_fallen=states_fallen
         self.indices=indices
-    def index_creator(self):
-        all_indices=[]
-        for state in self.states:
-            alphas_occ=[i for i in range(len(state[0])) if int(state[0][i])==1]
-            betas_occ=[i for i in range(len(state[1])) if int(state[1][i])==1]
-            all_indices.append([alphas_occ,betas_occ])
-        return all_indices
+
     def state_creator(self):
         neh=self.neh
         groundstring="1"*neh+"0"*(self.n_unocc) #Ground state Slater determinant
@@ -323,7 +317,9 @@ class RHF_CISDsolver():
                     energy2+=twobody[a,a,b,b]
                     energy2-=twobody[a,b,b,a]
             energy2*=0.5
+
             diagonal_matrix[i]=onebody_alpha+onebody_beta+energy2
+
         return diagonal_matrix
 def make_mol(molecule,x,basis="6-31G"):
     mol=gto.Mole()
@@ -350,11 +346,30 @@ def evc(T,states,nonzeros=None):
     return e,vec
 
 
-molecule=lambda x: "N 0 0 0; N 0 0 %f"%x
+molecule=lambda x: "H 0 0 0; Li 0 0 %f"%x
 #molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
 reference_determinant=None
-basis="6-31G"
-molecule_name="N2"
+basis="STO-3G"
+molecule_name="Testerino Testistan"
+x_sol=np.linspace(2.0,2.0,1)
+for i,x in enumerate(x_sol):
+    print(i)
+    mol=make_mol(molecule,x,basis)
+    solver=RHF_CISDsolver(mol)
+    solver.make_T()
+    e_corr,sol0=solver.solve_T()
+    print(e_corr)
+    print((solver.T)[0,:])
+sys.exit(1)
+
+
+
+
+
+
+
+
+
 x_sol=np.linspace(1.2,4.5,34)
 
 ref_x_index=[0,4,8,12,16,33]

@@ -3,7 +3,7 @@ from numpy import linalg
 from numba import jit
 import numba as nb
 import scipy
-from scipy.linalg import lu, qr,svd
+from scipy.linalg import lu, qr,svd, det
 from helper_functions import *
 def swappistan(matrix):
     #return matrix
@@ -52,7 +52,7 @@ def cholesky_coefficientmatrix(matrix):
     PL=P@R.T
     Cnew=PL[:,:matrix.shape[1]]/np.sqrt(2)
     return Cnew
-def LDU_decomp(X):
+def LDU_decomp(X,overwrite_a=True,check_finite=False):
     """Singular-Value-based LDU decomposition.
     Input:
         -The matrix X to decompose
@@ -61,9 +61,9 @@ def LDU_decomp(X):
         - d : 1D diagonal matrix
         - R.T: 2D array of the right matrix
         """
-    U,s,Vh=svd(X)
-    detU=np.linalg.det(U)
-    detVh=np.linalg.det(Vh)
+    U,s,Vh=svd(X,overwrite_a=overwrite_a,check_finite=check_finite)
+    detU=det(U,check_finite=check_finite)
+    detVh=det(Vh,check_finite=check_finite)
     if detU<0:
         U[:,0]=-1*U[:,0]
         s[0]=-s[0]
@@ -83,7 +83,7 @@ def generalized_eigenvector(T,S,symmetric=True):
     s, U=np.linalg.eigh(S) #Diagonalize S (overlap matrix, Hermitian by definition)
     U=np.fliplr(U)
     s=s[::-1] #Order from largest to lowest; S is an overlap matrix, hence we won't
-    s=s[s>1e-15] #Keep only largest eigenvalues
+    s=s[s>1e-12] #Keep only largest eigenvalues
     spowerminushalf=s**(-0.5) #Take s
     snew=np.zeros((len(U),len(spowerminushalf)))
     sold=np.diag(spowerminushalf)

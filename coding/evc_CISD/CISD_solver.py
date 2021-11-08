@@ -9,7 +9,15 @@ sys.path.append("../eigenvectorcontinuation/")
 from matrix_operations import *
 from helper_functions import *
 from scipy.optimize import minimize, minimize_scalar
+#from scipy.linalg import orthogonal_procrustes
 np.set_printoptions(linewidth=200,precision=5,suppress=True)
+def orthogonal_procrustes(mo_new,reference_mo):
+    A=reference_mo.T
+    B=mo_new.T
+    M=B@A.T
+    U,s,Vt=scipy.linalg.svd(M)
+    return U@Vt, 0
+
 def similarize_1(MO_tochange,MO_ref,f,dev):
     num_bas=len(MO_tochange[0,:])
     for i in range(num_bas):
@@ -82,45 +90,29 @@ def orbital_dissimilarity_dev_1(alpha,y1,y2,x1,x2):
     second=np.sum((sa*y1+ca*y2-x2)*((ca*y1-sa*y2)))
     return first+second
 
-
-def localize_mocoeff(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
-    #Occupied
-    #mo=mo_coeff[:,mo_occ>0]
+def localize_cholesky(mol,mo_coeff,mo_occ):
     mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
     mo=swappistan(mo)
-
-    if previous_mo_coeff is not None:
-        premo=previous_mo_coeff[:,mo_occ>0]
-        #print("Norm before: %f"%np.sum(np.abs((mo-premo))**2))
-        for i in range(10):
-            mo=similarize_1(mo,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
-            mo=similarize(mo,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
-        for i in range(len(mo[0,:])):
-            if np.sum(np.abs(mo[:,i]-premo[:,i]))>np.sum(np.abs(mo[:,i]+premo[:,i])):
-                mo[:,i]=-mo[:,i]
-        #print("Norm after: %f"%np.sum(np.abs((mo-premo))**2))
-
     mo_coeff[:,mo_occ>0]=np.array(mo)
-
-    #Unoccupied
-    #mo_unocc=mo_coeff[:,mo_occ<=0]
     mo_unocc=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
     mo_unocc=swappistan(mo_unocc)
-    #print(mo_unocc)
+    mo_coeff[:,mo_occ<=0]=np.array(mo_unocc)
+    return mo_coeff
+def localize_procrustes(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
+    mo=mo_coeff[:,mo_occ>0]
+    premo=previous_mo_coeff[:,mo_occ>0]
+    R,scale=orthogonal_procrustes(mo,premo)
+    mo=mo@R
 
-    if previous_mo_coeff is not None:
-        premo=previous_mo_coeff[:,mo_occ<=0]
-        print("Norm before: %f"%np.sum(np.abs((mo_unocc-premo))))
-        for i in range(10):
-            mo_unocc=similarize_1(mo_unocc,premo,f=orbital_dissimilarity_1,dev=orbital_dissimilarity_dev_1)
-            mo_unocc=similarize(mo_unocc,premo,f=orbital_dissimilarity,dev=orbital_dissimilarity_dev)
-        for i in range(len(mo_unocc[0,:])):
-            if np.sum(np.abs(mo_unocc[:,i]-premo[:,i]))>np.sum(np.abs(mo_unocc[:,i]+premo[:,i])):
-                mo_unocc[:,i]=-mo_unocc[:,i]
-        print("Norm after: %f"%np.sum(np.abs((mo_unocc-premo))))
+    mo_coeff[:,mo_occ>0]=np.array(mo)
+    mo_unocc=mo_coeff[:,mo_occ<=0]
+    premo=previous_mo_coeff[:,mo_occ<=0]
+    R,scale=orthogonal_procrustes(mo_unocc,premo)
+    mo_unocc=mo_unocc@R
 
     mo_coeff[:,mo_occ<=0]=np.array(mo_unocc)
     #print(mo_unocc)
+
     return mo_coeff
 
 def calc_diff_bitstring(a,b):
@@ -131,18 +123,21 @@ def calc_diff_bitstring(a,b):
     return ndiffa,ndiffb
 
 class RHF_CISDsolver():
-    def __init__(self,mol,mo_coeff=None,previous_mo_coeff=None,nonzeros=None):
+    def __init__(self,mol,mo_coeff=None,basischange=False,nonzeros=None):
         self.mol=mol
         self.overlap=mol.intor("int1e_ovlp")
         if mo_coeff is None:
+            #If no parameter is given, we simply use the cholesky coefficient matrices
             print("Finding a new SL-det")
             mf=scf.RHF(mol)
             mf.kernel()
-            self.mo_coeff=mf.mo_coeff
-            #self.mo_coeff=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ,previous_mo_coeff) #I will not do this here for a while :)
+            self.mo_coeff=localize_cholesky(mol,mf.mo_coeff,mf.mo_occ)
         else:
-            self.mo_coeff=mo_coeff
-            self.mo_coeff=self.basischange(mo_coeff,self.overlap)
+            #If a given basis is given, then we either basis change it, or not.
+            if basischange:
+                self.mo_coeff=self.basischange(mo_coeff,self.overlap)
+            else:
+                self.mo_coeff=mo_coeff
         self.onebody=np.einsum("ki,lj,kl->ij",self.mo_coeff,self.mo_coeff,mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
         self.twobody=ao2mo.get_mo_eri(mol.intor('int2e',aosym="s1"),(self.mo_coeff,self.mo_coeff,self.mo_coeff,self.mo_coeff),aosym="s1")
         self.ne=mol.nelectron
@@ -155,6 +150,9 @@ class RHF_CISDsolver():
         self.T=None
         self.nonzeros=nonzeros
         self.data_creator()
+    def getdeterminant_matrix(self,AO_overlap,HF_coefficients_left,HF_coefficients_right):
+        determinant_matrix=np.einsum("ab,ai,bj->ij",AO_overlap,HF_coefficients_left,HF_coefficients_right)
+        return determinant_matrix
     def basischange(self,C_old,overlap_AOs_newnew):
         S=np.einsum("mi,vj,mv->ij",C_old,C_old,overlap_AOs_newnew)
         S_eig,S_U=np.linalg.eigh(S)
@@ -331,7 +329,7 @@ def make_mol(molecule,x,basis="6-31G"):
 def create_reference_determinant(mol):
     mf=scf.RHF(mol)
     mf.kernel()
-    mo_coeff_converted=localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ)
+    mo_coeff_converted=localize_cholesky(mol,mf.mo_coeff,mf.mo_occ)
     return mo_coeff_converted
 def evc(T,states,nonzeros=None):
     T_subspace=np.zeros((len(states),len(states)))
@@ -346,63 +344,50 @@ def evc(T,states,nonzeros=None):
     return e,vec
 
 
-molecule=lambda x: "H 0 0 0; Li 0 0 %f"%x
+molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
 #molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
-reference_determinant=None
-basis="STO-3G"
-molecule_name="Testerino Testistan"
-x_sol=np.linspace(2.0,2.0,1)
-for i,x in enumerate(x_sol):
-    print(i)
-    mol=make_mol(molecule,x,basis)
-    solver=RHF_CISDsolver(mol)
-    solver.make_T()
-    e_corr,sol0=solver.solve_T()
-    print(e_corr)
-    print((solver.T)[0,:])
-sys.exit(1)
-
-
-
-
-
-
-
-
-
+basis="6-31G"
+molecule_name="H F"
+basischange=False
 x_sol=np.linspace(1.2,4.5,34)
-
+#x_sol=np.array([1.9,2.5])
 ref_x_index=[0,4,8,12,16,33]
+reference_position=13
+#ref_x_index=[0]
 ref_x=[x_sol[ref_x_index]][0]
 print(ref_x)
 energy_refx=[]
 energies_EVC=np.zeros((len(x_sol),len(ref_x_index)))
 energies_ref=np.zeros(len(x_sol))
-#reference_determinant=create_reference_determinant(mol)
-
-#Step 1: Find the Slater-determinants
+mol=make_mol(molecule,x_sol[reference_position],basis)
+reference_determinant=create_reference_determinant(mol)
 all_determinants=[]
 reference_solutions=[]
 excitation_operators=[]
 mo_coeffs=[]
+#Step 1: Find the Slater-determinants
+
 for index, x in enumerate(x_sol):
     mol=make_mol(molecule,x,basis)
     mf=scf.RHF(mol)
     mf.kernel()
-    all_determinants.append(localize_mocoeff(mol,mf.mo_coeff,mf.mo_occ))
+    all_determinants.append(localize_cholesky(mol,mf.mo_coeff,mf.mo_occ))
+
+#Step 2: Minimize in relation to some reference
 for i, x in enumerate(x_sol):
-    if i==0:
-        continue
-    all_determinants[i]=localize_mocoeff(mol,all_determinants[i],mf.mo_occ,all_determinants[i-1])
+    #all_determinants[i]=localize_procrustes(mol,all_determinants[i],mf.mo_occ,reference_determinant) #Minimize to reference
+    pass
+#Step 3: Get excitation coefficients at reference geometries
 for i in ref_x_index:
     x=x_sol[i]
     print(x)
     mol=make_mol(molecule,x,basis)
-    solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i])
+    #solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i])
+    solver=RHF_CISDsolver(mol,mo_coeff=reference_determinant,basischange=True)
     energy,sol=solver.solve_T()
     energy_refx.append(energy)
     reference_solutions.append(sol)
-
+"""
 allstates=np.zeros(len(reference_solutions[0]))
 nonzeros=[]
 for state in reference_solutions:
@@ -422,14 +407,15 @@ for state in reference_solutions:
     print(norm)
     state=state/norm #Renormalize
 print(counter,len(allstates[allstates>1e-13]),counter/len(allstates[allstates>1e-13]))
+"""
+nonzeros=None
 
-
-
+#Step 4: Solve problem for each x.
 for i,x in enumerate(x_sol):
     print(i)
     mol=make_mol(molecule,x,basis)
-    #solver=RHF_CISDsolver(mol,reference_determinant)
-    solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i],nonzeros=nonzeros)
+    #solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i],nonzeros=nonzeros)
+    solver=RHF_CISDsolver(mol,mo_coeff=reference_determinant,basischange=True)
     solver.make_T()
     e_corr,sol0=solver.solve_T()
     excitation_operators.append(sol0*np.sign(sol0[0]))
@@ -438,28 +424,30 @@ for i,x in enumerate(x_sol):
         e,sol=evc(solver.T,reference_solutions[:j],nonzeros)
         energies_EVC[i,j-1]=e
     energies_ref[i]=e_corr
-diff_norms=[0]
-diff_coeffs=[0]
-for i in range(1,len(mo_coeffs)):
-    diff_coeffs.append(np.sum(np.abs(mo_coeffs[i]-mo_coeffs[i-1])))
-    diff_exc1=np.sum(np.abs(excitation_operators[i]-excitation_operators[i-1]))
-    diff_exc2=np.sum(np.abs(excitation_operators[i]+excitation_operators[i-1]))
+diff_norms=[]
+diff_coeffs=[]
+for i in range(0,len(mo_coeffs)):
+    diff_coeffs.append(np.linalg.norm((mo_coeffs[i]-reference_determinant)))
+    diff_exc1=np.linalg.norm((excitation_operators[i]-excitation_operators[reference_position]))
+    diff_exc2=np.linalg.norm((excitation_operators[i]+excitation_operators[reference_position]))
     diff_norms.append(np.min([diff_exc1,diff_exc2]))
 
-fig,ax=plt.subplots(nrows=3,ncols=1,sharex=True)
+fig,ax=plt.subplots(nrows=1,ncols=2,sharex=False,sharey=False)
 fig.suptitle("%s (%s)"%(molecule_name,basis))
-ax[0].plot(x_sol,energies_EVC,label="EVC")
+for i in range(len(ref_x_index)):
+    ax[0].plot(x_sol,energies_EVC[:,i],label="EVC (%d)"%i)
 ax[0].plot(x_sol,energies_ref,label="CISD")
 ax[0].plot(ref_x,energy_refx,"*",label="Sample points")
-
 ax[0].legend(loc='upper left',handletextpad=0.1)
 
-plt.xlabel("Internuclear distance (Bohr)")
+ax[0].set_xlabel("Internuclear distance (Bohr)")
 ax[0].set_ylabel("Energy")
-ax[1].plot(x_sol,diff_norms,label="Norm exc. coefficients (absolute value)")
-ax[1].set_title("Norm change in (correct) excitation operators")
-ax[2].plot(x_sol,diff_coeffs,label="Norm MO coefficients")
-ax[2].set_title("Norm change in MO coefficients")
+ax[1].plot(x_sol,diff_norms,label="exc. coefficients")
+ax[1].set_title("Norm of difference to reference")
+ax[1].plot(x_sol,diff_coeffs,label="MO coefficients")
+ax[1].set_xlabel("Internuclear distance (Bohr)")
+ax[1].set_ylabel("Norm")
+ax[1].legend()
 plt.tight_layout()
 if reference_determinant is None:
     filename="%s_%s_NONE.pdf"%(molecule_name,basis)

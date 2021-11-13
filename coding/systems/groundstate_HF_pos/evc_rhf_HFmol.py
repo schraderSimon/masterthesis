@@ -22,7 +22,7 @@ sample_x.append(np.linspace(2.75,3.0,5))
 sample_x.append(np.linspace(1.75,2.25,5))
 xc_array=np.linspace(1.2,4.5,10)
 molecule=lambda x: """H 0 0 0; F 0 0 %f"""%x
-molecule_name=r"Aidroden Floride"
+molecule_name=r"Hydrogen Fluoride"
 print("CCSDT")
 energiesCC=CC_energy_curve(xc_array,basis,molecule=molecule)
 energiesHF=energy_curve_RHF(xc_array,basis,molecule=molecule)

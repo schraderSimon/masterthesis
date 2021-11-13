@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 sys.path.append("./eigenvectorcontinuation/")
 from matrix_operations import *
 from helper_functions import *
-
-np.set_printoptions(linewidth=200,precision=5,suppress=True)
+from scipy.linalg import orthogonal_procrustes, norm, svd
+np.set_printoptions(linewidth=200,precision=10,suppress=True)
 
 def make_mol(molecule,x,basis="6-31G*"):
     mol=gto.Mole()
@@ -49,24 +49,30 @@ def diagonal_energy(onebody,twobody):
             energy2-=twobody[a,b,b,a]
     energy2*=0.5
     return onebody_alpha+onebody_beta+energy2
-mol1=make_mol(molecule,2.75)
+mol1=make_mol(molecule,1.2,"6-31G")
 mf=scf.RHF(mol1)
 mf.kernel()
 mo_1=mf.mo_coeff[:,mf.mo_occ>0]
-mo_africa=mf.mo_coeff
 xc_array=np.linspace(1.2,4.5,20)
 Energies=[]
+reference_mo=mo_1
+def orthogonal_own(mo_new,reference_mo):
+    A=reference_mo.T
+    B=mo_new.T
+    M=B@A.T
+    U,s,Vt=svd(M)
+    return U@Vt, 0
 for x in xc_array:
-    mol2=make_mol(molecule,x)
-    print("Pre basischange")
-    mo_y=basischange(mo_1,mol2.intor("int1e_ovlp")) #Big difference wether we transform all at once or not...
-    mo_x=basischange(mo_africa,mol2.intor("int1e_ovlp"))[:,mf.mo_occ>0]
-    print(mo_x-mo_y)
-    print(mo_y.T@mol2.intor("int1e_ovlp")@mo_y)
+    mol=make_mol(molecule,x,"6-31G")
+    mf=scf.RHF(mol)
+    mf.kernel()
+    mo_new=mf.mo_coeff[:,mf.mo_occ>0]
+    before=norm(mo_new-reference_mo)
+    R_own,scale=orthogonal_own(mo_new,reference_mo)
+    R,scale=orthogonal_procrustes(mo_new,reference_mo)
+    print(np.max(np.abs(R_own-R)))
+    after=norm(mo_new@R-reference_mo+1e-5)
 
-    onebody=np.einsum("ki,lj,kl->ij",mo_x,mo_x,mol2.intor("int1e_kin")+mol2.intor("int1e_nuc"))
-    twobody=ao2mo.get_mo_eri(mol2.intor('int2e',aosym="s1"),(mo_x,mo_x,mo_x,mo_x),aosym="s1")
-    E_mo_x=mol2.energy_nuc()+diagonal_energy(onebody,twobody)
-    Energies.append(E_mo_x)
+    print("Before: %f, after: %f"%(before,after))
 plt.plot(xc_array,Energies)
 plt.show()

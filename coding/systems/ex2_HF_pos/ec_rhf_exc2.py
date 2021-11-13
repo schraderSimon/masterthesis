@@ -16,10 +16,12 @@ basis="6-31G"
 sample_x=[]
 #sample_x.append(np.linspace(2.75,3.0,5))
 
-sample_x.append(np.linspace(2.0,3.0,2))
-xc_array=np.linspace(2.0,4.0,5)
-molecule=lambda x: """H 0 0 0; Li 0 0 %f"""%x
-molecule_name=r"Nananananannananana"
+sample_x.append(np.linspace(1.5,2.5,3))
+xc_array=np.linspace(1.2,4.5,34)
+xc_array=np.linspace(1.2,4.5,2)
+
+molecule=lambda x: """H 0 0 0; F 0 0 %f"""%x
+molecule_name=r"Hydrogen Fluoride"
 '''
 basis="6-31G"
 molecule_name="BeH2"
@@ -39,7 +41,7 @@ for pl_ind,sx in enumerate(sample_x):
     for i in range(1,len(sample_x[0])+1,1):
         print("Eigvec (%d)"%(i))
         HF=eigvecsolver_RHF_singlesdoubles(sx[:i],basis,molecule=molecule)
-        energiesEC,eigenvectors=HF.calculate_energies(xc_array,doubles=True)
+        energiesEC,eigenvectors=HF.calculate_energies(xc_array,doubles=False)
         #HF=eigvecsolver_RHF_singles(sx[:i],basis,molecule=molecule)
         #energiesEC,eigenvectors=HF.calculate_energies(xc_array)
 

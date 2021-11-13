@@ -12,12 +12,12 @@ import matplotlib.pyplot as plt
 np.set_printoptions(linewidth=300,precision=2,suppress=True)
 fig, ax = plt.subplots(1,2,figsize=(8.27,(8.27/2)),sharex=True,sharey=True)
 
-basis="6-31G*"
+basis="6-31G"
 sample_x=[]
-sample_x.append(np.linspace(2.75,3.0,5))
+sample_x.append(np.linspace(2.5,3.3,9))
 
-sample_x.append(np.linspace(1.5,2.0,5))
-xc_array=np.linspace(1.2,4.5,30)
+sample_x.append(np.linspace(1.5,2.3,9))
+xc_array=np.linspace(1.2,4.5,34)
 molecule=lambda x: """H 0 0 0; F 0 0 %f"""%x
 molecule_name=r"Hydrogen Fluoride"
 '''
@@ -32,17 +32,14 @@ energiesCC=CC_energy_curve(xc_array,basis,molecule=molecule)
 overlap_to_HF_left=[]
 overlap_to_HF_right=[]
 energiesHF=energy_curve_RHF(xc_array,basis,molecule=molecule)
-energy_array_in=np.loadtxt("results.csv",delimiter=",")
 
 energy_array=np.zeros((len(xc_array),6))
 counter=0
 for pl_ind,sx in enumerate(sample_x):
     for i in range(1,len(sample_x[0])+1,2):
         print("Eigvec (%d)"%(i))
-        #HF=eigvecsolver_RHF_singles(sx[:i],basis,molecule=molecule)
-        #overlaps,energiesEC,eigenvectors=HF.calculate_overlap_to_HF(xc_array)
-        energiesEC=energy_array_in[:,counter]
-        energy_array[:,counter]=energiesEC
+        HF=eigvecsolver_RHF_singles(sx[:i],basis,molecule=molecule)
+        energiesEC,eigenvectors=HF.calculate_energies(xc_array,doubles=False)
         if(pl_ind==0):
             ax[pl_ind].plot(xc_array,energiesEC,label="EC (%d point(s))"%(i))
             #overlap_to_HF_left.append(overlaps**2)
@@ -76,6 +73,10 @@ fig.legend(handletextpad=0.1,
             borderaxespad=0.1,    # Small spacing around legend box
             title="Legend"  # Title for the legend
 )
+ymin=np.min(energiesCC)-0.05
+ymax=np.max(energiesHF)+0.05
+ax[0].set_ylim(ymin,ymax)
+ax[1].set_ylim(ymin,ymax)
 plt.tight_layout()
 
 plt.subplots_adjust(right=0.78)

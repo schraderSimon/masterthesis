@@ -1,101 +1,107 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.linalg import norm
 import scipy as sp
 from pyscf import gto, scf, cc, ao2mo
 import sys
+sys.path.append("../../eigenvectorcontinuation/")
+from matrix_operations import *
+from helper_functions import *
+
 np.set_printoptions(linewidth=300,precision=2,suppress=True)
-def signchange(A,B):
-    for i in range(A.shape[1]): #For each column
-        if A[:,i].T@B[:,i]<0:
-            B[:,i]=-1*B[:,i]
 
-def basischange(C_old,overlap_AOs_newnew):
-    S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
-    S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
-    S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-    C_newbasis=S_poweronehalf@C_old #Basis change
-    q,r=np.linalg.qr(C_newbasis) #orthonormalise
-    return S_powerminusonehalf@q #change back
+def orthogonal_procrustes(mo_new,reference_mo):
+    A=reference_mo.T
+    B=mo_new.T
+    M=B@A.T
+    U,s,Vt=scipy.linalg.svd(M)
+    return U@Vt, 0
+def localize_cholesky(mol,mo_coeff,mo_occ):
+    mo=cholesky_coefficientmatrix(mo_coeff[:,mo_occ>0])
+    mo=swappistan(mo)
+    mo_coeff[:,mo_occ>0]=np.array(mo)
+    mo_unocc=cholesky_coefficientmatrix(mo_coeff[:,mo_occ<=0])
+    mo_unocc=swappistan(mo_unocc)
+    mo_coeff[:,mo_occ<=0]=np.array(mo_unocc)
+    return mo_coeff
+def localize_procrustes(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
+    mo=mo_coeff[:,mo_occ>0]
+    premo=previous_mo_coeff[:,mo_occ>0]
+    R,scale=orthogonal_procrustes(mo,premo)
+    mo=mo@R
 
-def build_molecule(x,molecule,basis):
-    """Create a molecule object with parameter x"""
+    mo_coeff[:,mo_occ>0]=np.array(mo)
+    mo_unocc=mo_coeff[:,mo_occ<=0]
+    premo=previous_mo_coeff[:,mo_occ<=0]
+    R,scale=orthogonal_procrustes(mo_unocc,premo)
+    mo_unocc=mo_unocc@R
 
+    mo_coeff[:,mo_occ<=0]=np.array(mo_unocc)
+    #print(mo_unocc)
+
+    return mo_coeff
+
+
+def make_mol(molecule,x,basis="6-31G"):
     mol=gto.Mole()
-    mol.atom="""%s"""%(molecule(x))
-    mol.charge=0
-    mol.spin=0
-    mol.unit="Bohr"
-    mol.basis=basis
+    mol.atom=molecule(x)
+    mol.basis = basis
+    mol.unit= "Bohr"
     mol.build()
     return mol
-basis="6-31G*"
-xc_array=np.linspace(1.2,4.5,3)
-molecule=lambda x: """F 0 0 0; H 0 0 %f"""%x
-molecule_name=r"Hydrogen Fluoride"
-mol=build_molecule(1.5,molecule,basis)
-print("Energy at r=1.5")
-mf = scf.RHF(mol).run()
+def create_reference_determinant(mol):
+    mf=scf.RHF(mol)
+    mf.kernel()
+    mo_coeff_converted=localize_cholesky(mol,mf.mo_coeff,mf.mo_occ)
+    return mo_coeff_converted
 
-expansion_coefficients_mol= mf.mo_coeff
-
-newmol=build_molecule(1.5,molecule,basis)
-newmol_overlap=newmol.intor("int1e_ovlp")
-expansion_coefficients_newmol_unchanged=basischange(expansion_coefficients_mol,newmol_overlap)
-print(expansion_coefficients_mol)
-print(expansion_coefficients_newmol_unchanged)
-signchange(expansion_coefficients_mol,expansion_coefficients_newmol_unchanged)
-print(expansion_coefficients_newmol_unchanged)
-expansion_coefficients_newmol=expansion_coefficients_newmol_unchanged[:,:5]
-print(expansion_coefficients_newmol)
-print("Energy at 2.0")
-newmol_mf=scf.HF(newmol)
-print("Energy at 2.0 with 1.5 coefficients")
-initial_guess=2*expansion_coefficients_newmol@expansion_coefficients_newmol.T
-newmol_mf.init_guess=initial_guess
-newmol_mf.max_cycle=0
-newmol_mf.kernel() #Do not do any iterations. This works!!
-expansion_coefficients_newmol_unchanged=newmol_mf.mo_coeff
-
-
-
-
-
-#Solve CCSD for 1.5 and get the amplitudes
-print("old")
-mycc = cc.CCSD(mf).run()
-t1=mycc.t1
-t2=mycc.t2
-myucc=cc.addons.convert_to_uccsd(mycc) #No need for this bitch
-t1_spin=cc.addons.spatial2spinorb(t2).shape
-print("new")
-mycc_new=cc.CCSD(newmol_mf)
-mycc_new.max_cycle=0 #Does not work if set to zero....
-mycc_new.kernel(mycc.t1, mycc.t2)
-print(mycc_new.t1-mycc.t1)
-
-
-# CCSD density matrix in MO basis
-#
-dm1s=mycc.make_rdm1()
-dm2s=mycc.make_rdm2()
-
-dm1 = mycc_new.make_rdm1()
-dm2 = mycc_new.make_rdm2()
-
-print(dm1s-dm1)
-print()
-print(np.all(np.abs(dm2s-dm2)<1e-10))
-print(np.max(np.abs(dm2s-dm2)))
+molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
+#molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
+basis="6-31G"
+molecule_name="HF"
+x_sol=np.linspace(1.5,4,30)
+#x_sol=np.array([1.9,2.5])
+ref_x=2.5
+energies_ref=np.zeros(len(x_sol))
+mol=make_mol(molecule,ref_x,basis)
+reference_determinant=create_reference_determinant(mol)
+all_determinants=[]
+reference_solutions=[]
+excitation_operators=[]
+mo_coeffs=[]
+CC_coefficients=[]
+#Step 1: Find the Slater-determinants
+mf=scf.RHF(mol)
+mf.kernel()
+mf.mo_coeff=reference_determinant
+mycc=cc.CCSD(mf)
+mycc.kernel()
+reference_cc=mycc.t2
+for index, x in enumerate(x_sol):
+    mol=make_mol(molecule,x,basis)
+    mf=scf.RHF(mol)
+    mf.kernel()
+    all_determinants.append(localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,reference_determinant))
+    #all_determinants.append(localize_cholesky(mol,mf.mo_coeff,mf.mo_occ))
+    mf.mo_coeff=all_determinants[index]
+    print(mf.mo_coeff.T@mf.get_fock()@mf.mo_coeff) #Fock matrix in MO basis
+    mycc=cc.CCSD(mf)
+    mycc.kernel()
+    CC_coefficients.append(mycc.t2)
 sys.exit(1)
-
-#
-# CCSD energy based on density matrices
-#
-h1 = np.einsum('pi,pq,qj->ij', expansion_coefficients_newmol_unchanged.conj(), mf.get_hcore(), expansion_coefficients_newmol_unchanged)
-nmo = expansion_coefficients_newmol_unchanged.shape[1]
-eri = ao2mo.kernel(mol, expansion_coefficients_newmol_unchanged, compact=False).reshape([nmo]*4)
-E = np.einsum('pq,qp', h1, dm1)
-# Note dm2 is transposed to simplify its contraction to integrals
-E+= np.einsum('pqrs,pqrs', eri, dm2) * .5
-E+= mol.energy_nuc()
-print('E(CCSD) = %s, reference %s' % (E, mycc.e_tot))
+plot_indeces=np.random.randint(5,size=(30,4))
+def pick(arr,x):
+    return arr[x[0],x[1],x[2],x[3]]
+for i in range(len(plot_indeces)):
+    plotterino=[]
+    for j in range(len(CC_coefficients)):
+        print(CC_coefficients[j].shape)
+        print(CC_coefficients[j][np.ix_(plot_indeces[0])])
+        plotterino.append(pick(CC_coefficients[j],plot_indeces[i]))
+    plt.plot(plotterino)
+plt.show()
+norm_changes=[]
+for t2 in CC_coefficients:
+    norm_changes.append(norm(t2-reference_cc))
+plt.plot(norm_changes)
+plt.show()

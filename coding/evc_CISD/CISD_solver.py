@@ -9,7 +9,6 @@ sys.path.append("../eigenvectorcontinuation/")
 from matrix_operations import *
 from helper_functions import *
 from scipy.optimize import minimize, minimize_scalar
-#from scipy.linalg import orthogonal_procrustes
 np.set_printoptions(linewidth=200,precision=5,suppress=True)
 def orthogonal_procrustes(mo_new,reference_mo):
     A=reference_mo.T
@@ -343,118 +342,120 @@ def evc(T,states,nonzeros=None):
     e,vec=generalized_eigenvector(T_subspace,S_subspace)
     return e,vec
 
+if __name__=="__main__":
+    molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
+    #molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
+    basis="STO-3G"
+    molecule_name="HF"
+    basischange=False
+    x_sol=np.linspace(1.2,4.5,34)
+    #x_sol=np.array([1.9,2.5])
+    ref_x_index=[0,4,8,12,16,33]
+    reference_position=13
+    #ref_x_index=[0]
+    ref_x=[x_sol[ref_x_index]][0]
+    print(ref_x)
+    energy_refx=[]
+    energies_EVC=np.zeros((len(x_sol),len(ref_x_index)))
+    energies_ref=np.zeros(len(x_sol))
+    mol=make_mol(molecule,x_sol[reference_position],basis)
+    reference_determinant=create_reference_determinant(mol)
+    all_determinants=[]
+    reference_solutions=[]
+    excitation_operators=[]
+    mo_coeffs=[]
+    #Step 1: Find the Slater-determinants
 
-molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
-#molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
-basis="6-31G"
-molecule_name="H F"
-basischange=False
-x_sol=np.linspace(1.2,4.5,34)
-#x_sol=np.array([1.9,2.5])
-ref_x_index=[0,4,8,12,16,33]
-reference_position=13
-#ref_x_index=[0]
-ref_x=[x_sol[ref_x_index]][0]
-print(ref_x)
-energy_refx=[]
-energies_EVC=np.zeros((len(x_sol),len(ref_x_index)))
-energies_ref=np.zeros(len(x_sol))
-mol=make_mol(molecule,x_sol[reference_position],basis)
-reference_determinant=create_reference_determinant(mol)
-all_determinants=[]
-reference_solutions=[]
-excitation_operators=[]
-mo_coeffs=[]
-#Step 1: Find the Slater-determinants
+    for index, x in enumerate(x_sol):
+        mol=make_mol(molecule,x,basis)
+        mf=scf.RHF(mol)
+        mf.kernel()
+        all_determinants.append(mf.mo_coeff)
+        #all_determinants.append(localize_cholesky(mol,mf.mo_coeff,mf.mo_occ))
 
-for index, x in enumerate(x_sol):
-    mol=make_mol(molecule,x,basis)
-    mf=scf.RHF(mol)
-    mf.kernel()
-    all_determinants.append(localize_cholesky(mol,mf.mo_coeff,mf.mo_occ))
+    #Step 2: Minimize in relation to some reference
+    for i, x in enumerate(x_sol):
+        mol=make_mol(molecule,x,basis)
+        all_determinants[i]=localize_procrustes(mol,all_determinants[i],mf.mo_occ,reference_determinant) #Minimize to reference
+        pass
+    #Step 3: Get excitation coefficients at reference geometries
+    for i in ref_x_index:
+        x=x_sol[i]
+        print(x)
+        mol=make_mol(molecule,x,basis)
+        solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i])
+        #solver=RHF_CISDsolver(mol,mo_coeff=reference_determinant,basischange=True)
+        energy,sol=solver.solve_T()
+        energy_refx.append(energy)
+        reference_solutions.append(sol)
+    """
+    allstates=np.zeros(len(reference_solutions[0]))
+    nonzeros=[]
+    for state in reference_solutions:
+        allstates+=np.abs(state)
+    counter=0
+    allstates/=len(reference_solutions)
+    for index in range(len(allstates)):
+        destroyer=10**(-3.5)
+        if allstates[index]<destroyer:# and allstates[index]>1e-13:
+            counter+=1
+            for state in reference_solutions:
+                state[index]=0
+        else:
+            nonzeros.append(index)
+    for state in reference_solutions:
+        norm=state.T@state
+        print(norm)
+        state=state/norm #Renormalize
+    print(counter,len(allstates[allstates>1e-13]),counter/len(allstates[allstates>1e-13]))
+    """
+    nonzeros=None
 
-#Step 2: Minimize in relation to some reference
-for i, x in enumerate(x_sol):
-    #all_determinants[i]=localize_procrustes(mol,all_determinants[i],mf.mo_occ,reference_determinant) #Minimize to reference
-    pass
-#Step 3: Get excitation coefficients at reference geometries
-for i in ref_x_index:
-    x=x_sol[i]
-    print(x)
-    mol=make_mol(molecule,x,basis)
-    #solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i])
-    solver=RHF_CISDsolver(mol,mo_coeff=reference_determinant,basischange=True)
-    energy,sol=solver.solve_T()
-    energy_refx.append(energy)
-    reference_solutions.append(sol)
-"""
-allstates=np.zeros(len(reference_solutions[0]))
-nonzeros=[]
-for state in reference_solutions:
-    allstates+=np.abs(state)
-counter=0
-allstates/=len(reference_solutions)
-for index in range(len(allstates)):
-    destroyer=10**(-3.5)
-    if allstates[index]<destroyer:# and allstates[index]>1e-13:
-        counter+=1
-        for state in reference_solutions:
-            state[index]=0
+    #Step 4: Solve problem for each x.
+    for i,x in enumerate(x_sol):
+        print(i)
+        mol=make_mol(molecule,x,basis)
+        solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i],nonzeros=nonzeros)
+        #solver=RHF_CISDsolver(mol,mo_coeff=reference_determinant,basischange=True)
+        solver.make_T()
+        e_corr,sol0=solver.solve_T()
+        excitation_operators.append(sol0*np.sign(sol0[0]))
+        mo_coeffs.append(solver.mo_coeff)
+        for j in range(1,len(reference_solutions)+1):
+            e,sol=evc(solver.T,reference_solutions[:j],nonzeros)
+            energies_EVC[i,j-1]=e
+        energies_ref[i]=e_corr
+    diff_norms=[]
+    diff_coeffs=[]
+    for i in range(0,len(mo_coeffs)):
+        diff_coeffs.append(np.linalg.norm((mo_coeffs[i]-reference_determinant)))
+        diff_exc1=np.linalg.norm((excitation_operators[i]-excitation_operators[reference_position]))
+        diff_exc2=np.linalg.norm((excitation_operators[i]+excitation_operators[reference_position]))
+        diff_norms.append(np.min([diff_exc1,diff_exc2]))
+
+    fig,ax=plt.subplots(nrows=1,ncols=2,sharex=False,sharey=False)
+    fig.suptitle("%s (%s)"%(molecule_name,basis))
+    for i in range(len(ref_x_index)):
+        ax[0].plot(x_sol,energies_EVC[:,i],label="EVC (%d)"%i)
+    ax[0].plot(x_sol,energies_ref,label="CISD")
+    ax[0].plot(ref_x,energy_refx,"*",label="Sample points")
+    ax[0].legend(loc='upper left',handletextpad=0.1)
+
+    ax[0].set_xlabel("Internuclear distance (Bohr)")
+    ax[0].set_ylabel("Energy")
+    ax[1].plot(x_sol,diff_norms,label="exc. coefficients")
+    ax[1].set_title("Norm of difference to reference")
+    ax[1].plot(x_sol,diff_coeffs,label="MO coefficients")
+    ax[1].set_xlabel("Internuclear distance (Bohr)")
+    ax[1].set_ylabel("Norm")
+    ax[1].legend()
+    plt.tight_layout()
+    if reference_determinant is None:
+        filename="%s_%s_NONE.pdf"%(molecule_name,basis)
     else:
-        nonzeros.append(index)
-for state in reference_solutions:
-    norm=state.T@state
-    print(norm)
-    state=state/norm #Renormalize
-print(counter,len(allstates[allstates>1e-13]),counter/len(allstates[allstates>1e-13]))
-"""
-nonzeros=None
-
-#Step 4: Solve problem for each x.
-for i,x in enumerate(x_sol):
-    print(i)
-    mol=make_mol(molecule,x,basis)
-    #solver=RHF_CISDsolver(mol,mo_coeff=all_determinants[i],nonzeros=nonzeros)
-    solver=RHF_CISDsolver(mol,mo_coeff=reference_determinant,basischange=True)
-    solver.make_T()
-    e_corr,sol0=solver.solve_T()
-    excitation_operators.append(sol0*np.sign(sol0[0]))
-    mo_coeffs.append(solver.mo_coeff)
-    for j in range(1,len(reference_solutions)+1):
-        e,sol=evc(solver.T,reference_solutions[:j],nonzeros)
-        energies_EVC[i,j-1]=e
-    energies_ref[i]=e_corr
-diff_norms=[]
-diff_coeffs=[]
-for i in range(0,len(mo_coeffs)):
-    diff_coeffs.append(np.linalg.norm((mo_coeffs[i]-reference_determinant)))
-    diff_exc1=np.linalg.norm((excitation_operators[i]-excitation_operators[reference_position]))
-    diff_exc2=np.linalg.norm((excitation_operators[i]+excitation_operators[reference_position]))
-    diff_norms.append(np.min([diff_exc1,diff_exc2]))
-
-fig,ax=plt.subplots(nrows=1,ncols=2,sharex=False,sharey=False)
-fig.suptitle("%s (%s)"%(molecule_name,basis))
-for i in range(len(ref_x_index)):
-    ax[0].plot(x_sol,energies_EVC[:,i],label="EVC (%d)"%i)
-ax[0].plot(x_sol,energies_ref,label="CISD")
-ax[0].plot(ref_x,energy_refx,"*",label="Sample points")
-ax[0].legend(loc='upper left',handletextpad=0.1)
-
-ax[0].set_xlabel("Internuclear distance (Bohr)")
-ax[0].set_ylabel("Energy")
-ax[1].plot(x_sol,diff_norms,label="exc. coefficients")
-ax[1].set_title("Norm of difference to reference")
-ax[1].plot(x_sol,diff_coeffs,label="MO coefficients")
-ax[1].set_xlabel("Internuclear distance (Bohr)")
-ax[1].set_ylabel("Norm")
-ax[1].legend()
-plt.tight_layout()
-if reference_determinant is None:
-    filename="%s_%s_NONE.pdf"%(molecule_name,basis)
-else:
-    filename="%s_%s.pdf"%(molecule_name,basis)
-plt.savefig(filename)
-plt.show()
-for i,mo_coeff in enumerate(mo_coeffs):
-    print(x_sol[i])
-    print(mo_coeff)
+        filename="%s_%s.pdf"%(molecule_name,basis)
+    plt.savefig(filename)
+    plt.show()
+    for i,mo_coeff in enumerate(mo_coeffs):
+        print(x_sol[i])
+        print(mo_coeff)

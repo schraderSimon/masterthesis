@@ -39,162 +39,146 @@ def make_mol(molecule,x,basis="6-31G",charge=0):
 	mol.build()
 	return mol
 molecule=lambda x: "F 0 0 0; H 0 0 %f"%x
-def taus(a,b,i,j,ts,td):
-	tausv = td[a,b,i,j] + 0.5*(ts[a,i]*ts[b,j] - ts[b,i]*ts[a,j])
-	return tausv
 
-# Stanton eq (10)
-def tau(a,b,i,j,ts,td):
-	tauv = td[a,b,i,j] + ts[a,i]*ts[b,j] - ts[b,i]*ts[a,j]
-	return tauv
-def tau_mat(ts,td):
-	tau=np.zeros_like(td)
-	tau+=td
-	tau+=np.einsum("ai,bj->abij",ts,ts)
-	tau-=np.einsum("bi,aj->abij",ts,ts)
-	return tau
-def taus_mat(ts,td):
-	tausm=np.zeros_like(td)
-	tausm+=td
-	tausm+=np.einsum("ai,bj->abij",ts,ts)*0.5
-	tausm-=np.einsum("bi,aj->abij",ts,ts)*0.5
-	return tausm
+def tau_mat(ts,td,Nelec,dim):
+	ts=ts
+	td=td
+	tau_rel=td.copy()
+	tau_rel=tau_rel+np.einsum("ai,bj->abij",ts,ts)
+	tau_rel=tau_rel-np.einsum("bi,aj->abij",ts,ts)
+	return tau_rel
+def taus_mat(ts,td,Nelec,dim):
+	ts=ts
+	td=td
+	tausm_rel=td.copy()
+	tausm_rel=tausm_rel+np.einsum("ai,bj->abij",ts,ts)*0.5
+	tausm_rel=tausm_rel-np.einsum("bi,aj->abij",ts,ts)*0.5
+	return tausm_rel
 def updateintermediates(ts,td,Nelec,dim,fs,spinints,x=True):
 	# Stanton eq (3)
-	taus_temp=taus_mat(ts,td)
+	tau=tau_mat(ts,td,Nelec,dim)
+	taus=taus_mat(ts,td,Nelec,dim)
+	ts=ts
+	td=td
 	F = np.zeros((dim,dim))
 	F[Nelec:dim,Nelec:dim]=fs[Nelec:dim,Nelec:dim]
 	np.fill_diagonal(F[Nelec:dim,Nelec:dim],0)
 	W = np.zeros((dim,dim,dim,dim))
-	F[Nelec:dim,Nelec:dim]-=0.5*np.einsum("me,am->ae",fs[:Nelec,Nelec:dim],ts[Nelec:dim,:Nelec],optimize=True)
-	F[Nelec:dim,Nelec:dim]+=np.einsum("fm,mafe->ae",ts[Nelec:dim,:Nelec],spinints[:Nelec,Nelec:dim,Nelec:dim,Nelec:dim],optimize=True)
-	F[Nelec:dim,Nelec:dim]-=0.5*np.einsum("afmn,mnef->ae",taus_temp[Nelec:dim,Nelec:dim,:Nelec,:Nelec],spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	F[Nelec:dim,Nelec:dim]-=0.5*np.einsum("me,am->ae",fs[:Nelec,Nelec:dim],ts,optimize=True)
+	F[Nelec:dim,Nelec:dim]+=np.einsum("fm,mafe->ae",ts,spinints[:Nelec,Nelec:dim,Nelec:dim,Nelec:dim],optimize=True)
+	F[Nelec:dim,Nelec:dim]-=0.5*np.einsum("afmn,mnef->ae",taus,spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
 	# Stanton eq (4)
 	F[:Nelec,:Nelec]=fs[:Nelec,:Nelec]
 	np.fill_diagonal(F[:Nelec,:Nelec],0)
-	F[:Nelec,:Nelec]+=0.5*np.einsum("ei,me->mi",ts[Nelec:dim,:Nelec],fs[:Nelec,Nelec:dim],optimize=True)
-	F[:Nelec,:Nelec]+=np.einsum("en,mnie->mi",ts[Nelec:dim,:Nelec],spinints[:Nelec,:Nelec,:Nelec,Nelec:dim],optimize=True)
-	F[:Nelec,:Nelec]+=0.5*np.einsum("efin,mnef->mi",taus_temp[Nelec:dim,Nelec:dim,:Nelec,:Nelec],spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	F[:Nelec,:Nelec]+=0.5*np.einsum("ei,me->mi",ts,fs[:Nelec,Nelec:dim],optimize=True)
+	F[:Nelec,:Nelec]+=np.einsum("en,mnie->mi",ts,spinints[:Nelec,:Nelec,:Nelec,Nelec:dim],optimize=True)
+	F[:Nelec,:Nelec]+=0.5*np.einsum("efin,mnef->mi",taus,spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
 
 	# Stanton eq (5)
 	F[:Nelec,Nelec:dim]=fs[:Nelec,Nelec:dim]
-	F[:Nelec,Nelec:dim]+=np.einsum("fn,mnef->me",ts[Nelec:dim,:Nelec],spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	F[:Nelec,Nelec:dim]+=np.einsum("fn,mnef->me",ts,spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
 
 	# Stanton eq (6)
 	W[:Nelec,:Nelec,:Nelec,:Nelec]=spinints[:Nelec,:Nelec,:Nelec,:Nelec]
-	W[:Nelec,:Nelec,:Nelec,:Nelec]+=np.einsum("ej,mnie->mnij",ts[Nelec:dim,:Nelec],spinints[:Nelec,:Nelec,:Nelec,Nelec:dim],optimize=True)
-	W[:Nelec,:Nelec,:Nelec,:Nelec]-=np.einsum("ei,mnje->mnij",ts[Nelec:dim,:Nelec],spinints[:Nelec,:Nelec,:Nelec,Nelec:dim],optimize=True)
-	tau_temp=tau_mat(ts,td)
-	W[:Nelec,:Nelec,:Nelec,:Nelec]+=0.25*np.einsum("efij,mnef->mnij",tau_temp[Nelec:dim,Nelec:dim,:Nelec,:Nelec],spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	W[:Nelec,:Nelec,:Nelec,:Nelec]+=np.einsum("ej,mnie->mnij",ts,spinints[:Nelec,:Nelec,:Nelec,Nelec:dim],optimize=True)
+	W[:Nelec,:Nelec,:Nelec,:Nelec]-=np.einsum("ei,mnje->mnij",ts,spinints[:Nelec,:Nelec,:Nelec,Nelec:dim],optimize=True)
+	W[:Nelec,:Nelec,:Nelec,:Nelec]+=0.25*np.einsum("efij,mnef->mnij",tau,spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
 
 	# Stanton eq (7)
 	W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim] = spinints[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim]
-	W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim]+=np.einsum("am,bmef->abef",ts[Nelec:dim,:Nelec],spinints[Nelec:dim,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
-	W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim]-=np.einsum("bm,amef->abef",ts[Nelec:dim,:Nelec],spinints[Nelec:dim,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
-	W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim]+=0.25*np.einsum("abmn,mnef->abef",tau_temp[Nelec:dim,Nelec:dim,:Nelec,:Nelec],spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim]+=np.einsum("am,bmef->abef",ts,spinints[Nelec:dim,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim]-=np.einsum("bm,amef->abef",ts,spinints[Nelec:dim,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim]+=0.25*np.einsum("abmn,mnef->abef",tau,spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
 
 	# Stanton eq (8)
-	Wmbej = np.zeros((dim,dim,dim,dim))
 	W[:Nelec,Nelec:dim,Nelec:dim,:Nelec] = spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec]
-	W[:Nelec,Nelec:dim,Nelec:dim,:Nelec]+=np.einsum("fj,mbef->mbej",ts[Nelec:dim,:Nelec],spinints[:Nelec,Nelec:dim,Nelec:dim,Nelec:dim],optimize=True)
-	W[:Nelec,Nelec:dim,Nelec:dim,:Nelec]-=np.einsum("bn,mnej->mbej",ts[Nelec:dim,:Nelec],spinints[:Nelec,:Nelec:,Nelec:dim,:Nelec],optimize=True)
-	W[:Nelec,Nelec:dim,Nelec:dim,:Nelec]-=0.5*np.einsum("fbjn,mnef->mbej",td[Nelec:dim,Nelec:dim,:Nelec,:Nelec],spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
-	W[:Nelec,Nelec:dim,Nelec:dim,:Nelec]-=np.einsum("fj,bn,mnef->mbej",ts[Nelec:dim,:Nelec],ts[Nelec:dim,:Nelec],spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	W[:Nelec,Nelec:dim,Nelec:dim,:Nelec]+=np.einsum("fj,mbef->mbej",ts,spinints[:Nelec,Nelec:dim,Nelec:dim,Nelec:dim],optimize=True)
+	W[:Nelec,Nelec:dim,Nelec:dim,:Nelec]-=np.einsum("bn,mnej->mbej",ts,spinints[:Nelec,:Nelec:,Nelec:dim,:Nelec],optimize=True)
+	W[:Nelec,Nelec:dim,Nelec:dim,:Nelec]-=0.5*np.einsum("fbjn,mnef->mbej",td,spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	W[:Nelec,Nelec:dim,Nelec:dim,:Nelec]-=np.einsum("fj,bn,mnef->mbej",ts,ts,spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
 	return F,W
 def T1_eq(ts,td,fs,spinints,F,Nelec,dim,Dai):
-	tsnew = np.zeros((dim,dim))
-	ts_rel=ts[Nelec:dim,:Nelec]
-	tsnew_rel=np.einsum("ai->ia",fs[:Nelec,Nelec:dim],optimize=True)
-	tsnew_rel=tsnew_rel+np.einsum("ei,ae->ai",ts_rel,F[Nelec:dim,Nelec:dim],optimize=True)
-	tsnew_rel=tsnew_rel-np.einsum("am,mi->ai",ts_rel,F[:Nelec,:Nelec],optimize=True)
-	tsnew_rel=tsnew_rel+np.einsum("aeim,me->ai",td[Nelec:dim,Nelec:dim,:Nelec,:Nelec],F[:Nelec,Nelec:dim],optimize=True)
-	tsnew_rel=tsnew_rel-0.5*np.einsum("efim,maef->ai",td[Nelec:,Nelec:,:Nelec,:Nelec],spinints[:Nelec,Nelec:,Nelec:,Nelec:],optimize=True)
-	tsnew_rel=tsnew_rel-0.5*np.einsum("aemn,nmei->ai",td[Nelec:dim,Nelec:dim,:Nelec,:Nelec],spinints[:Nelec,:Nelec,Nelec:dim,:Nelec],optimize=True)
-	tsnew_rel=tsnew_rel-np.einsum("fn,naif->ai",ts_rel,spinints[:Nelec,Nelec:dim,:Nelec,Nelec:dim],optimize=True)
-	tsnew_rel=tsnew_rel-np.einsum("ai,ai->ai",ts[Nelec:dim,:Nelec],Dai[Nelec:dim,:Nelec],optimize=True)
-	tsnew[Nelec:dim,:Nelec]=tsnew_rel
-
+	ts=ts
+	td=td
+	tsnew=np.einsum("ai->ia",fs[:Nelec,Nelec:dim],optimize=True)
+	tsnew=tsnew+np.einsum("ei,ae->ai",ts,F[Nelec:dim,Nelec:dim],optimize=True)
+	tsnew=tsnew-np.einsum("am,mi->ai",ts,F[:Nelec,:Nelec],optimize=True)
+	tsnew=tsnew+np.einsum("aeim,me->ai",td,F[:Nelec,Nelec:dim],optimize=True)
+	tsnew=tsnew-0.5*np.einsum("efim,maef->ai",td,spinints[:Nelec,Nelec:,Nelec:,Nelec:],optimize=True)
+	tsnew=tsnew-0.5*np.einsum("aemn,nmei->ai",td,spinints[:Nelec,:Nelec,Nelec:dim,:Nelec],optimize=True)
+	tsnew=tsnew-np.einsum("fn,naif->ai",ts,spinints[:Nelec,Nelec:dim,:Nelec,Nelec:dim],optimize=True)
+	tsnew=tsnew-np.einsum("ai,ai->ai",ts,Dai[Nelec:dim,:Nelec],optimize=True)
 	return tsnew
 
 def T2_eq(ts,td,fs,spinints,F,Nelec,dim,Dabij,W):
-	tdnew = np.zeros((dim,dim,dim,dim))
-	tau_temp=tau_mat(ts,td)
-	ts_rel=ts[Nelec:dim,:Nelec]
-	td_rel=td[Nelec:dim,Nelec:dim,:Nelec,:Nelec]
-	tdnew_rel=np.zeros((dim-Nelec,dim-Nelec,Nelec,Nelec))
-	tdnew_rel=np.einsum("abij->ijab",spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("aeij,be->abij",td_rel,F[Nelec:dim,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("beij,ae->abij",td_rel,F[Nelec:dim,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel-0.5*np.einsum("aeij,bm,me->abij",td_rel,ts_rel,F[:Nelec,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel+0.5*np.einsum("beij,am,me->abij",td_rel,ts_rel,F[:Nelec,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel-0.5*np.einsum("abim,ej,me->abij",td_rel,ts_rel,F[:Nelec,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel+0.5*np.einsum("abjm,ei,me->abij",td_rel,ts_rel,F[:Nelec,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("abim,mj->abij",td_rel,F[:Nelec,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("abjm,mi->abij",td_rel,F[:Nelec,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("ei,abej->abij",ts_rel,spinints[Nelec:dim,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("ej,abei->abij",ts_rel,spinints[Nelec:dim,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+0.5*np.einsum("efij,abef->abij",tau_temp[Nelec:dim,Nelec:dim,:Nelec,:Nelec],W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("am,mbij->abij",ts_rel,spinints[:Nelec,Nelec:dim,:Nelec,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("bm,maij->abij",ts_rel,spinints[:Nelec,Nelec:dim,:Nelec,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("aeim,mbej->abij",td_rel,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("ei,am,mbej->abij",ts_rel,ts_rel,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("aejm,mbei->abij",td_rel,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("ej,am,mbei->abij",ts_rel,ts_rel,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("beim,maej->abij",td_rel,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("ei,bm,maej->abij",ts_rel,ts_rel,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("bejm,maei->abij",td_rel,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("ej,bm,maei->abij",ts_rel,ts_rel,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+0.5*np.einsum("abmn,mnij->abij",tau_temp[Nelec:dim,Nelec:dim,:Nelec,:Nelec],W[:Nelec,:Nelec,:Nelec,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("abij,abij->abij",td_rel,Dabij[Nelec:dim,Nelec:dim,:Nelec,:Nelec],optimize=True)
-	tdnew[Nelec:dim,Nelec:dim,:Nelec,:Nelec]=tdnew_rel
+	tau=tau_mat(ts,td,Nelec,dim)
+	tdnew=np.zeros((dim-Nelec,dim-Nelec,Nelec,Nelec))
+	tdnew=np.einsum("abij->ijab",spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	tdnew=tdnew+np.einsum("aeij,be->abij",td,F[Nelec:dim,Nelec:dim],optimize=True)
+	tdnew=tdnew-np.einsum("beij,ae->abij",td,F[Nelec:dim,Nelec:dim],optimize=True)
+	tdnew=tdnew-0.5*np.einsum("aeij,bm,me->abij",td,ts,F[:Nelec,Nelec:dim],optimize=True)
+	tdnew=tdnew+0.5*np.einsum("beij,am,me->abij",td,ts,F[:Nelec,Nelec:dim],optimize=True)
+	tdnew=tdnew-0.5*np.einsum("abim,ej,me->abij",td,ts,F[:Nelec,Nelec:dim],optimize=True)
+	tdnew=tdnew+0.5*np.einsum("abjm,ei,me->abij",td,ts,F[:Nelec,Nelec:dim],optimize=True)
+	tdnew=tdnew-np.einsum("abim,mj->abij",td,F[:Nelec,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("abjm,mi->abij",td,F[:Nelec,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("ei,abej->abij",ts,spinints[Nelec:dim,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("ej,abei->abij",ts,spinints[Nelec:dim,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew+0.5*np.einsum("efij,abef->abij",tau,W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim],optimize=True)
+	tdnew=tdnew-np.einsum("am,mbij->abij",ts,spinints[:Nelec,Nelec:dim,:Nelec,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("bm,maij->abij",ts,spinints[:Nelec,Nelec:dim,:Nelec,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("aeim,mbej->abij",td,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("ei,am,mbej->abij",ts,ts,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("aejm,mbei->abij",td,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("ej,am,mbei->abij",ts,ts,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("beim,maej->abij",td,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("ei,bm,maej->abij",ts,ts,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("bejm,maei->abij",td,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("ej,bm,maei->abij",ts,ts,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew+0.5*np.einsum("abmn,mnij->abij",tau,W[:Nelec,:Nelec,:Nelec,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("abij,abij->abij",td,Dabij[Nelec:dim,Nelec:dim,:Nelec,:Nelec],optimize=True)
 	return tdnew
 def makeT1(ts,td,fs,spinints,F,Nelec,dim,Dai,x=True):
 
-	tsnew = np.zeros((dim,dim))
-	tsnew_rel=np.zeros((dim-Nelec,Nelec))
-	ts_rel=ts[Nelec:dim,:Nelec]
-	tsnew_rel=np.einsum("ai->ia",fs[:Nelec,Nelec:dim],optimize=True)
-	tsnew_rel=tsnew_rel+np.einsum("ei,ae->ai",ts_rel,F[Nelec:dim,Nelec:dim],optimize=True)
-	tsnew_rel=tsnew_rel-np.einsum("am,mi->ai",ts_rel,F[:Nelec,:Nelec],optimize=True)
-	tsnew_rel=tsnew_rel+np.einsum("aeim,me->ai",td[Nelec:dim,Nelec:dim,:Nelec,:Nelec],F[:Nelec,Nelec:dim],optimize=True)
-	tsnew_rel=tsnew_rel-0.5*np.einsum("efim,maef->ai",td[Nelec:,Nelec:,:Nelec,:Nelec],spinints[:Nelec,Nelec:,Nelec:,Nelec:],optimize=True)
-	tsnew_rel=tsnew_rel-0.5*np.einsum("aemn,nmei->ai",td[Nelec:dim,Nelec:dim,:Nelec,:Nelec],spinints[:Nelec,:Nelec,Nelec:dim,:Nelec],optimize=True)
-	tsnew_rel=tsnew_rel-np.einsum("fn,naif->ai",ts_rel,spinints[:Nelec,Nelec:dim,:Nelec,Nelec:dim],optimize=True)
-	tsnew_rel=tsnew_rel/Dai[Nelec:dim,:Nelec]
-	tsnew[Nelec:dim,:Nelec]=tsnew_rel
+	tsnew=np.zeros((dim-Nelec,Nelec))
+	tsnew=np.einsum("ai->ia",fs[:Nelec,Nelec:dim],optimize=True)
+	tsnew=tsnew+np.einsum("ei,ae->ai",ts,F[Nelec:dim,Nelec:dim],optimize=True)
+	tsnew=tsnew-np.einsum("am,mi->ai",ts,F[:Nelec,:Nelec],optimize=True)
+	tsnew=tsnew+np.einsum("aeim,me->ai",td,F[:Nelec,Nelec:dim],optimize=True)
+	tsnew=tsnew-0.5*np.einsum("efim,maef->ai",td,spinints[:Nelec,Nelec:,Nelec:,Nelec:],optimize=True)
+	tsnew=tsnew-0.5*np.einsum("aemn,nmei->ai",td,spinints[:Nelec,:Nelec,Nelec:dim,:Nelec],optimize=True)
+	tsnew=tsnew-np.einsum("fn,naif->ai",ts,spinints[:Nelec,Nelec:dim,:Nelec,Nelec:dim],optimize=True)
+	tsnew=tsnew/Dai[Nelec:dim,:Nelec]
+	tsnew=tsnew
 	return tsnew
 # Stanton eq (2)
 def makeT2(ts,td,fs,spinints,F,Nelec,dim,Dabij,W):
-	tau_temp=tau_mat(ts,td)
-	tdnew = np.zeros((dim,dim,dim,dim))
-	ts_rel=ts[Nelec:dim,:Nelec]
-	td_rel=td[Nelec:dim,Nelec:dim,:Nelec,:Nelec]
-	tdnew_rel=np.zeros((dim-Nelec,dim-Nelec,Nelec,Nelec))
-	tdnew_rel=np.einsum("abij->ijab",spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("aeij,be->abij",td_rel,F[Nelec:dim,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("beij,ae->abij",td_rel,F[Nelec:dim,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel-0.5*np.einsum("aeij,bm,me->abij",td_rel,ts_rel,F[:Nelec,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel+0.5*np.einsum("beij,am,me->abij",td_rel,ts_rel,F[:Nelec,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel-0.5*np.einsum("abim,ej,me->abij",td_rel,ts_rel,F[:Nelec,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel+0.5*np.einsum("abjm,ei,me->abij",td_rel,ts_rel,F[:Nelec,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("abim,mj->abij",td_rel,F[:Nelec,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("abjm,mi->abij",td_rel,F[:Nelec,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("ei,abej->abij",ts_rel,spinints[Nelec:dim,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("ej,abei->abij",ts_rel,spinints[Nelec:dim,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+0.5*np.einsum("efij,abef->abij",tau_temp[Nelec:dim,Nelec:dim,:Nelec,:Nelec],W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("am,mbij->abij",ts_rel,spinints[:Nelec,Nelec:dim,:Nelec,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("bm,maij->abij",ts_rel,spinints[:Nelec,Nelec:dim,:Nelec,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("aeim,mbej->abij",td_rel,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("ei,am,mbej->abij",ts_rel,ts_rel,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("aejm,mbei->abij",td_rel,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("ej,am,mbei->abij",ts_rel,ts_rel,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("beim,maej->abij",td_rel,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("ei,bm,maej->abij",ts_rel,ts_rel,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+np.einsum("bejm,maei->abij",td_rel,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel-np.einsum("ej,bm,maei->abij",ts_rel,ts_rel,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel+0.5*np.einsum("abmn,mnij->abij",tau_temp[Nelec:dim,Nelec:dim,:Nelec,:Nelec],W[:Nelec,:Nelec,:Nelec,:Nelec],optimize=True)
-	tdnew_rel=tdnew_rel/Dabij[Nelec:dim,Nelec:dim,:Nelec,:Nelec]
-	tdnew[Nelec:dim,Nelec:dim,:Nelec,:Nelec]=tdnew_rel
+	tau=tau_mat(ts,td,Nelec,dim)
+	tdnew=np.zeros((dim-Nelec,dim-Nelec,Nelec,Nelec))
+	tdnew=np.einsum("abij->ijab",spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],optimize=True)
+	tdnew=tdnew+np.einsum("aeij,be->abij",td,F[Nelec:dim,Nelec:dim],optimize=True)
+	tdnew=tdnew-np.einsum("beij,ae->abij",td,F[Nelec:dim,Nelec:dim],optimize=True)
+	tdnew=tdnew-0.5*np.einsum("aeij,bm,me->abij",td,ts,F[:Nelec,Nelec:dim],optimize=True)
+	tdnew=tdnew+0.5*np.einsum("beij,am,me->abij",td,ts,F[:Nelec,Nelec:dim],optimize=True)
+	tdnew=tdnew-0.5*np.einsum("abim,ej,me->abij",td,ts,F[:Nelec,Nelec:dim],optimize=True)
+	tdnew=tdnew+0.5*np.einsum("abjm,ei,me->abij",td,ts,F[:Nelec,Nelec:dim],optimize=True)
+	tdnew=tdnew-np.einsum("abim,mj->abij",td,F[:Nelec,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("abjm,mi->abij",td,F[:Nelec,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("ei,abej->abij",ts,spinints[Nelec:dim,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("ej,abei->abij",ts,spinints[Nelec:dim,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew+0.5*np.einsum("efij,abef->abij",tau,W[Nelec:dim,Nelec:dim,Nelec:dim,Nelec:dim],optimize=True)
+	tdnew=tdnew-np.einsum("am,mbij->abij",ts,spinints[:Nelec,Nelec:dim,:Nelec,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("bm,maij->abij",ts,spinints[:Nelec,Nelec:dim,:Nelec,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("aeim,mbej->abij",td,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("ei,am,mbej->abij",ts,ts,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("aejm,mbei->abij",td,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("ej,am,mbei->abij",ts,ts,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("beim,maej->abij",td,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("ei,bm,maej->abij",ts,ts,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew+np.einsum("bejm,maei->abij",td,W[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew-np.einsum("ej,bm,maei->abij",ts,ts,spinints[:Nelec,Nelec:dim,Nelec:dim,:Nelec],optimize=True)
+	tdnew=tdnew+0.5*np.einsum("abmn,mnij->abij",tau,W[:Nelec,:Nelec,:Nelec,:Nelec],optimize=True)
+	tdnew=tdnew/Dabij[Nelec:dim,Nelec:dim,:Nelec,:Nelec]
 	return tdnew
 # Expression from Crawford, Schaefer (2000)
 # DOI: 10.1002/9780470125915.ch2
@@ -202,9 +186,12 @@ def makeT2(ts,td,fs,spinints,F,Nelec,dim,Dabij,W):
 # computes CCSD energy given T1 and T2
 
 def ccsdenergy(fs,spinints,ts,td,Nelec,dim):
-	ECCSD = np.einsum("ia,ai->",fs[:Nelec,Nelec:dim],ts[Nelec:dim,:Nelec],optimize=True)
-	ECCSD+=0.25*np.einsum("ijab,abij->",spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],td[Nelec:dim,Nelec:dim,:Nelec,:Nelec],optimize=True)
-	ECCSD+=0.5*np.einsum("ijab,ai,bj->",spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],ts[Nelec:dim,:Nelec],ts[Nelec:dim,:Nelec],optimize=True)
+	ts=ts
+	td=td
+	ECCSD = np.einsum("ia,ai->",fs[:Nelec,Nelec:dim],ts,optimize=True)
+	print(td.shape)
+	ECCSD+=0.25*np.einsum("ijab,abij->",spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],td,optimize=True)
+	ECCSD+=0.5*np.einsum("ijab,ai,bj->",spinints[:Nelec,:Nelec,Nelec:dim,Nelec:dim],ts,ts,optimize=True)
 	return ECCSD
 
 
@@ -294,16 +281,16 @@ for a in range(Nelec,dim):
 			for j in range(0,Nelec):
 				Dabij[a,b,i,j] = fs[i,i] + fs[j,j] - fs[a,a] - fs[b,b]
 
-ts = np.zeros((dim,dim))
-td = np.zeros((dim,dim,dim,dim))
+ts = np.zeros((dim-Nelec,Nelec))
+td = np.zeros((dim-Nelec,dim-Nelec,Nelec,Nelec))
 
 # Initial guess T2 --- from MP2 calculation!
 
-for a in range(Nelec,dim):
-	for b in range(Nelec,dim):
+for a in range(0,dim-Nelec):
+	for b in range(0,dim-Nelec):
 		for i in range(0,Nelec):
 			for j in range(0,Nelec):
-				td[a,b,i,j] += spinints[i,j,a,b]/(fs[i,i] + fs[j,j] - fs[a,a] - fs[b,b])
+				td[a,b,i,j] += spinints[i,j,a+Nelec,b+Nelec]/(fs[i,i] + fs[j,j] - fs[a+Nelec,a+Nelec] - fs[b+Nelec,b+Nelec])
 
 ECCSD = 0
 DECC = 1
@@ -327,7 +314,7 @@ while DECC > 1e-14: # arbitrary convergence criteria
 print("E(corr,CCSD) = ", ECCSD)
 print("E(CCSD) = ", ECCSD + ESCF)
 print("Number of convergence steps: %d"%counter)
-print(ts[Nelec:dim,:Nelec].T)
+print(ts.T)
 print(mycc.t1)
-print("Difference in T1 coefficients: %e"%(np.max(np.abs(ts[Nelec:dim,:Nelec].T-mycc.t1))))
-print("Difference in T2 coefficients: %e"%(np.max(np.abs(td[Nelec:dim,Nelec:dim,:Nelec,:Nelec].T-mycc.t2))))
+print("Difference in T1 coefficients: %e"%(np.max(np.abs(ts.T-mycc.t1))))
+print("Difference in T2 coefficients: %e"%(np.max(np.abs(td.T-mycc.t2))))

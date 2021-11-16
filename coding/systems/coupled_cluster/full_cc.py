@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pyscf import gto, cc,scf, ao2mo,fci
 import sys
-np.set_printoptions(linewidth=300,precision=4,suppress=True)
+np.set_printoptions(linewidth=300,precision=10,suppress=True)
 from scipy.linalg import block_diag, eig
 from numba import jit
 from matrix_operations import *
@@ -13,23 +13,35 @@ def orthogonal_procrustes(mo_new,reference_mo):
     M=B@A.T
     U,s,Vt=scipy.linalg.svd(M)
     return U@Vt, 0
-def localize_procrustes(mol,mo_coeff,mo_occ,previous_mo_coeff=None):
-    mo=mo_coeff[:,mo_occ>0]
-    premo=previous_mo_coeff[:,mo_occ>0]
-    R,scale=orthogonal_procrustes(mo,premo)
-    mo=mo@R
+def localize_procrustes(mol,mo_coeff,mo_occ,ref_mo_coeff,mix_states=False):
+    """Performs the orthgogonal procrustes on the occupied and the unoccupied molecular orbitals.
+    ref_mo_coeff is the mo_coefs of the reference state.
+    If "mix_states" is True, then mixing of occupied and unoccupied MO's is allowed.
+    """
+    if mix_states==False:
+        mo=mo_coeff[:,mo_occ>0]
+        premo=ref_mo_coeff[:,mo_occ>0]
+        R,scale=orthogonal_procrustes(mo,premo)
+        mo=mo@R
 
-    mo_coeff[:,mo_occ>0]=np.array(mo)
-    mo_unocc=mo_coeff[:,mo_occ<=0]
-    premo=previous_mo_coeff[:,mo_occ<=0]
-    R,scale=orthogonal_procrustes(mo_unocc,premo)
-    mo_unocc=mo_unocc@R
+        mo_coeff[:,mo_occ>0]=np.array(mo)
+        mo_unocc=mo_coeff[:,mo_occ<=0]
+        premo=ref_mo_coeff[:,mo_occ<=0]
+        R,scale=orthogonal_procrustes(mo_unocc,premo)
+        mo_unocc=mo_unocc@R
 
-    mo_coeff[:,mo_occ<=0]=np.array(mo_unocc)
-    #print(mo_unocc)
+        mo_coeff[:,mo_occ<=0]=np.array(mo_unocc)
+        #print(mo_unocc)
 
+
+    elif mix_states==True:
+        mo=mo_coeff[:,:]
+        premo=ref_mo_coeff[:,:]
+        R,scale=orthogonal_procrustes(mo,premo)
+        mo=mo@R
+
+        mo_coeff[:,:]=np.array(mo)
     return mo_coeff
-
 def make_mol(molecule,x,basis="6-31G",charge=0):
 	mol=gto.Mole()
 	mol.atom=molecule(x)
@@ -38,7 +50,7 @@ def make_mol(molecule,x,basis="6-31G",charge=0):
 	mol.charge=charge
 	mol.build()
 	return mol
-molecule=lambda x: "F 0 0 0; H 0 0 %f"%x
+molecule=lambda x: "H 0 0 0; Cl 0 0 %f"%x
 
 def tau_mat(ts,td,Nelec,dim):
 	ts=ts
@@ -207,12 +219,19 @@ def make_spinints_aokjemi(dim,energy_basis_2e_mol_chem,alternating):
     				S=s//2
     				spinints_AO_kjemi[p,q,r,s]=energy_basis_2e_mol_chem[P,Q,R,S]*alternating[p,q]*alternating[r,s]
     return spinints_AO_kjemi
-
-
-
+def best_CC_fit(t1s,t2s,eigvec):
+    """Find the 'best' t1, t2 based on a linear CC-state"""
+    eigvec=np.real(eigvec)
+    num=len(eigvec)
+    t1_new=np.zeros_like(t1s[0])
+    t2_new=np.zeros_like(t2s[0])
+    for i in range(num):
+        t1_new=t1_new+t1s[i]*eigvec[i]
+        t2_new=t2_new+t2s[i]*eigvec[i]
+    return t1_new,t2_new
 #Step 1: Produce Fock matrix
-
-basis="6-31G"
+mix_states=False
+basis="STO-3G"
 molecule_name="HF"
 x_sol=np.linspace(1.5,4,30)
 ref_x=2
@@ -231,7 +250,7 @@ xnew=1.9
 mol=make_mol(molecule,xnew,basis,charge=0)
 mf=scf.RHF(mol)
 ESCF=mf.kernel()
-rhf_mo=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,previous_mo_coeff=rhf_mo_ref)
+rhf_mo=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,ref_mo_coeff=rhf_mo_ref,mix_states=mix_states)
 #rhf_mo=mf.mo_coeff
 
 
@@ -328,7 +347,7 @@ print("Difference in T2 coefficients compared to scipy: %e"%(np.max(np.abs(td.T-
 
 #Now that the CC solver is in place, let's attempt to create functions for the calculation of the matrix elements as given by Ekstrøm & Hagen!!
 #I will here only continue a single CC state, but this does not really affect the mechanics.
-sample_x=[1.0,1.4,1.7,2.0,2.3,2.4,2.5]
+sample_x=[1.0,1.4,1.7,1.9,2.0,2.5,2.6,2.7,3.0,3.5,5.0]
 t1s=[]
 t2s=[]
 l1s=[]
@@ -337,7 +356,7 @@ for x in sample_x:
     mol=make_mol(molecule,x,basis,charge=0)
     mf=scf.RHF(mol)
     ESCF=mf.kernel(verbose=0)
-    rhf_mo=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,previous_mo_coeff=rhf_mo_ref)
+    rhf_mo=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,ref_mo_coeff=rhf_mo_ref,mix_states=mix_states)
     #rhf_mo=mf.mo_coeff
     mf.mo_coeff=rhf_mo
     overlap_basis=block_diag(mol.intor("int1e_ovlp"),mol.intor("int1e_ovlp"))
@@ -356,6 +375,7 @@ for x in sample_x:
     mycc.kernel()
     t1_pyscf=mycc.t1
     t2_pyscf=mycc.t2
+    l1_pyscf,l2_pyscf=mycc.solve_lambda()
     t1s.append(t1_pyscf.T)
     t2s.append(t2_pyscf.T)
     l1s.append(l1_pyscf.T)
@@ -363,17 +383,18 @@ for x in sample_x:
     #print("CC pyscf,",mycc.e_corr+ESCF)
     #print("CC own,",ccsdenergy(fs,spinints,t1_pyscf.T,t2_pyscf.T,Nelec,dim)+ESCF)#+ESCF)
 
-    l1_pyscf,l2_pyscf=mycc.solve_lambda()
-x_alphas=np.linspace(1.5,5.0,36)
+x_alphas=np.linspace(1.5,5.0,10)
 E_CCSD=[]
 E_FCI=[]
 E_approx=[]
+E_ownmethod=[]
+
 print("Start EVC")
 for x_alpha in x_alphas:
     mol=make_mol(molecule,x_alpha,basis,charge=0)
     mf=scf.RHF(mol)
     ESCF=mf.kernel(verbose=0)
-    rhf_mo=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,previous_mo_coeff=rhf_mo_ref)
+    rhf_mo=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,ref_mo_coeff=rhf_mo_ref,mix_states=mix_states)
     #rhf_mo=mf.mo_coeff
     mf.mo_coeff=rhf_mo
     overlap_basis=block_diag(mol.intor("int1e_ovlp"),mol.intor("int1e_ovlp"))
@@ -387,9 +408,9 @@ for x_alpha in x_alphas:
     spinints_AO_fysikk=np.transpose(spinints_AO_kjemi,(0,2,1,3))
     spinints_AO_fysikk_antisymm=spinints_AO_fysikk-np.transpose(spinints_AO_fysikk,(0,1,3,2))
     spinints=spinints_AO_fysikk_antisymm
-    myci = fci.FCI(mol, rhf_mo)
-    e, fcivec = myci.kernel()
-    E_FCI.append(e)
+    #myci = fci.FCI(mol, rhf_mo)
+    #e, fcivec = myci.kernel()
+    #E_FCI.append(e)
     mycc = cc.CCSD(gmf)
     try:
         mycc.kernel()
@@ -420,17 +441,35 @@ for x_alpha in x_alphas:
         for j, xj in enumerate(sample_x):
             X1=t1s[i]-t1s[j]
             X2=t2s[i]-t2s[j]
+            #overlap=1+np.einsum("ia,ai->",l1s[j].T,X1)+0.25*0.5*np.einsum("ijab,ai,bj->",l2s[j].T,X1,X1)+0.25**2*np.einsum("ijab,abij->",l2s[j].T,X2)
             overlap=1+np.einsum("ia,ai->",l1s[j].T,X1)+0.5*np.einsum("ijab,ai,bj->",l2s[j].T,X1,X1)+0.25*np.einsum("ijab,abij->",l2s[j].T,X2)
             S[i,j]=overlap
             exp_energy=ccsdenergy(fs,spinints,t1s[i],t2s[i],Nelec,dim)+ESCF
             H[i,j]=overlap*exp_energy
+            #extra=np.einsum("ia,ai->",l1s[j].T,t1_error)+0.25*np.einsum("ijab,ai,bj->",l2s[j].T,X1,t1_error)+0.25**2*np.einsum("ijab,abij->",l2s[j].T,t2_error)
             extra=np.einsum("ia,ai->",l1s[j].T,t1_error)+np.einsum("ijab,ai,bj->",l2s[j].T,X1,t1_error)+0.25*np.einsum("ijab,abij->",l2s[j].T,t2_error)
             H[i,j]=H[i,j]+extra
-    e,c=eig(H,b=S)
-    E_approx.append(np.min(np.real(e)))
+    e,cl,c=eig(scipy.linalg.pinv(S,atol=1e-8)@H,left=True)
+
+    idx = np.real(e).argsort()
+    e = e[idx]
+    c = c[:,idx]
+    cl = cl[:,idx]
+    E_approx.append(np.real(e[0]))
+
+    #e,left_eigvec=eig((scipy.linalg.pinv(S,atol=1e-8)@H).T)
+    e,vl,vr=eig(H,S,left=True)
+    print(np.real(cl.T@c)) #This needs to be diagonal to be a dual basis
+    niggo=(np.real(cl.T@c))[0,0]
+    print(np.sum(c[:,0]))
+    #t1own,t2own=best_CC_fit(t1s,t2s,np.real(c[:,0])/np.sum(np.real(c[:,0])))
+    t1own,t2own=best_CC_fit(t1s,t2s,np.real(c[:,0])/np.sum(np.real(c[:,0])))
+    E_ownmethod.append(ccsdenergy(fs,spinints,t1own,t2own,Nelec,dim)+ESCF)
 print("End EVC")
 plt.plot(x_alphas,E_CCSD,label="CCSD")
 plt.plot(x_alphas,E_approx,label="EVC")
-plt.plot(x_alphas,E_FCI,label="FCI")
+#plt.plot(x_alphas,E_FCI,label="FCI")
+plt.plot(x_alphas,E_ownmethod,label="own CC")
+
 plt.legend()
 plt.show()

@@ -7,6 +7,7 @@ from scipy.linalg import block_diag, eig
 from numba import jit
 from matrix_operations import *
 from helper_functions import *
+from scipy.optimize import minimize, root,newton
 def orthogonal_procrustes(mo_new,reference_mo):
     A=reference_mo.T
     B=mo_new.T
@@ -50,7 +51,7 @@ def make_mol(molecule,x,basis="6-31G",charge=0):
 	mol.charge=charge
 	mol.build()
 	return mol
-molecule=lambda x: "H 0 0 0; Cl 0 0 %f"%x
+molecule=lambda x: "N 0 0 0; N 0 0 %f"%x
 
 def tau_mat(ts,td,Nelec,dim):
 	ts=ts
@@ -221,20 +222,78 @@ def make_spinints_aokjemi(dim,energy_basis_2e_mol_chem,alternating):
     return spinints_AO_kjemi
 def best_CC_fit(t1s,t2s,eigvec):
     """Find the 'best' t1, t2 based on a linear CC-state"""
+    def cost_function(sol,t1s,t2s,eigvec):
+
+        num=len(eigvec)
+        first_fitterino=np.zeros_like(t1s[0])
+        second_fitterino=np.zeros_like(t2s[0])
+        for i in range(num):
+            first_fitterino=first_fitterino+t1s[i]*eigvec[i]
+            second_fitterino=second_fitterino+t2s[i]*eigvec[i]*0.25
+        for i in range(num):
+            second_fitterino=second_fitterino+np.einsum("ai,bj->abij",t1s[i],t1s[i])*eigvec[i]*0.5
+        a,i=t1s[0].shape
+        t1_sol=np.reshape(sol[:a*i],(a,i))
+        t2_sol=np.reshape(sol[a*i:],(a,a,i,i))
+        first_sol=np.zeros_like(t1s[0])
+        second_sol=np.zeros_like(t2s[0])
+        first_sol=t1_sol
+        second_sol=t2_sol*0.25
+        second_sol=second_sol+np.einsum("ai,bj->abij",t1_sol,t1_sol)*0.5
+        cost=np.sum((first_sol-first_fitterino)**2)+np.sum((second_sol-second_fitterino)**2)
+        return cost
+    def gradient(sol,t1s,t2s,eigvec):
+        num=len(eigvec)
+        first_fitterino=np.zeros_like(t1s[0])
+        second_fitterino=np.zeros_like(t2s[0])
+        for i in range(num):
+            first_fitterino=first_fitterino+t1s[i]*eigvec[i]
+            second_fitterino=second_fitterino+t2s[i]*eigvec[i]*0.25
+        for i in range(num):
+            second_fitterino=second_fitterino+np.einsum("ai,bj->abij",t1s[i],t1s[i])*eigvec[i]*0.5
+        a,i=t1s[0].shape
+        t1_grad=np.zeros((a,i))
+        t2_grad=np.zeros((a,a,i,i))
+        t1_sol=np.reshape(sol[:a*i],(a,i))
+        t2_sol=np.reshape(sol[a*i:],(a,a,i,i))
+        first_sol=np.zeros_like(t1s[0])
+        second_sol=np.zeros_like(t2s[0])
+        first_sol=t1_sol
+        second_sol=t2_sol*0.25
+        second_sol=second_sol+np.einsum("ai,bj->abij",t1_sol,t1_sol)*0.5
+        for ass in range(a):
+            for iss in range(i):
+                t1_grad[ass,iss]=-2*(first_fitterino[ass,iss]-t1_sol[ass,iss])-2*np.einsum("bj,bj->",first_sol,second_fitterino[ass,:,iss,:]-second_sol[ass,:,iss,:])
+        t2_grad=-0.5*(second_fitterino-second_sol)
+        grad=np.concatenate((t1_grad,t2_grad),axis=None)
+        return grad
+    a,i=t1s[0].shape
     eigvec=np.real(eigvec)
     num=len(eigvec)
-    t1_new=np.zeros_like(t1s[0])
-    t2_new=np.zeros_like(t2s[0])
-    for i in range(num):
-        t1_new=t1_new+t1s[i]*eigvec[i]
-        t2_new=t2_new+t2s[i]*eigvec[i]
+    t1_guess=np.zeros_like(t1s[0])
+    t2_guess=np.zeros_like(t2s[0])
+    for l in range(num):
+        t1_guess=t1_guess+t1s[l]*eigvec[l]
+        t2_guess=t2_guess+t2s[l]*eigvec[l]
+    x0=np.concatenate((t1_guess,t2_guess),axis=None)
+    x_sol=x0
+    options={}
+    options["gtol"]=1e-12
+    options["ftol"]=1e-12
+    res=minimize(cost_function,x0,args=(t1s,t2s,eigvec),jac=gradient,method="L-BFGS-B",options=options,tol=1e-12)
+    x_sol=res.x
+    success=res.success
+    print("Success: ",success)
+    print("Max gradient:",np.max(np.abs(gradient(x_sol,t1s,t2s,eigvec))))
+    t1_new=np.reshape(x_sol[:a*i],(a,i))
+    t2_new=np.reshape(x_sol[a*i:],(a,a,i,i))
     return t1_new,t2_new
 #Step 1: Produce Fock matrix
 mix_states=False
-basis="STO-3G"
+basis="cc-pVDZ"
 molecule_name="HF"
 x_sol=np.linspace(1.5,4,30)
-ref_x=2
+ref_x=4
 #x_sol=np.array([1.9,2.5])
 energies_ref=np.zeros(len(x_sol))
 mol=make_mol(molecule,ref_x,basis,charge=0)
@@ -347,7 +406,7 @@ print("Difference in T2 coefficients compared to scipy: %e"%(np.max(np.abs(td.T-
 
 #Now that the CC solver is in place, let's attempt to create functions for the calculation of the matrix elements as given by Ekstrøm & Hagen!!
 #I will here only continue a single CC state, but this does not really affect the mechanics.
-sample_x=[1.0,1.4,1.7,1.9,2.0,2.5,2.6,2.7,3.0,3.5,5.0]
+sample_x=np.linspace(1.7,2.0,8)
 t1s=[]
 t2s=[]
 l1s=[]
@@ -383,17 +442,20 @@ for x in sample_x:
     #print("CC pyscf,",mycc.e_corr+ESCF)
     #print("CC own,",ccsdenergy(fs,spinints,t1_pyscf.T,t2_pyscf.T,Nelec,dim)+ESCF)#+ESCF)
 
-x_alphas=np.linspace(1.5,5.0,10)
+x_alphas=np.linspace(1.5,5.0,35)
+
 E_CCSD=[]
 E_FCI=[]
 E_approx=[]
 E_ownmethod=[]
-
+E_diffguess=[]
+E_RHF=[]
 print("Start EVC")
 for x_alpha in x_alphas:
     mol=make_mol(molecule,x_alpha,basis,charge=0)
     mf=scf.RHF(mol)
     ESCF=mf.kernel(verbose=0)
+    E_RHF.append(ESCF)
     rhf_mo=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,ref_mo_coeff=rhf_mo_ref,mix_states=mix_states)
     #rhf_mo=mf.mo_coeff
     mf.mo_coeff=rhf_mo
@@ -456,20 +518,80 @@ for x_alpha in x_alphas:
     c = c[:,idx]
     cl = cl[:,idx]
     E_approx.append(np.real(e[0]))
-
-    #e,left_eigvec=eig((scipy.linalg.pinv(S,atol=1e-8)@H).T)
-    e,vl,vr=eig(H,S,left=True)
-    print(np.real(cl.T@c)) #This needs to be diagonal to be a dual basis
-    niggo=(np.real(cl.T@c))[0,0]
-    print(np.sum(c[:,0]))
-    #t1own,t2own=best_CC_fit(t1s,t2s,np.real(c[:,0])/np.sum(np.real(c[:,0])))
     t1own,t2own=best_CC_fit(t1s,t2s,np.real(c[:,0])/np.sum(np.real(c[:,0])))
-    E_ownmethod.append(ccsdenergy(fs,spinints,t1own,t2own,Nelec,dim)+ESCF)
+    own_energy=ccsdenergy(fs,spinints,t1own,t2own,Nelec,dim)+ESCF
+    mycc = cc.CCSD(gmf)
+    mycc.kernel(t1=t1own.T,t2=t2own.T)
+    E_diffguess.append(mycc.e_corr+ESCF)
+    print("Own:",own_energy,"approx:",np.real(e[0]),"difguess:",E_diffguess[-1])
+    E_ownmethod.append(own_energy)
 print("End EVC")
+
+
+energy_simen=[]
+
+for x_alpha in x_alphas:
+    mol=make_mol(molecule,x_alpha,basis,charge=0)
+    mf=scf.RHF(mol)
+    ESCF=mf.kernel(verbose=0)
+    rhf_mo=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,ref_mo_coeff=rhf_mo_ref,mix_states=mix_states)
+    #rhf_mo=mf.mo_coeff
+    mf.mo_coeff=rhf_mo
+    overlap_basis=block_diag(mol.intor("int1e_ovlp"),mol.intor("int1e_ovlp"))
+    energy_basis_1e=block_diag(mol.intor("int1e_kin")+mol.intor("int1e_nuc"),mol.intor("int1e_kin")+mol.intor("int1e_nuc"))
+    gmf=scf.addons.convert_to_ghf(mf)
+    mo_coeff=gmf.mo_coeff
+    fs=mo_coeff.T@gmf.get_fock()@mo_coeff #Fock matrix
+    energy_basis_2e=mol.intor('int2e')
+    energy_basis_2e_mol_chem=ao2mo.get_mo_eri(energy_basis_2e,(rhf_mo,rhf_mo,rhf_mo,rhf_mo)) #Molecular orbitals in spatial basis, not spin basis. Chemists notation
+    spinints_AO_kjemi=make_spinints_aokjemi(dim,energy_basis_2e_mol_chem,alternating)
+    spinints_AO_fysikk=np.transpose(spinints_AO_kjemi,(0,2,1,3))
+    spinints_AO_fysikk_antisymm=spinints_AO_fysikk-np.transpose(spinints_AO_fysikk,(0,1,3,2))
+    spinints=spinints_AO_fysikk_antisymm
+    Dai = np.zeros((dim,dim))
+    for a in range(Nelec,dim):
+    	for i in range(0,Nelec):
+    		Dai[a,i] = fs[i,i] - fs[a,a]
+
+    # Stanton eq (13)
+    Dabij = np.zeros((dim,dim,dim,dim)) #dabei oder "Die bitch? Hmm. Fragen ueber Fragen.
+    for a in range(Nelec,dim):
+    	for b in range(Nelec,dim):
+    		for i in range(0,Nelec):
+    			for j in range(0,Nelec):
+    				Dabij[a,b,i,j] = fs[i,i] + fs[j,j] - fs[a,a] - fs[b,b]
+    #Now the relevant stuff is set up.
+
+    def error_function(params,t1s,t2s,Nelec,dim,fs,spinints,Dai,Dabij):
+        t1=np.zeros(t1s[0].shape)
+        t2=np.zeros(t2s[0].shape)
+        for i in range(len(t1s)):
+            t1+=params[i]*t1s[i] #Starting guess
+            t2+=params[i]*t2s[i] #Starting guess
+        projection_errors=np.zeros(len(t1s))
+        F,W = updateintermediates(t1,t2,Nelec,dim,fs,spinints)
+        t1_error=T1_eq(t1,t2,fs,spinints,F,Nelec,dim,Dai)
+        t2_error=T2_eq(t1,t2,fs,spinints,F,Nelec,dim,Dabij,W)
+        for i in range(len(projection_errors)):
+            projection_errors[i]=np.einsum("ia,ia->",t1_error,t1s[i])+np.einsum("ijab,ijab->",t2_error,t2s[i])
+        return projection_errors
+    start_guess=np.full(len(sample_x),1/len(sample_x))
+    sol=root(error_function,start_guess,args=(t1s,t2s,Nelec,dim,fs,spinints,Dai,Dabij))
+    print(sol.success)
+    print(sol.x,sum(sol.x))
+    final=sol.x
+    t1=np.zeros(t1s[0].shape)
+    t2=np.zeros(t2s[0].shape)
+    for i in range(len(t1s)):
+        t1+=final[i]*t1s[i] #Starting guess
+        t2+=final[i]*t2s[i] #Starting guess
+    energy_simen.append(ccsdenergy(fs,spinints,t1,t2,Nelec,dim)+ESCF)
+plt.plot(x_alphas,energy_simen,label="Simen's idea")
 plt.plot(x_alphas,E_CCSD,label="CCSD")
 plt.plot(x_alphas,E_approx,label="EVC")
 #plt.plot(x_alphas,E_FCI,label="FCI")
 plt.plot(x_alphas,E_ownmethod,label="own CC")
-
+plt.plot(x_alphas,E_diffguess,label="CCSD based on own guess")
+plt.plot(x_alphas,E_RHF,label="RHF")
 plt.legend()
 plt.show()

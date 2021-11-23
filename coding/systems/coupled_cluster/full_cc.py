@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from pyscf import gto, cc,scf, ao2mo,fci
 import sys
 np.set_printoptions(linewidth=300,precision=10,suppress=True)
-from scipy.linalg import block_diag, eig
+from scipy.linalg import block_diag, eig, orth
 from numba import jit
 from matrix_operations import *
 from helper_functions import *
@@ -51,7 +51,8 @@ def make_mol(molecule,x,basis="6-31G",charge=0):
 	mol.charge=charge
 	mol.build()
 	return mol
-molecule=lambda x: "N 0 0 0; N 0 0 %f"%x
+#molecule=lambda x: "H 0 0 0; F 0 0 %f"%x
+molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
 
 def tau_mat(ts,td,Nelec,dim):
 	ts=ts
@@ -289,13 +290,10 @@ def best_CC_fit(t1s,t2s,eigvec):
     t2_new=np.reshape(x_sol[a*i:],(a,a,i,i))
     return t1_new,t2_new
 #Step 1: Produce Fock matrix
-mix_states=False
-basis="cc-pVDZ"
-molecule_name="HF"
-x_sol=np.linspace(1.5,4,30)
-ref_x=4
-#x_sol=np.array([1.9,2.5])
-energies_ref=np.zeros(len(x_sol))
+mix_states=True
+basis="6-31G"
+molecule_name="N2"
+ref_x=1.5
 mol=make_mol(molecule,ref_x,basis,charge=0)
 ENUC=mol.energy_nuc()
 Nelec=mol.nelectron
@@ -341,7 +339,15 @@ spinints_AO_kjemi=make_spinints_aokjemi(dim,energy_basis_2e_mol_chem,alternating
 spinints_AO_fysikk=np.transpose(spinints_AO_kjemi,(0,2,1,3))
 spinints_AO_fysikk_antisymm=spinints_AO_fysikk-np.transpose(spinints_AO_fysikk,(0,1,3,2))
 spinints=spinints_AO_fysikk_antisymm
-
+def RHF_energy_nonconverged(Nelec2,energy_basis1,energy_basis_2e_mol,Enuc):
+    E=0
+    for i in range(Nelec2):
+        E+=energy_basis1[i,i]
+    E*=2
+    for i in range(Nelec2):
+        for j in range(Nelec2):
+            E+=2*energy_basis_2e_mol[i,i,j,j]-energy_basis_2e_mol[i,j,j,i]
+    return E+Enuc
 def test_HF_energy():
     E=0
     for i in range(Nelec):
@@ -406,7 +412,8 @@ print("Difference in T2 coefficients compared to scipy: %e"%(np.max(np.abs(td.T-
 
 #Now that the CC solver is in place, let's attempt to create functions for the calculation of the matrix elements as given by Ekstrøm & Hagen!!
 #I will here only continue a single CC state, but this does not really affect the mechanics.
-sample_x=np.linspace(1.7,2.0,8)
+sample_x=np.linspace(1.5,2.5,11)
+sample_energies=[]
 t1s=[]
 t2s=[]
 l1s=[]
@@ -416,6 +423,9 @@ for x in sample_x:
     mf=scf.RHF(mol)
     ESCF=mf.kernel(verbose=0)
     rhf_mo=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,ref_mo_coeff=rhf_mo_ref,mix_states=mix_states)
+
+
+
     #rhf_mo=mf.mo_coeff
     mf.mo_coeff=rhf_mo
     overlap_basis=block_diag(mol.intor("int1e_ovlp"),mol.intor("int1e_ovlp"))
@@ -432,6 +442,7 @@ for x in sample_x:
 
     mycc = cc.CCSD(gmf)
     mycc.kernel()
+    sample_energies.append(mycc.e_tot)
     t1_pyscf=mycc.t1
     t2_pyscf=mycc.t2
     l1_pyscf,l2_pyscf=mycc.solve_lambda()
@@ -442,7 +453,8 @@ for x in sample_x:
     #print("CC pyscf,",mycc.e_corr+ESCF)
     #print("CC own,",ccsdenergy(fs,spinints,t1_pyscf.T,t2_pyscf.T,Nelec,dim)+ESCF)#+ESCF)
 
-x_alphas=np.linspace(1.5,5.0,35)
+#x_alphas=np.linspace(1.5,5,20)
+x_alphas=np.linspace(0,4,41)
 
 E_CCSD=[]
 E_FCI=[]
@@ -450,13 +462,17 @@ E_approx=[]
 E_ownmethod=[]
 E_diffguess=[]
 E_RHF=[]
+
 print("Start EVC")
+
 for x_alpha in x_alphas:
     mol=make_mol(molecule,x_alpha,basis,charge=0)
     mf=scf.RHF(mol)
     ESCF=mf.kernel(verbose=0)
     E_RHF.append(ESCF)
     rhf_mo=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,ref_mo_coeff=rhf_mo_ref,mix_states=mix_states)
+    mf_new=scf.RHF(mol)
+
     #rhf_mo=mf.mo_coeff
     mf.mo_coeff=rhf_mo
     overlap_basis=block_diag(mol.intor("int1e_ovlp"),mol.intor("int1e_ovlp"))
@@ -473,10 +489,13 @@ for x_alpha in x_alphas:
     #myci = fci.FCI(mol, rhf_mo)
     #e, fcivec = myci.kernel()
     #E_FCI.append(e)
+    eb1=np.einsum('pi,pq,qj->ij', rhf_mo, mol.intor("int1e_kin")+mol.intor("int1e_nuc"), rhf_mo)
+    ESCF=RHF_energy_nonconverged(Nelec//2,eb1,energy_basis_2e_mol_chem,mol.energy_nuc())
     mycc = cc.CCSD(gmf)
     try:
         mycc.kernel()
         E_CCSD.append(mycc.e_corr+ESCF)
+        print(mycc.e_corr)
     except np.linalg.LinAlgError:
         E_CCSD.append(np.nan)
     except:
@@ -520,16 +539,42 @@ for x_alpha in x_alphas:
     E_approx.append(np.real(e[0]))
     t1own,t2own=best_CC_fit(t1s,t2s,np.real(c[:,0])/np.sum(np.real(c[:,0])))
     own_energy=ccsdenergy(fs,spinints,t1own,t2own,Nelec,dim)+ESCF
-    mycc = cc.CCSD(gmf)
-    mycc.kernel(t1=t1own.T,t2=t2own.T)
-    E_diffguess.append(mycc.e_corr+ESCF)
-    print("Own:",own_energy,"approx:",np.real(e[0]),"difguess:",E_diffguess[-1])
+    #mycc = cc.CCSD(gmf)
+    #mycc.kernel(t1=t1own.T,t2=t2own.T)
+    #E_diffguess.append(mycc.e_corr+ESCF)
+    print("Own:",own_energy,"approx:",np.real(e[0]))#,"difguess:",E_diffguess[-1])
     E_ownmethod.append(own_energy)
 print("End EVC")
 
+print("Start approach 2")
 
 energy_simen=[]
-
+start_guess=np.full(len(sample_x),1/len(sample_x))
+def orthonormalize_ts(t1s,t2s):
+    t_tot=[]
+    a,i=t1s[0].shape
+    avg_norm=0
+    for j in range(len(t1s)):
+        t_tot.append(np.concatenate((t1s[j],t2s[j]),axis=None))
+        avg_norm+=np.sum(np.abs(t_tot[-1]))
+    avg_norm/=len(t1s)
+    t_tot=np.array(t_tot).T
+    print(t_tot.shape)
+    U,s,Vt=svd(t_tot,full_matrices=False)
+    t_tot=(U@Vt).T
+    """
+    for j in range(len(t1s)):
+        print(np.sum(np.abs(t_tot[j,:])))
+        t_tot[j,:]=t_tot[j,:]/np.sum(np.abs(t_tot[j,:]))*avg_norm
+    print(t_tot.shape)
+    """
+    t1_new=[]
+    t2_new=[]
+    for j in range(len(t1s)):
+        t1_new.append(np.reshape(t_tot[j,:a*i],(a,i)))
+        t2_new.append(np.reshape(t_tot[j,a*i:],(a,a,i,i)))
+    return t1_new,t2_new
+t1s,t2s=orthonormalize_ts(t1s,t2s)
 for x_alpha in x_alphas:
     mol=make_mol(molecule,x_alpha,basis,charge=0)
     mf=scf.RHF(mol)
@@ -548,6 +593,8 @@ for x_alpha in x_alphas:
     spinints_AO_fysikk=np.transpose(spinints_AO_kjemi,(0,2,1,3))
     spinints_AO_fysikk_antisymm=spinints_AO_fysikk-np.transpose(spinints_AO_fysikk,(0,1,3,2))
     spinints=spinints_AO_fysikk_antisymm
+    eb1=np.einsum('pi,pq,qj->ij', rhf_mo, mol.intor("int1e_kin")+mol.intor("int1e_nuc"), rhf_mo)
+    ESCF=RHF_energy_nonconverged(Nelec//2,eb1,energy_basis_2e_mol_chem,mol.energy_nuc())
     Dai = np.zeros((dim,dim))
     for a in range(Nelec,dim):
     	for i in range(0,Nelec):
@@ -562,36 +609,65 @@ for x_alpha in x_alphas:
     				Dabij[a,b,i,j] = fs[i,i] + fs[j,j] - fs[a,a] - fs[b,b]
     #Now the relevant stuff is set up.
 
-    def error_function(params,t1s,t2s,Nelec,dim,fs,spinints,Dai,Dabij):
+    def error_function(params,t1s,t2s,Nelec,dim,fs,spinints,Dai,Dabij,jac=False):
         t1=np.zeros(t1s[0].shape)
         t2=np.zeros(t2s[0].shape)
         for i in range(len(t1s)):
             t1+=params[i]*t1s[i] #Starting guess
             t2+=params[i]*t2s[i] #Starting guess
         projection_errors=np.zeros(len(t1s))
+
         F,W = updateintermediates(t1,t2,Nelec,dim,fs,spinints)
         t1_error=T1_eq(t1,t2,fs,spinints,F,Nelec,dim,Dai)
         t2_error=T2_eq(t1,t2,fs,spinints,F,Nelec,dim,Dabij,W)
         for i in range(len(projection_errors)):
-            projection_errors[i]=np.einsum("ia,ia->",t1_error,t1s[i])+np.einsum("ijab,ijab->",t2_error,t2s[i])
+            projection_errors[i]=np.einsum("ia,ia->",t1_error,t1s[i],optimize=True)+np.einsum("ijab,ijab->",t2_error,t2s[i],optimize=True)
+        if (jac==True):
+            jacobian=np.zeros((len(params),len(params)))
+            delta=1e-14
+            for i in range(len(projection_errors)):
+                t1_mod=np.zeros(t1s[0].shape)
+                t2_mod=np.zeros(t2s[0].shape)
+                for k in range(len(t1s)):
+                    t1_mod+=params[k]*t1s[k] #Starting guess
+                    t2_mod+=params[k]*t2s[k] #Starting guess
+                t1_mod+=t1s[i]*delta #Derivative and stuff.
+                t2_mod+=t2s[i]*delta #Derivative and stuff.
+                Fmod,Wmod = updateintermediates(t1_mod,t2_mod,Nelec,dim,fs,spinints)
+                t1_errormod=T1_eq(t1_mod,t2_mod,fs,spinints,Fmod,Nelec,dim,Dai)
+                t2_errormod=T2_eq(t1_mod,t2_mod,fs,spinints,Fmod,Nelec,dim,Dabij,Wmod)
+                for j in range(len(projection_errors)):
+                    jacobian[i,j]=((np.einsum("ia,ia->",t1_errormod,t1s[i],optimize=True)+np.einsum("ijab,ijab->",t2_errormod,t2s[i],optimize=True))-projection_errors[i])/delta
+            return projection_errors,jacobian
         return projection_errors
-    start_guess=np.full(len(sample_x),1/len(sample_x))
-    sol=root(error_function,start_guess,args=(t1s,t2s,Nelec,dim,fs,spinints,Dai,Dabij))
-    print(sol.success)
-    print(sol.x,sum(sol.x))
+    jacob=False
+    sol=root(error_function,start_guess,args=(t1s,t2s,Nelec,dim,fs,spinints,Dai,Dabij,jacob),jac=jacob,method="hybr",options={"xtol":1e-3})#,method="broyden1")
     final=sol.x
+    start_guess=final
+    print(sol.keys())
+    try:
+        print("Converged: ",sol.success, " number of iterations:",sol.nit)
+    except:
+        print("Converged: ",sol.success, " number of iterations:",sol.nfev)
+    print(final,sum(final))
+
     t1=np.zeros(t1s[0].shape)
     t2=np.zeros(t2s[0].shape)
     for i in range(len(t1s)):
         t1+=final[i]*t1s[i] #Starting guess
         t2+=final[i]*t2s[i] #Starting guess
-    energy_simen.append(ccsdenergy(fs,spinints,t1,t2,Nelec,dim)+ESCF)
-plt.plot(x_alphas,energy_simen,label="Simen's idea")
-plt.plot(x_alphas,E_CCSD,label="CCSD")
-plt.plot(x_alphas,E_approx,label="EVC")
-#plt.plot(x_alphas,E_FCI,label="FCI")
-plt.plot(x_alphas,E_ownmethod,label="own CC")
-plt.plot(x_alphas,E_diffguess,label="CCSD based on own guess")
+    newEn=ccsdenergy(fs,spinints,t1,t2,Nelec,dim)+ESCF
+    energy_simen.append(newEn)
+    print(newEn)
 plt.plot(x_alphas,E_RHF,label="RHF")
+plt.plot(x_alphas,E_CCSD,label="CCSD")
+plt.plot(x_alphas,E_approx,label="EVC (approach 1)")
+plt.plot(x_alphas,E_ownmethod,label="Fit to approach 1")
+plt.plot(x_alphas,energy_simen,label="EVC (approach 2)")
+plt.plot(sample_x,sample_energies,"*",label="Sampling points")
+plt.xlabel("Distance (Bohr)")
+plt.ylabel("Energy (Hartree)")
 plt.legend()
+plt.tight_layout()
+#plt.savefig("%s_%s_%d.pdf"%(molecule_name,basis,len(sample_x)))
 plt.show()

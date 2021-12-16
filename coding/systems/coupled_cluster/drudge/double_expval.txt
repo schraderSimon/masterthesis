@@ -1,0 +1,897 @@
+    rhs = zeros((no, no, nv, nv))
+
+    rhs -= 2 * einsum(
+        "ib,ja->ijab", f, tiT
+    )
+
+    rhs -= 2 * einsum(
+        "ja,ib->ijab", f, tiT
+    )
+
+    rhs += 4 * einsum(
+        "ia,jb->ijab", f, tiT
+    )
+
+    rhs += 4 * einsum(
+        "jb,ia->ijab", f, tiT
+    )
+
+    rhs -= 2 * einsum(
+        "ca,ijbc->ijab", f, tiT
+    )
+
+    rhs -= 2 * einsum(
+        "cb,ijca->ijab", f, tiT
+    )
+
+    rhs -= 2 * einsum(
+        "ic,cjba->ijab", tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "jc,icba->ijab", tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ca,ijcb->ijab", f, tiT
+    )
+
+    rhs += 4 * einsum(
+        "cb,ijac->ijab", f, tiT
+    )
+
+    rhs += 4 * einsum(
+        "ic,cjab->ijab", tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "jc,icab->ijab", tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "klab,ijlk->ijab", tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "klab,ijkl->ijab", tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ijcd,dcab->ijab", tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ijcd,cdab->ijab", tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "ck,ilab,kjcl->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "ck,ilac,kjlb->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "ck,ljab,iklc->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "ck,ljcb,ikal->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,ilba,kjlc->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,ilbc,kjal->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,ilca,kjbl->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,ilcb,kjla->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,klab,ijlc->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,ljac,ikbl->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,ljba,ikcl->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,ljbc,ikla->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,ljca,iklb->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,lkab,ijcl->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ilab,kjlc->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ilac,kjbl->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ilba,kjcl->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ilbc,kjla->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ilca,kjlb->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ilcb,kjal->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,klab,ijcl->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ljab,ikcl->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ljac,iklb->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ljba,iklc->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ljbc,ikal->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ljca,ikbl->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,ljcb,ikla->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,lkab,ijlc->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ik,kjab->ijab", f, tiT
+    )
+
+    rhs -= 4 * einsum(
+        "jk,ikab->ijab", f, tiT
+    )
+
+    rhs -= 4 * einsum(
+        "ka,ijkb->ijab", tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "kb,ijak->ijab", tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ik,kjba->ijab", f, tiT
+    )
+
+    rhs += 2 * einsum(
+        "jk,ikba->ijab", f, tiT
+    )
+
+    rhs += 2 * einsum(
+        "ka,ijbk->ijab", tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "kb,ijka->ijab", tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ikac,cjbk->ijab", tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ikbc,cjka->ijab", tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ikca,cjkb->ijab", tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ikcb,cjak->ijab", tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "kjac,ickb->ijab", tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "kjbc,icak->ijab", tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "kjca,icbk->ijab", tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "kjcb,icka->ijab", tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ikbc,cjak->ijab", tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ikca,cjbk->ijab", tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ikcb,cjka->ijab", tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "kjac,icbk->ijab", tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "kjbc,icka->ijab", tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "kjca,ickb->ijab", tiT, u
+    )
+
+    rhs += 8 * einsum(
+        "ikac,cjkb->ijab", tiT, u
+    )
+
+    rhs += 8 * einsum(
+        "kjcb,icak->ijab", tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ic,ck,kjab->ijab", f, t, tiT
+    )
+
+    rhs -= 4 * einsum(
+        "jc,ck,ikab->ijab", f, t, tiT
+    )
+
+    rhs -= 4 * einsum(
+        "ka,ck,ijcb->ijab", f, t, tiT
+    )
+
+    rhs -= 4 * einsum(
+        "kb,ck,ijac->ijab", f, t, tiT
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ia,kjbc->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ib,kjca->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ic,kjab->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ja,ikbc->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,jb,ikca->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,jc,ikab->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ka,ijcb->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,kb,ijac->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ic,ck,kjba->ijab", f, t, tiT
+    )
+
+    rhs += 2 * einsum(
+        "jc,ck,ikba->ijab", f, t, tiT
+    )
+
+    rhs += 2 * einsum(
+        "ka,ck,ijbc->ijab", f, t, tiT
+    )
+
+    rhs += 2 * einsum(
+        "kb,ck,ijca->ijab", f, t, tiT
+    )
+
+    rhs += 2 * einsum(
+        "ck,ib,kjac->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,ic,kjba->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,ja,ikcb->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,jc,ikba->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,ka,ijbc->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,kb,ijca->ijab", t, tiT, u
+    )
+
+    rhs += 8 * einsum(
+        "ck,ia,kjcb->ijab", t, tiT, u
+    )
+
+    rhs += 8 * einsum(
+        "ck,jb,ikac->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ijad,kdbc->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ijbd,dkac->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ijcd,kdab->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ijda,dkbc->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ijdb,kdac->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ijdc,dkab->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ikad,djbc->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ikbd,djca->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ikda,djcb->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,ikdb,djac->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,kjad,idcb->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,kjbd,idac->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,kjda,idbc->ijab", t, tiT, u
+    )
+
+    rhs -= 4 * einsum(
+        "ck,kjdb,idca->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,ijbd,kdac->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,ijcd,dkab->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,ijda,kdbc->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,ijdc,kdab->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,ikbd,djac->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,ikda,djbc->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,ikdb,djca->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,kjad,idbc->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,kjbd,idca->ijab", t, tiT, u
+    )
+
+    rhs += 2 * einsum(
+        "ck,kjda,idcb->ijab", t, tiT, u
+    )
+
+    rhs += 8 * einsum(
+        "ck,ijad,dkbc->ijab", t, tiT, u
+    )
+
+    rhs += 8 * einsum(
+        "ck,ijdb,dkac->ijab", t, tiT, u
+    )
+
+    rhs += 8 * einsum(
+        "ck,ikad,djcb->ijab", t, tiT, u
+    )
+
+    rhs += 8 * einsum(
+        "ck,kjdb,idac->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkl,ijac,klbd->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkl,ijcb,klad->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkl,ikac,ljbd->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkl,ikbc,ljda->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkl,ikca,ljdb->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkl,kjab,ilcd->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkl,kjbc,ilad->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkl,kjca,ilbd->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkl,kjcb,ilda->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkl,kjcd,ilab->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdlk,ikab,ljcd->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdlk,ikac,ljdb->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdlk,ikcd,ljab->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdlk,kjcb,ilad->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdlk,klac,ijdb->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdlk,klbc,ijad->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdkl,ikba,ljcd->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdkl,ikcb,ljad->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdkl,ikcd,ljba->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdkl,kjac,ildb->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdkl,klac,ijbd->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdkl,klbc,ijda->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,ijbc,klad->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,ijca,klbd->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,ijcd,klab->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,ikbc,ljad->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,ikca,ljbd->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,ikcb,ljda->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,kjac,ilbd->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,kjba,ilcd->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,kjbc,ilda->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,kjca,ildb->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,kjcd,ilba->ijab", t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlk,klab,ijcd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,ijbc,klad->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,ijca,klbd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,ijcd,klab->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,ikab,ljcd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,ikbc,ljad->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,ikca,ljbd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,ikcb,ljda->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,ikcd,ljab->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,kjac,ilbd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,kjba,ilcd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,kjbc,ilda->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,kjca,ildb->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,kjcd,ilba->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,klab,ijcd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,klac,ijdb->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkl,klbc,ijad->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,ijac,klbd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,ijcb,klad->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,ikac,ljbd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,ikba,ljcd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,ikbc,ljda->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,ikca,ljdb->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,ikcb,ljad->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,ikcd,ljba->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,kjab,ilcd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,kjac,ildb->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,kjbc,ilad->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,kjca,ilbd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,kjcb,ilda->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,kjcd,ilab->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,klac,ijbd->ijab", t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlk,klbc,ijda->ijab", t, tiT, u
+    )
+
+    rhs += 16 * einsum(
+        "cdkl,ikac,ljdb->ijab", t, tiT, u
+    )
+
+    rhs += 16 * einsum(
+        "cdkl,kjcb,ilad->ijab", t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "ck,dl,ijac,klbd->ijab", t, t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "ck,dl,ijcb,klad->ijab", t, t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "ck,dl,kjab,ilcd->ijab", t, t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cl,dk,ikab,ljcd->ijab", t, t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cl,dk,ikac,ljdb->ijab", t, t, tiT, u
+    )
+
+    rhs -= 8 * einsum(
+        "cl,dk,kjcb,ilad->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "ck,dl,ikba,ljcd->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,ijbc,klad->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,ijca,klbd->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,ijcd,klab->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,ikbc,ljad->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,ikca,ljbd->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,ikcb,ljda->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,kjac,ilbd->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,kjba,ilcd->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,kjbc,ilda->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,kjca,ildb->ijab", t, t, tiT, u
+    )
+
+    rhs -= 2 * einsum(
+        "cl,dk,klab,ijcd->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,dl,ijbc,klad->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,dl,ijca,klbd->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,dl,ijcd,klab->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,dl,ikab,ljcd->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,dl,kjba,ilcd->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "ck,dl,klab,ijcd->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,ijac,klbd->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,ijcb,klad->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,ikac,ljbd->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,ikba,ljcd->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,ikbc,ljda->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,ikca,ljdb->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,ikcb,ljad->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,kjab,ilcd->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,kjac,ildb->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,kjbc,ilad->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,kjca,ilbd->ijab", t, t, tiT, u
+    )
+
+    rhs += 4 * einsum(
+        "cl,dk,kjcb,ilda->ijab", t, t, tiT, u
+    )

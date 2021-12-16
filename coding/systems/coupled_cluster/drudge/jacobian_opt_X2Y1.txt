@@ -1,0 +1,157 @@
+    tau^0 = zeros((no, no, nv, nv))
+
+    tau^0 -= einsum(
+        "jiab->ijab", u
+    )
+
+    tau^0 += 2 * einsum(
+        "jiba->ijab", u
+    )
+
+    tau^1 = zeros((no, nv))
+
+    tau^1 += einsum(
+        "bj,jiba->ia", t, tau^0
+    )
+
+    del tau^0
+
+    tau^2 = zeros((no, nv))
+
+    tau^2 += einsum(
+        "ia->ia", tau^1
+    )
+
+    del tau^1
+
+    tau^2 += einsum(
+        "ia->ia", f
+    )
+
+    tau^4 = zeros((no, no, no, nv))
+
+    tau^4 += KroneckerDelta(i, j) * einsum(
+        "ka->ijka", tau^2
+    )
+
+    tau^4 -= 2*KroneckerDelta(i, k) * einsum(
+        "ja->ijka", tau^2
+    )
+
+    tau^5 = zeros((no, no, no, nv))
+
+    tau^5 += KroneckerDelta(i, k) * einsum(
+        "ja->ijka", tau^2
+    )
+
+    tau^5 -= 2*KroneckerDelta(j, k) * einsum(
+        "ia->ijka", tau^2
+    )
+
+    del tau^2
+
+    tau^3 = zeros((no, no, no, nv))
+
+    tau^3 += einsum(
+        "bi,jkab->ijka", t, u
+    )
+
+    tau^4 += 2 * einsum(
+        "ijka->ijka", tau^3
+    )
+
+    tau^4 -= einsum(
+        "ikja->ijka", tau^3
+    )
+
+    tau^5 += 2 * einsum(
+        "kija->ijka", tau^3
+    )
+
+    tau^5 -= einsum(
+        "kjia->ijka", tau^3
+    )
+
+    del tau^3
+
+    tau^4 -= einsum(
+        "jkia->ijka", u
+    )
+
+    tau^4 += 2 * einsum(
+        "kjia->ijka", u
+    )
+
+    rhs = zeros((no, nv, no, no, nv, nv))
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "ijkb->iajkbc", tau^4
+    )
+
+    del tau^4
+
+    tau^5 -= einsum(
+        "ijka->ijka", u
+    )
+
+    tau^5 += 2 * einsum(
+        "jika->ijka", u
+    )
+
+    rhs -= 2*KroneckerDelta(a, b) * einsum(
+        "kjic->iajkbc", tau^5
+    )
+
+    del tau^5
+
+    tau^6 = zeros((no, nv, nv, nv))
+
+    tau^6 += einsum(
+        "aj,ijbc->iabc", t, u
+    )
+
+    tau^7 = zeros((no, nv, nv, nv))
+
+    tau^7 -= einsum(
+        "iabc->iabc", tau^6
+    )
+
+    del tau^6
+
+    tau^7 += einsum(
+        "iabc->iabc", u
+    )
+
+    tau^8 = zeros((no, nv, nv, nv))
+
+    tau^8 += 2 * einsum(
+        "iabc->iabc", tau^7
+    )
+
+    tau^8 -= einsum(
+        "iacb->iabc", tau^7
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "jabc->iajkbc", tau^8
+    )
+
+    del tau^8
+
+    tau^9 = zeros((no, nv, nv, nv))
+
+    tau^9 -= einsum(
+        "iabc->iabc", tau^7
+    )
+
+    tau^9 += 2 * einsum(
+        "iacb->iabc", tau^7
+    )
+
+    del tau^7
+
+    rhs += 2*KroneckerDelta(i, j) * einsum(
+        "kabc->iajkbc", tau^9
+    )
+
+    del tau^9

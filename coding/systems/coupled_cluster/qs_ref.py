@@ -51,6 +51,7 @@ def construct_pyscf_system_rhf_ref(
     charge=0,
     cart=False,
     reference_state=None,
+    mix_states=False,
     **kwargs,
 ):
     """Convenience function setting up a closed-shell atom or a molecule from
@@ -138,7 +139,7 @@ def construct_pyscf_system_rhf_ref(
     if reference_state is None:
         C = np.asarray(hf.mo_coeff)
     else:
-        C=localize_procrustes(mol,hf.mo_coeff,hf.mo_occ,ref_mo_coeff=reference_state,mix_states=False)
+        C=localize_procrustes(mol,hf.mo_coeff,hf.mo_occ,ref_mo_coeff=reference_state,mix_states=mix_states)
     h = pyscf.scf.hf.get_hcore(mol)
     s = mol.intor_symmetric("int1e_ovlp")
     u = mol.intor("int2e").reshape(l, l, l, l).transpose(0, 2, 1, 3)

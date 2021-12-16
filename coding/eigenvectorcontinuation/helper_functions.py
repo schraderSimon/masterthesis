@@ -69,31 +69,31 @@ def energy_curve_RHF(xvals,basis_type,molecule):
         energies.append(energy)
     return np.array(energies)
 
-def CC_energy_curve(xvals,basis_type,molecule):
+def CC_energy_curve(xvals,basis_type,molecule,unit="Bohr"):
     energies=[]
     for index,x in enumerate(xvals):
         print("%d/%d"%(index,len(xvals)))
         mol1=gto.Mole()
         mol1.atom=molecule(x) #take this as a "basis" assumption.
         mol1.basis=basis_type
-        mol1.unit='AU'
+        mol1.unit=unit
         mol1.spin=0 #Assume closed shell
         mol1.symmetry=True
         mol1.build()
         mf=mol1.RHF().run(verbose=2) #Solve RHF equations to get overlap
         ccsolver=cc.CCSD(mf).run(verbose=2)
         energy=ccsolver.e_tot
-        energy+= ccsolver.ccsd_t()
+        #energy+= ccsolver.ccsd_t()
         energies.append(energy)
     return np.array(energies)
-def FCI_energy_curve(xvals,basis_type,molecule):
+def FCI_energy_curve(xvals,basis_type,molecule,unit="Bohr"):
     energies=[]
     for index,x in enumerate(xvals):
         print("%d/%d"%(index,len(xvals)))
         mol1=gto.Mole()
-        mol1.atom=molecule(x) #take this as a "basis" assumption.
+        mol1.atom=molecule(*x) #take this as a "basis" assumption.
         mol1.basis=basis_type
-        mol1.unit='AU'
+        mol1.unit=unit
         mol1.spin=0 #Assume closed shell
         mol1.symmetry=True
         mol1.build()

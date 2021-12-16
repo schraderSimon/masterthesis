@@ -1,0 +1,801 @@
+    rhs = zeros((no, no, nv, nv, no, nv))
+
+    rhs += 2*KroneckerDelta(a, d) * einsum(
+        "bl,cibk->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(a, c) * einsum(
+        "bl,dikb->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "bk,cdba->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "bl,cdab->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, d) * einsum(
+        "cikl->klcdia", u
+    )
+
+    rhs -= 4*KroneckerDelta(a, c) * einsum(
+        "dilk->klcdia", u
+    )
+
+    rhs -= 2*KroneckerDelta(i, l) * einsum(
+        "cdak->klcdia", u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "cdla->klcdia", u
+    )
+
+    rhs += 2*KroneckerDelta(a, d) * einsum(
+        "cilk->klcdia", u
+    )
+
+    rhs += 2*KroneckerDelta(a, c) * einsum(
+        "dikl->klcdia", u
+    )
+
+    rhs -= 8 * einsum(
+        "bk,cdjl,ijab->klcdia", t, t, u
+    )
+
+    rhs -= 8 * einsum(
+        "bl,cdkj,ijab->klcdia", t, t, u
+    )
+
+    rhs -= 8 * einsum(
+        "cj,dblk,ijab->klcdia", t, t, u
+    )
+
+    rhs -= 8 * einsum(
+        "dj,cbkl,ijab->klcdia", t, t, u
+    )
+
+    rhs -= 8*KroneckerDelta(a, d) * einsum(
+        "cbkj,ijlb->klcdia", t, u
+    )
+
+    rhs -= 8*KroneckerDelta(a, c) * einsum(
+        "dblj,ijkb->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, l) * einsum(
+        "cbjk,djab->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "cbjl,djba->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, l) * einsum(
+        "cbkj,djba->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "cblj,djab->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, l) * einsum(
+        "ja,cdjk->klcdia", f, t
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "ja,cdlj->klcdia", f, t
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "cj,djal->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, l) * einsum(
+        "cj,djka->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, l) * einsum(
+        "dj,cjak->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "dj,cjla->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "cj,ijlk->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "dj,ijkl->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "cdal->klcdia", u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "cdka->klcdia", u
+    )
+
+    rhs -= 4*KroneckerDelta(i, l) * einsum(
+        "dbjk,cjba->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "dbjl,cjab->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, l) * einsum(
+        "dbkj,cjab->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "dblj,cjba->klcdia", t, u
+    )
+
+    rhs -= 2 * einsum(
+        "bk,cdlj,ijba->klcdia", t, t, u
+    )
+
+    rhs -= 2 * einsum(
+        "bl,cdjk,ijba->klcdia", t, t, u
+    )
+
+    rhs -= 2 * einsum(
+        "cj,dbkl,ijba->klcdia", t, t, u
+    )
+
+    rhs -= 2 * einsum(
+        "dj,cblk,ijba->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "cbjk,ijbl->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "cbjl,ijkb->klcdia", t, u
+    )
+
+    rhs -= 8*KroneckerDelta(a, d) * einsum(
+        "a0j,cbkl,ijba0->klcdia", t, t, u
+    )
+
+    rhs -= 8*KroneckerDelta(a, c) * einsum(
+        "a0j,dblk,ijba0->klcdia", t, t, u
+    )
+
+    rhs -= 8*KroneckerDelta(a, c) * einsum(
+        "a0k,dblj,ija0b->klcdia", t, t, u
+    )
+
+    rhs -= 8*KroneckerDelta(a, d) * einsum(
+        "a0l,cbkj,ija0b->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "a0j,cblk,ija0b->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "a0j,dbkl,ija0b->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "a0k,cbjl,ija0b->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "a0k,cblj,ijba0->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "a0k,dbjl,ijba0->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "a0l,cbjk,ijba0->klcdia", t, t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, d) * einsum(
+        "ba0kl,ciba0->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, c) * einsum(
+        "ba0kl,dia0b->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(a, d) * einsum(
+        "ba0kl,cia0b->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(a, c) * einsum(
+        "ba0kl,diba0->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, d) * einsum(
+        "a0l,bk,ciba0->klcdia", t, t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, c) * einsum(
+        "a0l,bk,dia0b->klcdia", t, t, u
+    )
+
+    rhs += 2*KroneckerDelta(a, d) * einsum(
+        "a0l,bk,cia0b->klcdia", t, t, u
+    )
+
+    rhs += 2*KroneckerDelta(a, c) * einsum(
+        "a0l,bk,diba0->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "cblj,ijbk->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "dbjk,ijlb->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "dbjl,ijbk->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "dbkj,ijbl->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, l) * einsum(
+        "cbjk,djba->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "cbjl,djab->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "cblj,djba->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, l) * einsum(
+        "dbjk,cjab->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "dbjl,cjba->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, l) * einsum(
+        "dbkj,cjba->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "a0l,dbjk,ija0b->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "a0l,dbkj,ijba0->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "cj,ba0kl,ijba0->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "dj,ba0kl,ija0b->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "a0j,cbkl,ija0b->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "a0j,cblk,ijba0->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "a0j,dbkl,ijba0->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "a0j,dblk,ija0b->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "a0k,cbjl,ijba0->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "a0k,cblj,ija0b->klcdia", t, t, u
+    )
+
+    rhs -= 8*KroneckerDelta(i, k) * einsum(
+        "bi0,cdjl,ji0ab->klcdia", t, t, u
+    )
+
+    rhs -= 8*KroneckerDelta(i, l) * einsum(
+        "bi0,cdkj,ji0ab->klcdia", t, t, u
+    )
+
+    rhs -= 8*KroneckerDelta(i, k) * einsum(
+        "ci0,dblj,i0jab->klcdia", t, t, u
+    )
+
+    rhs -= 8*KroneckerDelta(i, l) * einsum(
+        "di0,cbkj,i0jab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, l) * einsum(
+        "bi0,cdjk,i0jab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "bi0,cdlj,i0jab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, l) * einsum(
+        "bk,cdji0,ji0ab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "bl,cdji0,i0jab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, l) * einsum(
+        "ci0,dbjk,i0jab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "ci0,dbjl,ji0ab->klcdia", t, t, u
+    )
+
+    rhs += 4 * einsum(
+        "bk,cdjl,ijba->klcdia", t, t, u
+    )
+
+    rhs += 4 * einsum(
+        "bk,cdlj,ijab->klcdia", t, t, u
+    )
+
+    rhs += 4 * einsum(
+        "bl,cdjk,ijab->klcdia", t, t, u
+    )
+
+    rhs += 4 * einsum(
+        "bl,cdkj,ijba->klcdia", t, t, u
+    )
+
+    rhs += 4 * einsum(
+        "cj,dbkl,ijab->klcdia", t, t, u
+    )
+
+    rhs += 4 * einsum(
+        "cj,dblk,ijba->klcdia", t, t, u
+    )
+
+    rhs += 4 * einsum(
+        "dj,cbkl,ijba->klcdia", t, t, u
+    )
+
+    rhs += 4 * einsum(
+        "dj,cblk,ijab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "cbjk,ijlb->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "cbjl,ijbk->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "a0k,dbjl,ija0b->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "a0k,dblj,ijba0->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "a0l,cbjk,ija0b->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "a0l,cbkj,ijba0->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "a0l,dbjk,ijba0->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "a0l,dbkj,ija0b->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "cj,ba0kl,ija0b->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "dj,ba0kl,ijba0->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "a0l,bk,cj,ijba0->klcdia", t, t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "a0l,bk,dj,ija0b->klcdia", t, t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, l) * einsum(
+        "ci0,dbkj,ji0ab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, l) * einsum(
+        "di0,cbjk,ji0ab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "di0,cbjl,i0jab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "di0,cblj,ji0ab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "bi0,cdjk,ji0ab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "bi0,cdjl,i0jab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "bi0,cdkj,i0jab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "bi0,cdlj,ji0ab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "bk,cdji0,i0jab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "bl,cdji0,ji0ab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "cbkj,ijbl->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "cblj,ijkb->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "dbjk,ijbl->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "dbjl,ijkb->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "dbkj,ijlb->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "dblj,ijbk->klcdia", t, u
+    )
+
+    rhs += 8*KroneckerDelta(i, l) * einsum(
+        "cbkj,djab->klcdia", t, u
+    )
+
+    rhs += 8*KroneckerDelta(i, k) * einsum(
+        "dblj,cjab->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, l) * einsum(
+        "bk,cj,djab->klcdia", t, t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, l) * einsum(
+        "bk,dj,cjba->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "a0l,bk,cj,ija0b->klcdia", t, t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "a0l,bk,dj,ijba0->klcdia", t, t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "ci0,dbjk,ji0ab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "ci0,dbjl,i0jab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "ci0,dbkj,i0jab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "ci0,dblj,ji0ab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "di0,cbjk,i0jab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "di0,cbjl,ji0ab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "di0,cbkj,ji0ab->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "di0,cblj,i0jab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, l) * einsum(
+        "bk,cj,di0,ji0ab->klcdia", t, t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "bl,cj,di0,i0jab->klcdia", t, t, t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "bl,cj,djba->klcdia", t, t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "bl,dj,cjab->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "bk,cj,ijbl->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "bk,dj,ijlb->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "bl,cj,ijkb->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "bl,dj,ijbk->klcdia", t, t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, l) * einsum(
+        "bk,cj,djba->klcdia", t, t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, l) * einsum(
+        "bk,dj,cjab->klcdia", t, t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "bl,cj,djab->klcdia", t, t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "bl,dj,cjba->klcdia", t, t, u
+    )
+
+    rhs -= 4 * einsum(
+        "cbkl,diab->klcdia", t, u
+    )
+
+    rhs -= 4 * einsum(
+        "cblk,diba->klcdia", t, u
+    )
+
+    rhs -= 4 * einsum(
+        "dbkl,ciba->klcdia", t, u
+    )
+
+    rhs -= 4 * einsum(
+        "dblk,ciab->klcdia", t, u
+    )
+
+    rhs += 2 * einsum(
+        "cblk,diab->klcdia", t, u
+    )
+
+    rhs += 2 * einsum(
+        "dbkl,ciab->klcdia", t, u
+    )
+
+    rhs += 8 * einsum(
+        "cbkl,diba->klcdia", t, u
+    )
+
+    rhs += 8 * einsum(
+        "dblk,ciba->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, d) * einsum(
+        "ib,cbkl->klcdia", f, t
+    )
+
+    rhs -= 4*KroneckerDelta(a, c) * einsum(
+        "ib,dblk->klcdia", f, t
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "bk,cj,di0,i0jab->klcdia", t, t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "bl,cj,di0,ji0ab->klcdia", t, t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "cdji0,i0jal->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, l) * einsum(
+        "cdji0,ji0ak->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "cdji0,i0jak->klcdia", t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "cdji0,ji0al->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "cj,di0,i0jal->klcdia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, l) * einsum(
+        "cj,di0,ji0ak->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, l) * einsum(
+        "cj,di0,i0jak->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "cj,di0,ji0al->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "bk,cj,ijlb->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "bk,dj,ijbl->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, d) * einsum(
+        "bl,cj,ijbk->klcdia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(a, c) * einsum(
+        "bl,dj,ijkb->klcdia", t, t, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdjl,ijak->klcdia", t, u
+    )
+
+    rhs -= 8 * einsum(
+        "cdkj,ijal->klcdia", t, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdjk,ijla->klcdia", t, u
+    )
+
+    rhs -= 2 * einsum(
+        "cdlj,ijka->klcdia", t, u
+    )
+
+    rhs += 4 * einsum(
+        "cdjk,ijal->klcdia", t, u
+    )
+
+    rhs += 4 * einsum(
+        "cdjl,ijka->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, d) * einsum(
+        "bk,cibl->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, c) * einsum(
+        "bk,dilb->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, d) * einsum(
+        "bl,cikb->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, c) * einsum(
+        "bl,dibk->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, l) * einsum(
+        "bk,cdab->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "bl,cdba->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(a, d) * einsum(
+        "ib,cblk->klcdia", f, t
+    )
+
+    rhs += 2*KroneckerDelta(a, c) * einsum(
+        "ib,dbkl->klcdia", f, t
+    )
+
+    rhs += 2*KroneckerDelta(a, d) * einsum(
+        "bk,cilb->klcdia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(a, c) * einsum(
+        "bk,dibl->klcdia", t, u
+    )
+
+    rhs += 4 * einsum(
+        "cdkj,ijla->klcdia", t, u
+    )
+
+    rhs += 4 * einsum(
+        "cdlj,ijak->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "ja,cdjl->klcdia", f, t
+    )
+
+    rhs -= 4*KroneckerDelta(i, l) * einsum(
+        "ja,cdkj->klcdia", f, t
+    )
+
+    rhs -= 4*KroneckerDelta(i, l) * einsum(
+        "cj,djak->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "cj,djla->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "dj,cjal->klcdia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, l) * einsum(
+        "dj,cjka->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, d) * einsum(
+        "cj,ijkl->klcdia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "dj,ijlk->klcdia", t, u
+    )

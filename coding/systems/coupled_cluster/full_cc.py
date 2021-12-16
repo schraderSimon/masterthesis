@@ -151,13 +151,40 @@ def basischange(C_old,overlap_AOs_newnew,neh):
     return C_new
 
 
-
+def orthonormalize_ts_choice(t1s,t2s,choice):
+    t_tot=[]
+    t_tot_small=[]
+    a,i=t1s[0].shape
+    avg_norm=0
+    for j in range(len(t1s)):
+        #t1_contr=np.einsum("ai,bk->abik",t1s[j],t1s[j])
+        #t_tot.append(np.concatenate((t1s[j],0.5*t1_contr+0.25*t2s[j]),axis=None))
+        t_tot_small.append(np.concatenate((t1s[j],t2s[j]),axis=None)[choice])
+        t_tot.append(np.concatenate((t1s[j],t2s[j]),axis=None))
+        avg_norm+=np.sum(np.abs(t_tot[-1]))
+    t_tot_small=np.array(t_tot_small).T
+    print(t_tot_small.shape)
+    t_tot=np.array(t_tot).T
+    M=t_tot_small.T@t_tot_small
+    Mpowerminushalf=powerminushalf(M)
+    t_tot=(t_tot@Mpowerminushalf).T
+    print(t_tot.shape)
+    t1_new=[]
+    t2_new=[]
+    for j in range(len(t1s)):
+        new_t1=np.reshape(t_tot[j,:a*i],(a,i))
+        #new_t2=(4*np.reshape(t_tot[j,a*i:],(a,a,i,i))-2*np.einsum("ai,bk->abik",new_t1,new_t1))
+        new_t2=np.reshape(t_tot[j,a*i:],(a,a,i,i))
+        t1_new.append(new_t1)
+        t2_new.append(new_t2)
+    return t1_new,t2_new
 def orthonormalize_ts(t1s,t2s):
+
     t_tot=[]
     a,i=t1s[0].shape
     avg_norm=0
     for j in range(len(t1s)):
-        t1_contr=np.einsum("ai,bk->abik",t1s[j],t1s[j])
+        #t1_contr=np.einsum("ai,bk->abik",t1s[j],t1s[j])
         #t_tot.append(np.concatenate((t1s[j],0.5*t1_contr+0.25*t2s[j]),axis=None))
         t_tot.append(np.concatenate((t1s[j],t2s[j]),axis=None))
         avg_norm+=np.sum(np.abs(t_tot[-1]))

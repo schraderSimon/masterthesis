@@ -71,6 +71,11 @@ def LDU_decomp(X,overwrite_a=True,check_finite=False):
         Vh[0,:]=-1*Vh[0,:]
         s[0]=-s[0]
     return U,s,Vh
+def powerminushalf(M):
+    "Returns M^{-1/2}."
+    U,s,Vh=svd(M,check_finite=False)
+    s=1/(np.sqrt(s))
+    return U@np.diag(s)@Vh 
 def generalized_eigenvector(T,S,symmetric=True):
     """Solves the generalized eigenvector problem.
     Input:

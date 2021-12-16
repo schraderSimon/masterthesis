@@ -1,0 +1,113 @@
+    rhs = zeros((no, nv, no, nv))
+
+    rhs -= 4 * einsum(
+        "cbjk,ijab->kcia", t, u
+    )
+
+    rhs -= 4 * einsum(
+        "cbkj,ijba->kcia", t, u
+    )
+
+    rhs += 2 * einsum(
+        "cbjk,ijba->kcia", t, u
+    )
+
+    rhs += 8 * einsum(
+        "cbkj,ijab->kcia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, c) * einsum(
+        "bj,ijkb->kcia", t, u
+    )
+
+    rhs -= 4 * einsum(
+        "bk,cj,ijab->kcia", t, t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "bj,cjba->kcia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(a, c) * einsum(
+        "bj,ijbk->kcia", t, u
+    )
+
+    rhs += 2 * einsum(
+        "bk,cj,ijba->kcia", t, t, u
+    )
+
+    rhs += 4*KroneckerDelta(i, k) * einsum(
+        "bj,cjab->kcia", t, u
+    )
+
+    rhs -= 4 * einsum(
+        "cj,ijak->kcia", t, u
+    )
+
+    rhs += 2 * einsum(
+        "cj,ijka->kcia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(i, k) * einsum(
+        "ja,cj->kcia", f, t
+    )
+
+    rhs -= 4*KroneckerDelta(a, c) * einsum(
+        "bdjk,ijdb->kcia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(a, c) * einsum(
+        "bdjk,ijbd->kcia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(a, c) * einsum(
+        "bj,dk,ijdb->kcia", t, t, u
+    )
+
+    rhs += 2*KroneckerDelta(a, c) * einsum(
+        "bj,dk,ijbd->kcia", t, t, u
+    )
+
+    rhs -= 2 * einsum(
+        "ciak->kcia", u
+    )
+
+    rhs += 4 * einsum(
+        "cika->kcia", u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "ik->kcia", f
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "ca->kcia", f
+    )
+
+    rhs -= 2 * einsum(
+        "bk,ciab->kcia", t, u
+    )
+
+    rhs += 4 * einsum(
+        "bk,ciba->kcia", t, u
+    )
+
+    rhs -= 2*KroneckerDelta(a, c) * einsum(
+        "ib,bk->kcia", f, t
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "cbjl,jlab->kcia", t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "cbjl,ljab->kcia", t, u
+    )
+
+    rhs -= 4*KroneckerDelta(i, k) * einsum(
+        "bl,cj,jlab->kcia", t, t, u
+    )
+
+    rhs += 2*KroneckerDelta(i, k) * einsum(
+        "bl,cj,ljab->kcia", t, t, u
+    )

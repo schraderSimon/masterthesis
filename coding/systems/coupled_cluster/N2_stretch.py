@@ -33,9 +33,9 @@ for i in range(3):
 
     E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,run_cc=True,cc_approx=False,type="procrustes")
     axes[i].plot(geom_alphas1,E_CCSDx,label="CCSD")
-    axes[i].plot(geom_alphas1,E_approx,label="CCSD WF")
-    axes[i].plot(geom_alphas1,energy_simen,label="CCSD AMP")
-    axes[i].plot(geom_alphas1,energy_simen,label="CCSD AMP (10%)")
+    axes[i].plot(geom_alphas1,E_approx,label="WF-CCEVC")
+    axes[i].plot(geom_alphas1,energy_simen,label="AMP-CCEVC")
+    axes[i].plot(geom_alphas1,energy_simen_random,label="AMP-CCEVC (10%)")
     axes[i].plot(sample_geom,sample_energies,"*",label="Sample points")
     axes[i].set_xlabel("distance (Bohr)")
     #axes[i].legend()

@@ -44,7 +44,7 @@ from qiskit.opflow.primitive_ops import Z2Symmetries
 from qiskit.opflow import PauliSumOp, TaperedPauliSumOp
 import sys
 import warnings
-electronic_driver = PySCFDriver(atom="H 0 0 0; H 0 0 0.735",basis="STO-6G")
+electronic_driver = PySCFDriver(atom="Li 0 0 0; H 0 0 4",basis="STO-6G")
 electronic_driver_result = electronic_driver.run()
 electronic_energy=electronic_driver_result.get_property("ElectronicEnergy")
 twobody=electronic_energy.get_electronic_integral(ElectronicBasis.MO,2)
@@ -55,25 +55,31 @@ grouped_property.add_property(electronic_energy)
 grouped_property.add_property(particle_number)
 grouped_property.add_property(basistransform)
 active_space_trafo = ActiveSpaceTransformer(
-    4, 4, [1,2,3,4]
+    2, 3, [1,2,4]
 )
-qubit_converter = QubitConverter(mapper=JordanWignerMapper(),z2symmetry_reduction = "auto")
+qubit_converter = QubitConverter(mapper=ParityMapper(),z2symmetry_reduction = "auto",two_qubit_reduction=True)
 
 problem = ElectronicStructureProblem(electronic_driver)#, transformers=[active_space_trafo])
 #print(problem._grouped_property_transformed)
-qubit_op = qubit_converter.convert(problem.second_q_ops()[0])
-#newGroup=active_space_trafo.transform(grouped_property)
+qubit_op = qubit_converter.convert(problem.second_q_ops()[0],num_particles=4)
+newGroup=active_space_trafo.transform(grouped_property)
+hamiltonian = newGroup.second_q_ops()[0]
 
-print(qubit_op)
-#print(qubit_op.__dict__)
-result = NumPyEigensolver().compute_eigenvalues(qubit_op)
+print(hamiltonian)
+hamiltonian = qubit_converter.convert(hamiltonian,num_particles=2)
+result = NumPyEigensolver().compute_eigenvalues(hamiltonian)
 #print(result)
 
-pauli_symm = Z2Symmetries.find_Z2_symmetries(qubit_op)
-print(ElectronicStructureProblem.symmetry_sector_locator(pauli_symm,qubit_converter))
-qubit_op_new=pauli_symm.taper(qubit_op)
-result = NumPyEigensolver().compute_eigenvalues(qubit_op_new)
-print(result.eigenvalues[0])
+pauli_symm = Z2Symmetries.find_Z2_symmetries(hamiltonian)
+print(qubit_op.num_qubits)
+print(pauli_symm)
+print(qubit_op)
+qubit_op_new=pauli_symm.taper(hamiltonian).reduce()
+print(qubit_op_new)
+for qubit_oppy in qubit_op_new:
+    print(qubit_oppy.num_qubits)
+    result = NumPyEigensolver().compute_eigenvalues(qubit_oppy)
+    print(result.eigenvalues[0])
 sys.exit(1)
 
 problem2 = ElectronicStructureProblem(electronic_driver)

@@ -86,7 +86,7 @@ def localize_procrustes(mol,mo_coeff,mo_occ,ref_mo_coeff,mix_states=False,active
     return mo_coeff
 
 def molecule(x):
-    return "Be 0 0 0; H 0 0 -%f; H 0 0 %f"%(x,x)
+    return "Li 0 0 0; H 0 0 -%f"%(x)
 #molecule=lambda x: "H 0 0 0; H 0 0 -%f"%x
 def get_qubit_op(molecule,x,qi,qubit_converter,basis="STO-6G",ref_det=None,remove_core=True,active_space=None,nelec=None):
 
@@ -97,6 +97,7 @@ def get_qubit_op(molecule,x,qi,qubit_converter,basis="STO-6G",ref_det=None,remov
     hcore_ao = mol.intor('int1e_kin') + mol.intor('int1e_nuc')
     nuc_rep=mf.energy_nuc()
     mo_coeff=mf.mo_coeff
+    print(mo_coeff)
     if ref_det is not None:
         mo_coeff=localize_procrustes(mol,mf.mo_coeff,mf.mo_occ,ref_det,active_orbitals=active_space,nelec=nelec)
     hcore_mo = np.einsum('pi,pq,qj->ij', mo_coeff, hcore_ao, mo_coeff)
@@ -193,7 +194,7 @@ def calculate_energy_overlap(unitary1,unitary2,num_qubits,hamiltonian,qi,nuc_rep
     sampler_energy = CircuitSampler(qi).convert(expectation_energy)
     sampler_overlap = CircuitSampler(qi).convert(expectation_overlap)
     return sampler_energy.eval()+sampler_overlap.eval()*nuc_rep,sampler_overlap.eval()
-basis="6-31G"
+basis="STO-6G"
 ref_x=3
 mol = mol = gto.M(atom=molecule(ref_x), basis=basis,unit="Bohr")
 mol.build()
@@ -204,7 +205,7 @@ nuc_rep=mf.energy_nuc()
 ref_det=mf.mo_coeff
 
 sample_x=[2,3,4,5,6]
-x_of_interest=np.linspace(2,6,41)
+x_of_interest=np.linspace(1,6,26)
 E_EVC=np.zeros(len(x_of_interest))
 E_exact=np.zeros(len(x_of_interest))
 E_UCC=np.zeros(len(x_of_interest))
@@ -214,8 +215,8 @@ qi = QuantumInstance(backend=backend, seed_simulator=seed, seed_transpiler=seed)
 qubit_converter = QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True)#,z2symmetry_reduction = 'auto')
 numPyEigensolver=NumPyEigensolver()
 optimizer=SLSQP(maxiter=200)
-active_space=[1,2,3,4]
-nelec=4
+active_space=[1,2,4]
+nelec=2
 unitaries=[]
 for i,x in enumerate(sample_x):
     qubit_hamiltonian, num_particles,num_spin_orbitals,nuc_rep=get_qubit_op(molecule,x,qi,qubit_converter,active_space=active_space,nelec=nelec,basis=basis,ref_det=ref_det)

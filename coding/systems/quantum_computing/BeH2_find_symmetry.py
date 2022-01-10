@@ -25,7 +25,7 @@ from qiskit_nature.properties.second_quantization.electronic.integrals import (
 )
 from qiskit_nature.properties.second_quantization.electronic.bases import ElectronicBasis
 from qiskit import Aer, transpile
-from qiskit.algorithms.optimizers import COBYLA, SPSA,SLSQP, QNSPSA
+from qiskit.algorithms.optimizers import COBYLA, SPSA,SLSQP, QNSPSA, L_BFGS_B
 from qiskit_nature.circuit.library import UCC,UCCSD, HartreeFock
 from qiskit_nature.algorithms import VQEUCCFactory
 from qiskit_nature.converters.second_quantization import QubitConverter
@@ -40,12 +40,13 @@ from qiskit.converters import circuit_to_gate
 from qiskit.tools.visualization import circuit_drawer
 from qiskit_nature.transformers.second_quantization.electronic import ActiveSpaceTransformer, FreezeCoreTransformer
 from qiskit.opflow.primitive_ops import Z2Symmetries
-
+import qiskit_nature.circuit.library.initial_states.hartree_fock as hf
 import sys
 import warnings
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 def molecule(x):
-    return "Li 0 0 0; H 0 0 -%f"%(x)#; H 0 0 %f"%(x,x)
+    return "Be 0 0 0; H 0 0 -%f; H 0 0 %f"%(x,x)#; H 0 0 %f"%(x,x)
+#molecule=lambda x: "Li 0 0 0; H 0 0 %f"%x
 def get_qubit_op(molecule,x,qi,qubit_converter,basis="STO-6G",ref_det=None,remove_core=True,active_space=None,nelec=None):
     mol = mol = gto.M(atom=molecule(x), basis=basis,unit="Bohr",symmetry=True)
     mol.build()
@@ -90,7 +91,7 @@ hcore_ao = mol.intor('int1e_kin') + mol.intor('int1e_nuc')
 nuc_rep=mf.energy_nuc()
 ref_det=mf.mo_coeff
 
-sample_x=np.linspace(0.5,5,25)
+sample_x=np.linspace(1,6,51)
 x_of_interest=np.linspace(1,6,26)
 E_EVC=np.zeros(len(x_of_interest))
 E_exact=np.zeros(len(x_of_interest))
@@ -98,12 +99,13 @@ E_UCC=np.zeros(len(x_of_interest))
 backend=Aer.get_backend("aer_simulator_statevector")
 seed=100
 qi = QuantumInstance(backend=backend, seed_simulator=seed, seed_transpiler=seed)
-qubit_converter = QubitConverter(mapper=JordanWignerMapper(),two_qubit_reduction=False)
+
 numPyEigensolver=NumPyEigensolver()
-optimizer=COBYLA(maxiter=200)
-active_space=[1,2,3,4]
-nelec=2
+optimizer=L_BFGS_B()
+active_space=[1,2,3,4,5,6]
+nelec=4
 unitaries=[]
+qubit_converter = QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True)
 def get_tapering_value(index,max_index):
     print(index,max_index)
     bitstring=bin(index)[2:]
@@ -123,6 +125,7 @@ def find_symmetry():
     hamiltonian = newGroup.second_q_ops()[0]
     num_particles=newGroup.get_property("ParticleNumber").num_particles
     num_spin_orbitals=newGroup.get_property("ParticleNumber").num_spin_orbitals
+
     qubit_op = qubit_converter.convert(hamiltonian,num_particles=num_particles)
     pauli_symm = Z2Symmetries.find_Z2_symmetries(qubit_op)
     print(pauli_symm)
@@ -151,14 +154,16 @@ for i,x in enumerate(sample_x):
     qubit_op = qubit_converter.convert(hamiltonian,num_particles=num_particles)
     result0 = np.real(numPyEigensolver.compute_eigenvalues(qubit_op).eigenvalues[0])
 
-    qubit_converter_symmetry=QubitConverter(mapper=JordanWignerMapper(),two_qubit_reduction=False,z2symmetry_reduction=tapering_value)
-    qubit_hamiltonian=qubit_converter_symmetry.convert(hamiltonian)
+    qubit_converter_symmetry=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True,z2symmetry_reduction=tapering_value)
+    qubit_hamiltonian=qubit_converter_symmetry.convert(hamiltonian,num_particles=num_particles)
     result = np.real(numPyEigensolver.compute_eigenvalues(qubit_hamiltonian).eigenvalues[0])
+
+    initial_state = HartreeFock(num_spin_orbitals=num_spin_orbitals,num_particles=num_particles,qubit_converter=qubit_converter_symmetry)
     var_form = UCC(
         excitations="sd",
         num_particles=num_particles,
         num_spin_orbitals=num_spin_orbitals,
-        #initial_state=initial_state,
+        initial_state=initial_state,
         qubit_converter=qubit_converter_symmetry,
         reps=1
     )

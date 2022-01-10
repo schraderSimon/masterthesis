@@ -90,7 +90,7 @@ hcore_ao = mol.intor('int1e_kin') + mol.intor('int1e_nuc')
 nuc_rep=mf.energy_nuc()
 ref_det=mf.mo_coeff
 
-sample_x=[5]
+sample_x=np.linspace(0.5,5,25)
 x_of_interest=np.linspace(1,6,26)
 E_EVC=np.zeros(len(x_of_interest))
 E_exact=np.zeros(len(x_of_interest))
@@ -100,9 +100,9 @@ seed=100
 qi = QuantumInstance(backend=backend, seed_simulator=seed, seed_transpiler=seed)
 qubit_converter = QubitConverter(mapper=JordanWignerMapper(),two_qubit_reduction=False)
 numPyEigensolver=NumPyEigensolver()
-optimizer=SLSQP(maxiter=200)
-active_space=[0,1,2,3,4]
-nelec=4
+optimizer=COBYLA(maxiter=200)
+active_space=[1,2,3,4]
+nelec=2
 unitaries=[]
 def get_tapering_value(index,max_index):
     print(index,max_index)
@@ -119,6 +119,7 @@ def get_tapering_value(index,max_index):
 def find_symmetry():
     newGroup=get_qubit_op(molecule,1.5,qi,qubit_converter,active_space=active_space,nelec=nelec,basis=basis,ref_det=ref_det)
     energyshift=np.real(newGroup.get_property("ElectronicEnergy")._shift["ActiveSpaceTransformer"])
+    nuc_rep=np.real(newGroup.get_property("ElectronicEnergy")._nuclear_repulsion_energy)
     hamiltonian = newGroup.second_q_ops()[0]
     num_particles=newGroup.get_property("ParticleNumber").num_particles
     num_spin_orbitals=newGroup.get_property("ParticleNumber").num_spin_orbitals
@@ -135,50 +136,24 @@ def find_symmetry():
     minimal=int(np.argmin(vals))
     tapering_value=get_tapering_value(minimal,len(qubit_op_new))
     return tapering_value
+tapering_value=find_symmetry()
+energies_exact=[]
+energies_tapered=[]
+energies_approx=[]
 for i,x in enumerate(sample_x):
+
     newGroup=get_qubit_op(molecule,x,qi,qubit_converter,active_space=active_space,nelec=nelec,basis=basis,ref_det=ref_det)
     energyshift=np.real(newGroup.get_property("ElectronicEnergy")._shift["ActiveSpaceTransformer"])
+    nuc_rep=np.real(newGroup.get_property("ElectronicEnergy")._nuclear_repulsion_energy)
     hamiltonian = newGroup.second_q_ops()[0]
     num_particles=newGroup.get_property("ParticleNumber").num_particles
     num_spin_orbitals=newGroup.get_property("ParticleNumber").num_spin_orbitals
     qubit_op = qubit_converter.convert(hamiltonian,num_particles=num_particles)
-    pauli_symm = Z2Symmetries.find_Z2_symmetries(qubit_op)
-    print(pauli_symm)
-    qubit_op_new=pauli_symm.taper(qubit_op).reduce()
-    vals=np.zeros(len(qubit_op_new))
-    for i in range(len(qubit_op_new)):
-        result = NumPyEigensolver().compute_eigenvalues(qubit_op_new[i])
-        print("Eigenvalue of %f"%np.real(result.eigenvalues[0]))
-        #print(pauli_symm.tapering_values)
-        vals[i]=np.real(result.eigenvalues[0])
-    minimal=int(np.argmin(vals))
-    tapering_value=get_tapering_value(minimal,len(qubit_op_new))
-    print(minimal)
-    qubit_hamiltonian=qubit_op_new[minimal]
-    print(qubit_hamiltonian)
-    result = numPyEigensolver.compute_eigenvalues(qubit_hamiltonian)
-    """
-    for i in [1,-1]:
-        for j in [1,-1]:
-            for k in [1,-1]:
-                qubit_converter_symmetry=QubitConverter(mapper=JordanWignerMapper(),two_qubit_reduction=False,z2symmetry_reduction=[i,j,k])
-                newOp=qubit_converter_symmetry.convert(hamiltonian,num_particles=num_particles)
-                print("[%d,%d,%d]"%(i,j,k))
-                print((newOp-qubit_op_new[minimal]).reduce())
-    """
-    print(tapering_value)
+    result0 = np.real(numPyEigensolver.compute_eigenvalues(qubit_op).eigenvalues[0])
+
     qubit_converter_symmetry=QubitConverter(mapper=JordanWignerMapper(),two_qubit_reduction=False,z2symmetry_reduction=tapering_value)
-    pauli_symm.tapering_values=[tapering_value,tapering_value,tapering_value]
-    #qubit_converter_symmetry.force_match(num_particles=num_particles,z2symmetries=pauli_symm)
     qubit_hamiltonian=qubit_converter_symmetry.convert(hamiltonian)
-    print(qubit_hamiltonian)
-    """
-    initial_state = HartreeFock(
-            num_spin_orbitals=num_spin_orbitals,
-            num_particles=num_particles,
-            qubit_converter=qubit_converter_symmetry,
-        )
-    """
+    result = np.real(numPyEigensolver.compute_eigenvalues(qubit_hamiltonian).eigenvalues[0])
     var_form = UCC(
         excitations="sd",
         num_particles=num_particles,
@@ -187,7 +162,6 @@ for i,x in enumerate(sample_x):
         qubit_converter=qubit_converter_symmetry,
         reps=1
     )
-
     ansatz=var_form
     include_custom=True
     vqe = VQE(ansatz=ansatz,include_custom=include_custom, optimizer=optimizer,quantum_instance=qi)
@@ -195,7 +169,13 @@ for i,x in enumerate(sample_x):
     energy=vqe_result.eigenvalue.real+nuc_rep+energyshift
     print(energy)
     print("Approx: %.15f"%energy)
-    print("Exact: %.15f"%(nuc_rep+np.min(vals)+energyshift))
-    circuit=vqe.get_optimal_circuit()
-    circuit.decompose().draw(output="mpl")
-    plt.show()
+    print("Exact: %.15f"%(nuc_rep+result0+energyshift))
+    print("Exact: %.15f"%(nuc_rep+result+energyshift))
+    energies_exact.append(nuc_rep+result0+energyshift)
+    energies_tapered.append(nuc_rep+result+energyshift)
+    energies_approx.append(energy)
+plt.plot(sample_x,energies_exact,label="Exact untapered")
+plt.plot(sample_x,energies_tapered,label="Exact tapered")
+plt.plot(sample_x,energies_approx,label="Approx tapered")
+plt.legend()
+plt.show()

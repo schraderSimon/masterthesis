@@ -128,8 +128,11 @@ def find_symmetry():
 
     qubit_op = qubit_converter.convert(hamiltonian,num_particles=num_particles)
     pauli_symm = Z2Symmetries.find_Z2_symmetries(qubit_op)
-    print(pauli_symm)
+
     qubit_op_new=pauli_symm.taper(qubit_op).reduce()
+    print(pauli_symm)
+    print(pauli_symm.__dict__)
+    sys.exit(1)
     vals=np.zeros(len(qubit_op_new))
     for i in range(len(qubit_op_new)):
         result = NumPyEigensolver().compute_eigenvalues(qubit_op_new[i])

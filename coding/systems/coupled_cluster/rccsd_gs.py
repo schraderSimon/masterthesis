@@ -102,7 +102,7 @@ def solve_evc(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states
             own_energy=gccsolver.ccsdenergy(t1own,t2own)+ESCF
             E_ownmethod.append(own_energy)
     return E_CCSD,E_approx,E_diffguess,E_RHF,E_ownmethod
-def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states=False,random_picks=0,type="procrustes"):
+def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states=False,random_picks=0,type="procrustes",optimal=True):
     def system_jacobian(system):
         f = system.construct_fock_matrix(system.h, system.u)
         no=system.n
@@ -129,10 +129,23 @@ def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_state
                 t2+=params[i]*t2s[i] #Starting guess
 
             f = system.construct_fock_matrix(system.h, system.u)
-            t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
-            t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
 
-
+            removed_t1=np.zeros_like(t1.flatten())
+            removed_t2=np.zeros_like(t2.flatten())
+            flattened_t1=t1.flatten()
+            flattened_t2=t2.flatten()
+            lenT1=len(removed_t1)
+            for picky in picks:
+                if picky<lenT1:
+                    removed_t1[picky]=flattened_t1[picky]
+                else:
+                    removed_t2[picky-lenT1]=flattened_t2[picky-lenT1]
+            removed_t1=removed_t1.reshape(t1.shape)
+            removed_t2=removed_t2.reshape(t2.shape)
+            #t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np) #Original idea
+            #t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np) #Original idea
+            t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, removed_t1, removed_t2, system.o, system.v, np) #Simens idea
+            t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, removed_t1, removed_t2, system.o, system.v, np) #Simens idea
             ts=[np.concatenate((t1s[i],t2s[i]),axis=None) for i in range(len(t1s))]
             t_error=np.concatenate((t1_error,t2_error),axis=None)
             projection_errors=np.zeros(len(t1s))
@@ -170,7 +183,21 @@ def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_state
             random_number=int(random_picks*totamount)
     print("Picks: %f, Total amount: %f"%(random_number,totamount))
     picks=np.random.choice(totamount,random_number,replace=False)# Random choice
+    #Alternatively, we cn take the 10 percent most important amplitudes!
     t1s,t2s=orthonormalize_ts(t1s,t2s)
+    def pick_largest():
+        T=np.zeros_like(np.concatenate((t1s[0],t2s[0]),axis=None))
+        t1=np.zeros(t1s[0].shape)
+        t2=np.zeros(t2s[0].shape)
+        for i in range(len(t1s)):
+            t1+=1/len(t1s)*t1s[i] #Starting guess
+            t2+=1/len(t2s)*t2s[i] #Starting guess
+            T+=np.concatenate((t1s[i],t2s[i]),axis=None)
+        index_order=np.argsort(np.abs(T))
+        return index_order[len(index_order)-random_number:], T[index_order[len(index_order)-random_number]]
+    if optimal:
+        picks,cutoff=pick_largest()
+        print("Smallest picked: %e"%cutoff)
     for x_alpha in x_alphas:
         system = construct_pyscf_system_rhf_ref(
             molecule=molecule_func(*x_alpha),
@@ -185,7 +212,7 @@ def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_state
         t1_Jac,t2_Jac=system_jacobian(system)
         jacob=jacobian_function
 
-        sol=root(error_function,start_guess,args=(system,t1s,t2s,t1_Jac,t2_Jac,picks),jac=jacob,method="hybr",options={"xtol":1e-5})#,method="broyden1")
+        sol=root(error_function,start_guess,args=(system,t1s,t2s,t1_Jac,t2_Jac,picks),jac=jacob,method="hybr",options={"xtol":1e-2})#,method="broyden1")
         print("Error")
         print(error_function(sol.x,system,t1s,t2s,t1_Jac,t2_Jac,picks))
         try:
@@ -198,6 +225,9 @@ def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_state
         for i in range(len(t1s)):
             t1+=final[i]*t1s[i] #Starting guess
             t2+=final[i]*t2s[i] #Starting guess
+        t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np) #Original idea
+        t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np) #Original idea
+        print("Maximal projection error:T1: %f, T2: %f"%(np.max(t1_error), np.max(t2_error)))
         newEn=rhs_e.compute_rccsd_ground_state_energy(f, system.u, t1, t2, system.o, system.v, np)+ESCF
         if sol.success==False:
             newEn=np.nan
@@ -221,11 +251,11 @@ if __name__=="__main__":
     basis_set = bse.get_basis(basis, fmt='nwchem')
     charge = 0
     #molecule =lambda arr: "Be 0.0 0.0 0.0; H 0.0 0.0 %f; H 0.0 0.0 -%f"%(arr,arr)
-    molecule=lambda x:  "N 0 0 0; N 0 0 %f"%x
+    molecule=lambda x:  "Be 0 0 0;H 0 0 %f;H 0 0 -%f"%(x,x)
     refx=[2]
     print(molecule(*refx))
     reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-    sample_geom1=np.linspace(1.5,2.5,10)
+    sample_geom1=np.linspace(1.5,6,10)
     #sample_geom1=[2.5,3.0,6.0]
     sample_geom=[[x] for x in sample_geom1]
     sample_geom1=np.array(sample_geom).flatten()
@@ -233,12 +263,10 @@ if __name__=="__main__":
     geom_alphas=[[x] for x in geom_alphas1]
 
     t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
-
-    energy_simen=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,type="procrustes")
-
+    energy_simen_random=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,random_picks=0.1,optimal=True,type="procrustes")
     E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,run_cc=True,cc_approx=False,type="procrustes")
     plt.plot(geom_alphas1,E_CCSDx,label="CCSD")
     plt.plot(geom_alphas1,E_approx,label="CCSD WF")
-    plt.plot(geom_alphas1,energy_simen,label="CCSD AMP")
+    plt.plot(geom_alphas1,energy_simen_random,label="CCSD AMP")
     plt.legend()
     plt.show()

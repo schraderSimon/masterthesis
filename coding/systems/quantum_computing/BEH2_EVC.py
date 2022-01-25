@@ -43,9 +43,35 @@ from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
 from qiskit.converters import circuit_to_gate
 from qiskit.tools.visualization import circuit_drawer
 from qiskit_nature.transformers.second_quantization.electronic import ActiveSpaceTransformer, FreezeCoreTransformer
-from qiskit.opflow.primitive_ops import Z2Symmetries
+from qiskit.opflow.primitive_ops import Z2Symmetries, PauliOp
 import sys
 import warnings
+from scipy.io import loadmat, savemat
+
+def create_equalvalueIndeces(coefficients,matrixElements):
+    """Takes a list of operators and coefficients and
+    if coefficients are equal, turns it into an equivalent set of operators and coefficients"""
+    identicals=[]
+    different_ones=[]
+    identicals.append([0])
+    different_ones.append(np.real(coefficients[0]))
+    for i in range(1,len(coefficients)):
+        hasIdentical=False
+        for j in range(len(different_ones)):
+            if(abs((coefficients[i])-(different_ones[j]))<1e-13):#If they are numerically identical
+                identicals[j].append(i)
+                hasIdentical=True
+                print("Adding %d to %d"%(i,j))
+                break
+        if hasIdentical==False:
+            different_ones.append(np.real(coefficients[i]))
+            identicals.append([i])
+    newCoefficients=[]
+    newMatrixElements=[]
+    for i in range(len(identicals)):
+        newCoefficients.append(coefficients[identicals[i][0]]*len(identicals[i]))
+        newMatrixElements.append(matrixElements[identicals[i][0]])
+    return newCoefficients, newMatrixElements
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 def molecule(x):
     return "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x)
@@ -61,13 +87,14 @@ nuc_rep=mf.energy_nuc()
 ref_det=mf.mo_coeff
 active_space=[1,2,3,4,5,6] #Freezing [1,2,3,5,6] works kinda for BeH2
 nelec=4
-sample_x=[2,3,4,5,6]
+sample_x=[6.5,5.5,4.5,3.5,2.5,1.5]
+#sample_x=[5.5]
 x_of_interest=np.linspace(6.5,1.5,51)
 E_EVC=np.zeros(len(x_of_interest))
 E_exact=np.zeros(len(x_of_interest))
 E_UCC=np.zeros(len(x_of_interest))
 E_k2=np.zeros(len(x_of_interest))
-backend= Aer.get_backend('statevector_simulator')
+backend= AerSimulator(method='statevector',max_parallel_threads=4)
 seed=np.random.randint(100000)
 qi = QuantumInstance(backend=backend, seed_simulator=seed, seed_transpiler=seed)
 
@@ -87,8 +114,34 @@ xvals=UCC_3UPCCG_params["xvals"][0]
 UCC_circuits=[]
 kUPCC_circuits=[]
 UCC_2_circuits=[]
-hamiltonian, num_particles,num_spin_orbitals,nuc_rep=get_hamiltonian(molecule,1,qi,active_space=active_space,nelec=nelec,basis=basis,ref_det=ref_det)
+hamiltonian, num_particles,num_spin_orbitals,nuc_rep=get_hamiltonian(molecule,3,qi,active_space=active_space,nelec=nelec,basis=basis,ref_det=ref_det)
 qubit_hamiltonian=qubit_converter_symmetry.convert(hamiltonian,num_particles=num_particles)
+qubit_hamiltonian=qubit_hamiltonian.reduce()
+print(qubit_hamiltonian)
+op_list=[]
+coeff_list=[]
+for pauliOpStr,coeff in qubit_hamiltonian.primitive.to_list():
+    op_list.append((PauliOp(Pauli(pauliOpStr))))
+    coeff_list.append(coeff)
+"""
+newcoeff,newOpList=create_equalvalueIndeces(coeff_list,op_list)
+def makeH(coeffs,OpList):
+    operator=OpList[0]*coeffs[0]
+    for i in range(1,len(OpList)):
+        operator+=OpList[i]*coeffs[i]
+    return operator
+operator=makeH(newcoeff,newOpList)
+"""
+print("------")
+print(operator)
+result = NumPyEigensolver().compute_eigenvalues(qubit_hamiltonian)
+print("Eigenvalue before shit: %f"%np.real(result.eigenvalues[0]))
+result = NumPyEigensolver().compute_eigenvalues(operator)
+print("Eigenvalue after shit: %f"%np.real(result.eigenvalues[0]))
+
+sys.exit(1)
+
+print("Len OP list: %d"%len(op_list))
 num_qubits=qubit_hamiltonian.num_qubits
 for sample_x_val in sample_x: #Get circuits
     print("Baemp")
@@ -97,29 +150,74 @@ for sample_x_val in sample_x: #Get circuits
     UCC_param=UCC_1_params[idx]
     UCC_2_param=UCC_2_params[idx]
     UCC_3UP_param=UCC_3UP_params[idx]
-    UCC_ansatz_f,initial_point=UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter_symmetry,reps=1,generalized=False)
+    #UCC_ansatz_f,initial_point=UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter_symmetry,reps=1,generalized=False)
     UCC_2_ansatz_f,initial_point=UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter_symmetry,reps=2,generalized=False)
-    ansatz_k3_f,initial_point_k2=kUpUCCSD_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter_symmetry,reps=3)
-    UCC_circuits.append(UCC_ansatz_f.assign_parameters(UCC_param))
+    #ansatz_k3_f,initial_point_k2=kUpUCCSD_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter_symmetry,reps=3)
+    #UCC_circuits.append(UCC_ansatz_f.assign_parameters(UCC_param))
     UCC_2_circuits.append(UCC_2_ansatz_f.assign_parameters(UCC_2_param))
-    kUPCC_circuits.append(ansatz_k3_f.assign_parameters(UCC_3UP_param))
-
+    #kUPCC_circuits.append(ansatz_k3_f.assign_parameters(UCC_3UP_param))
 print("Done getting ciruicts")
-import time
-optimization_levels=[0,1,2,3]
-print("")
-idiots=[UCC_circuits[0],UCC_2_circuits[0],kUPCC_circuits[0]]
-names=["Standard UCC", "UCC_2", "kUPGCC"]
-for i in range(3):
-    circuit_to_transpile=idiots[i]
-    print(names[i])
-    for optimization_level in optimization_levels:
-        start = time.perf_counter()
-        newcirc=transpile(circuit_to_transpile,backend=backend,optimization_level=optimization_level)
-        end = time.perf_counter()
-        print("UCC_2Opt-lev: %d, Time: %f, Num_nonlocal_gates: %d,unitary factors: %d "%(optimization_level,end-start,newcirc.num_nonlocal_gates(),newcirc.num_unitary_factors()))
-        newUn=circuit_to_gate(newcirc)
-        start = time.perf_counter()
-        h,s=calculate_energy_overlap(newUn,newUn,num_qubits,qubit_hamiltonian,qi,nuc_rep,include_custom=True,complex=False)
-        end = time.perf_counter()
-        print("Time to compute h,s:%f"%(end-start))
+for i in range(len(UCC_circuits)):
+    #newcirc=transpile(UCC_circuits[i],backend=backend,optimization_level=1)
+    #UCC_circuits[i]=newcirc
+    newcirc=transpile(UCC_2_circuits[i],backend=backend,optimization_level=1)
+    UCC_2_circuits[i]=newcirc
+    #newcirc=transpile(kUPCC_circuits[i],backend=backend,optimization_level=1)
+    #kUPCC_circuits[i]=newcirc
+print("Done transforming circuits")
+zero1states={}
+pauli_string_exp_vals={}
+overlaps={}
+for i in range(len(sample_x)):
+    for j in range(i,len(sample_x)):
+        zero1states["%d%d"%(i,j)]=get_01_state(UCC_2_circuits[i],UCC_2_circuits[j],num_qubits,backend)
+print("Done getting new states")
+outfile=open("aaBeH2_UCC2_sampleXPauliStrings.txt","w")
+outfile.write("Sample_x:\n")
+for k,x in enumerate(sample_x):
+    outfile.write("%d %f\n"%(k,x))
+outfile.write("-\n")
+for i in range(len(sample_x)):
+    for j in range(i,len(sample_x)):
+        overlaps["%d%d"%(i,j)]=get_overlap_expectations(zero1states["%d%d"%(i,j)],num_qubits,qi)
+        pauli_string_exp_vals["%d%d"%(i,j)]=get_energy_expectations(zero1states["%d%d"%(i,j)],op_list,qi)
+        outfile.write("Overlap %d %d: %f\n"%(i,j,overlaps["%d%d"%(i,j)]))
+        outfile.write("Pauli strings %d %d:\n"%(i,j))
+        for key in pauli_string_exp_vals["%d%d"%(i,j)]:
+                outfile.write("%s %f\n"%(key,pauli_string_exp_vals["%d%d"%(i,j)][key]))
+        outfile.write("-\n")
+outfile.close()
+sys.exit(1)
+E_EVC=np.zeros(len(x_of_interest))
+E_exact=np.zeros(len(x_of_interest))
+for k,x in enumerate(x_of_interest):
+    print(k)
+    H=np.zeros((len(sample_x),len(sample_x)))
+    S=np.zeros((len(sample_x),len(sample_x)))
+    hamiltonian, num_particles,num_spin_orbitals,nuc_rep=get_hamiltonian(molecule,x,qi,active_space=active_space,nelec=nelec,basis=basis,ref_det=ref_det)
+    qubit_hamiltonian=qubit_converter_symmetry.convert(hamiltonian,num_particles=num_particles)
+    coefs_strings=qubit_hamiltonian.reduce().primitive.to_list()
+    for i in range(len(sample_x)):
+        for j in range(i,len(sample_x)):
+            h=0
+            s=overlaps["%d%d"%(i,j)]
+            for pauliOpStr,coeff in qubit_hamiltonian.primitive.to_list():
+                try:
+                    h+=pauli_string_exp_vals["%d%d"%(i,j)][pauliOpStr]*coeff
+                except KeyError:
+                    pass
+            S[i,j]=S[j,i]=np.real(s)
+            H[i,j]=H[j,i]=np.real(h+s*nuc_rep)
+            print(h,s)
+    e,cl,c=eig(scipy.linalg.pinv(S,atol=1e-8)@H,left=True)
+    idx = np.real(e).argsort()
+    e = e[idx]
+    c = c[:,idx]
+    cl = cl[:,idx]
+    E_EVC[k]=np.real(e[0])
+    result = numPyEigensolver.compute_eigenvalues(qubit_hamiltonian)
+    E_exact[k]=np.real(result.eigenvalues[0]+nuc_rep)
+plt.plot(x_of_interest,E_EVC,label="EVC")
+plt.plot(x_of_interest,E_exact,label="exact")
+plt.legend()
+plt.show()

@@ -11,7 +11,7 @@ from scipy.optimize import minimize, root,newton
 from qiskit_nature.properties.second_quantization.electronic import ElectronicEnergy, ParticleNumber
 from qiskit_nature.properties.second_quantization.electronic.electronic_structure_driver_result import ElectronicStructureDriverResult
 from qiskit_nature.properties.second_quantization.electronic.bases import ElectronicBasis, ElectronicBasisTransform
-
+from qiskit.opflow.list_ops import ListOp
 from qiskit_nature.properties import GroupedProperty
 import numpy as np
 import matplotlib.pyplot as plt
@@ -42,7 +42,7 @@ from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
 from qiskit.converters import circuit_to_gate
 from qiskit.tools.visualization import circuit_drawer
 from qiskit_nature.transformers.second_quantization.electronic import ActiveSpaceTransformer, FreezeCoreTransformer
-from qiskit.opflow.primitive_ops import Z2Symmetries
+from qiskit.opflow.primitive_ops import Z2Symmetries, PauliOp
 from scipy.io import loadmat, savemat
 import sys
 import warnings
@@ -243,6 +243,75 @@ def kUpUCCSD_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=Q
     """
     init_pt=10*0.1*(np.random.rand(len(var_form.parameters))-0.5)
     return var_form, init_pt
+def get_01_state(unitary1,unitary2,num_qubits,backend):
+    qc=QuantumCircuit()
+    qr=QuantumRegister(num_qubits+1,"q")
+    controlled_unitary1=unitary1.control(1)
+    controlled_unitary2=unitary2.control(1)
+    qc.add_register( qr )
+    qc.h(0)
+    qc.x(0)
+    qc.append(controlled_unitary1,qr)
+    qc.x(0)
+    qc.append(controlled_unitary2,qr)
+    newcirc=transpile(qc,backend=backend,optimization_level=1)
+    return newcirc
+def get_energy_expectations(zero1_state,op_list,qi):
+    print("Starting shit")
+    expectation_vals={}
+    state=CircuitStateFn(zero1_state)
+
+    number_OPs=len(op_list)
+    dicterino={}
+    maxnum=30
+    k=0
+    while k<number_OPs:
+        print(k)
+        op_list_new=[]
+        for op in op_list[k:k+maxnum]:
+            op_list_new.append(op^X)
+        measurable_expression = StateFn(ListOp(op_list_new), is_measurement=True).compose(state)
+        expectation = AerPauliExpectation().convert(measurable_expression)
+        sampler = CircuitSampler(qi).convert(expectation)
+        values=sampler.eval()
+        dicterino.update({str(op_list[k+i]): values[i] for i in range(len(values))})
+        print(values)
+        k+=maxnum
+    return dicterino
+def get_energy_expectations_sample(zero1_state,op_list,qi,sample=True):
+    print("Starting shit")
+    expectation_vals={}
+    state=CircuitStateFn(zero1_state)
+
+    number_OPs=len(op_list)
+    dicterino={}
+    maxnum=30
+    k=0
+    while k<number_OPs:
+        print(k)
+        op_list_new=[]
+        for op in op_list[k:k+maxnum]:
+            op_list_new.append(op^X)
+        measurable_expression = StateFn(ListOp(op_list_new), is_measurement=True).compose(state)
+        expectation = AerPauliExpectation().convert(measurable_expression)
+        sampler = CircuitSampler(qi).convert(expectation)
+        values=sampler.eval()
+        dicterino.update({str(op_list[k+i]): values[i] for i in range(len(values))})
+        print(values)
+        k+=maxnum
+    return dicterino
+
+def get_overlap_expectations(zero1_state,num_qubits,qi,sample=True):
+    expectation_vals=[]
+    state=CircuitStateFn(zero1_state)
+    overlap_measurement=I
+    for i in range(num_qubits-1):
+        overlap_measurement=overlap_measurement^I
+    overlap_measurement=overlap_measurement^X
+    measurable_expression = StateFn(overlap_measurement, is_measurement=True).compose(state)
+    expectation = AerPauliExpectation().convert(measurable_expression)
+    sampler = CircuitSampler(qi).convert(expectation)
+    return sampler.eval()
 def calculate_energy_overlap(unitary1,unitary2,num_qubits,hamiltonian,qi,nuc_rep,include_custom=True,complex=False):
     qc=QuantumCircuit()
     qr=QuantumRegister(num_qubits+1,"q")

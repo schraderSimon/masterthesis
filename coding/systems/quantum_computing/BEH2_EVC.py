@@ -48,30 +48,6 @@ import sys
 import warnings
 from scipy.io import loadmat, savemat
 
-def create_equalvalueIndeces(coefficients,matrixElements):
-    """Takes a list of operators and coefficients and
-    if coefficients are equal, turns it into an equivalent set of operators and coefficients"""
-    identicals=[]
-    different_ones=[]
-    identicals.append([0])
-    different_ones.append(np.real(coefficients[0]))
-    for i in range(1,len(coefficients)):
-        hasIdentical=False
-        for j in range(len(different_ones)):
-            if(abs((coefficients[i])-(different_ones[j]))<1e-13):#If they are numerically identical
-                identicals[j].append(i)
-                hasIdentical=True
-                print("Adding %d to %d"%(i,j))
-                break
-        if hasIdentical==False:
-            different_ones.append(np.real(coefficients[i]))
-            identicals.append([i])
-    newCoefficients=[]
-    newMatrixElements=[]
-    for i in range(len(identicals)):
-        newCoefficients.append(coefficients[identicals[i][0]]*len(identicals[i]))
-        newMatrixElements.append(matrixElements[identicals[i][0]])
-    return newCoefficients, newMatrixElements
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 def molecule(x):
     return "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x)
@@ -123,15 +99,6 @@ coeff_list=[]
 for pauliOpStr,coeff in qubit_hamiltonian.primitive.to_list():
     op_list.append((PauliOp(Pauli(pauliOpStr))))
     coeff_list.append(coeff)
-"""
-newcoeff,newOpList=create_equalvalueIndeces(coeff_list,op_list)
-def makeH(coeffs,OpList):
-    operator=OpList[0]*coeffs[0]
-    for i in range(1,len(OpList)):
-        operator+=OpList[i]*coeffs[i]
-    return operator
-operator=makeH(newcoeff,newOpList)
-"""
 print("------")
 print(operator)
 result = NumPyEigensolver().compute_eigenvalues(qubit_hamiltonian)

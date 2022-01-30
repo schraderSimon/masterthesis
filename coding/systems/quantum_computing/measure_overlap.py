@@ -54,7 +54,7 @@ def orthogonal_procrustes(mo_new,reference_mo):
     U,s,Vt=scipy.linalg.svd(M)
     return U@Vt, 0
 
-def localize_procrustes(mol,mo_coeff,mo_occ,ref_mo_coeff,mix_states=False,active_orbitals=None,nelec=None):
+def localize_procrustes(mol,mo_coeff,mo_occ,ref_mo_coeff,mix_states=False,active_orbitals=None,nelec=None, return_R=False):
     """Performs the orthgogonal procrustes on the occupied and the unoccupied molecular orbitals.
     ref_mo_coeff is the mo_coefs of the reference state.
     If "mix_states" is True, then mixing of occupied and unoccupied MO's is allowed.
@@ -65,36 +65,85 @@ def localize_procrustes(mol,mo_coeff,mo_occ,ref_mo_coeff,mix_states=False,active
         nelec=int(np.sum(mo_occ))
     active_orbitals_occ=active_orbitals[:nelec//2]
     active_orbitals_unocc=active_orbitals[nelec//2:]
-
+    mo_coeff_new=mo_coeff.copy()
     if mix_states==False:
         mo=mo_coeff[:,active_orbitals_occ]
         premo=ref_mo_coeff[:,active_orbitals_occ]
-        R,scale=orthogonal_procrustes(mo,premo)
-        mo=mo@R
-
-        mo_coeff[:,active_orbitals_occ]=np.array(mo)
+        R1,scale=orthogonal_procrustes(mo,premo)
+        mo=mo@R1
         mo_unocc=mo_coeff[:,active_orbitals_unocc]
         premo=ref_mo_coeff[:,active_orbitals_unocc]
-        R,scale=orthogonal_procrustes(mo_unocc,premo)
-        mo_unocc=mo_unocc@R
-
-        mo_coeff[:,active_orbitals_unocc]=np.array(mo_unocc)
+        R2,scale=orthogonal_procrustes(mo_unocc,premo)
+        mo_unocc=mo_unocc@R2
 
 
+        mo_coeff_new[:,active_orbitals_occ]=np.array(mo)
+        mo_coeff_new[:,active_orbitals_unocc]=np.array(mo_unocc)
+        R=block_diag(R1,R2)
     elif mix_states==True:
         mo=mo_coeff[:,active_orbitals]
         premo=ref_mo_coeff[:,active_orbitals]
         R,scale=orthogonal_procrustes(mo,premo)
         mo=mo@R
 
-        mo_coeff[:,active_orbitals]=np.array(mo)
-    return mo_coeff
+        mo_coeff_new[:,active_orbitals]=np.array(mo)
+
+    if return_R:
+        return mo_coeff_new,R
+    else:
+        return mo_coeff_new
 
 def molecule(x):
     return "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x)
 #molecule=lambda x: "Li 0 0 0; H 0 0 -%f"%x
 #molecule=lambda x: "H 0 0 0; H 0 0 2.324362966; H %f 0 0; H %f 0 2.324362966"%(x,x)
-def get_hamiltonian(molecule,x,qi,basis="STO-6G",ref_det=None,remove_core=True,active_space=None,nelec=None):
+def get_basis_Hamiltonian(molecule,x,qi,mo_coeff,basis="STO-6G",active_space=None,nelec=None,symmetry=None,irreps=None):
+    mol = mol = gto.M(atom=molecule(x), basis=basis,unit="Bohr",symmetry=symmetry)
+    mol.build()
+    mf = scf.RHF(mol)
+    mf.irrep_nelec=irreps
+    eref=mf.kernel()
+    hcore_ao = mol.intor('int1e_kin') + mol.intor('int1e_nuc')
+    nuc_rep=mf.energy_nuc()
+    hcore_mo = np.einsum('pi,pq,qj->ij', mo_coeff, hcore_ao, mo_coeff)
+    nao = mol.nao_nr()
+    eri_ao = mol.intor('int2e')
+    eri_mo = ao2mo.incore.full(eri_ao, mo_coeff)
+    twobody_MO=TwoBodyElectronicIntegrals(ElectronicBasis.MO, (eri_mo,eri_mo,eri_mo,eri_mo))
+    onebody_MO=OneBodyElectronicIntegrals(ElectronicBasis.MO, (hcore_mo,hcore_mo))
+    twobody_AO=TwoBodyElectronicIntegrals(ElectronicBasis.AO, (eri_ao,eri_ao,eri_ao,eri_ao))
+    onebody_AO=OneBodyElectronicIntegrals(ElectronicBasis.AO, (hcore_ao,hcore_ao))
+    electronic_energy=ElectronicEnergy(
+            [onebody_AO, twobody_AO, onebody_MO, twobody_MO],
+            nuclear_repulsion_energy=nuc_rep,
+            reference_energy=eref,
+        )
+    num_particles=mol.nelec
+    num_spin_orbitals=2*len(hcore_ao)
+    particle_number = ParticleNumber(
+    num_spin_orbitals=num_spin_orbitals,
+    num_particles=num_particles,
+    )
+    basistransform=ElectronicBasisTransform(ElectronicBasis.AO,ElectronicBasis.MO,mo_coeff)
+    grouped_property=ElectronicStructureDriverResult()
+    grouped_property.add_property(electronic_energy)
+    grouped_property.add_property(particle_number)
+    grouped_property.add_property(basistransform)
+    if active_space is None:
+        active_space=np.arange(len(hcore_ao))
+    if nelec is None:
+        nelec=int(np.sum(mol.nelec))
+    transformer= ActiveSpaceTransformer(
+        nelec, len(active_space), active_space
+    )
+    newGroup=transformer.transform(grouped_property)
+    energyshift=np.real(newGroup.get_property("ElectronicEnergy")._shift["ActiveSpaceTransformer"])
+    hamiltonian = newGroup.second_q_ops()[0]
+    num_particles=newGroup.get_property("ParticleNumber").num_particles
+    num_spin_orbitals=newGroup.get_property("ParticleNumber").num_spin_orbitals
+    return hamiltonian, num_particles,num_spin_orbitals, nuc_rep+energyshift,newGroup
+
+def get_hamiltonian(molecule,x,qi,basis="STO-6G",ref_det=None,active_space=None,nelec=None):
 
     mol = mol = gto.M(atom=molecule(x), basis=basis,unit="Bohr")
     mol.build()
@@ -146,7 +195,6 @@ def get_unitary(hamiltonian,ansatz,optimizer,qi,nuc_rep,include_custom=True,init
     vqe = VQE(ansatz=ansatz,include_custom=include_custom, optimizer=optimizer,quantum_instance=qi,initial_point=initial_point)
 
     vqe_result =vqe.compute_minimum_eigenvalue(hamiltonian)
-    print(vqe.optimal_params)
     circuit=vqe.get_optimal_circuit()
     unitary=circuit_to_gate(circuit)
     optimal_params=vqe.optimal_params
@@ -186,6 +234,9 @@ def SU2_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitC
             initial_state=initial_state,
             name='EfficientSU2',
     )
+    init_pt=0.02*(np.random.rand(len(var_form.parameters))-0.5)
+
+    return var_form,init_pt
 def UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None,generalized=False):
     if initial_state is None:
         initial_state = HartreeFock(
@@ -204,6 +255,25 @@ def UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitC
     )
     init_pt=0.02*(np.random.rand(len(var_form.parameters))-0.5)
     return var_form, init_pt
+def SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None,generalized=False):
+    if initial_state is None:
+        initial_state = HartreeFock(
+                num_spin_orbitals=num_spin_orbitals,
+                num_particles=num_particles,
+                qubit_converter=qubit_converter,
+            )
+    var_form = SUCCD(
+        num_particles=num_particles,
+        num_spin_orbitals=num_spin_orbitals,
+        initial_state=initial_state,
+        qubit_converter=qubit_converter,
+        reps=reps,
+        generalized=generalized,
+        include_singles=(True,True)
+    )
+    init_pt=0.02*(np.random.rand(len(var_form.parameters))-0.5)
+    return var_form, init_pt
+
 def UPCCSD_excitation_generator(num_particles,num_spin_orbitals):
     num_spin_orbitals=num_spin_orbitals//2
     excitations=[]
@@ -278,31 +348,7 @@ def get_energy_expectations(zero1_state,op_list,qi):
         print(values)
         k+=maxnum
     return dicterino
-def get_energy_expectations_sample(zero1_state,op_list,qi,sample=True):
-    print("Starting shit")
-    expectation_vals={}
-    state=CircuitStateFn(zero1_state)
-
-    number_OPs=len(op_list)
-    dicterino={}
-    maxnum=30
-    k=0
-    while k<number_OPs:
-        print(k)
-        op_list_new=[]
-        for op in op_list[k:k+maxnum]:
-            op_list_new.append(op^X)
-        measurable_expression = StateFn(ListOp(op_list_new), is_measurement=True).compose(state)
-        expectation = AerPauliExpectation().convert(measurable_expression)
-        sampler = CircuitSampler(qi).convert(expectation)
-        values=sampler.eval()
-        dicterino.update({str(op_list[k+i]): values[i] for i in range(len(values))})
-        print(values)
-        k+=maxnum
-    return dicterino
-
-def get_overlap_expectations(zero1_state,num_qubits,qi,sample=True):
-    expectation_vals=[]
+def get_overlap_expectations(zero1_state,num_qubits,qi):
     state=CircuitStateFn(zero1_state)
     overlap_measurement=I
     for i in range(num_qubits-1):
@@ -312,39 +358,14 @@ def get_overlap_expectations(zero1_state,num_qubits,qi,sample=True):
     expectation = AerPauliExpectation().convert(measurable_expression)
     sampler = CircuitSampler(qi).convert(expectation)
     return sampler.eval()
+def get_energy_expectations_01state(zero1_state,num_qubits,qubit_hamiltonian,qi):
+    state=CircuitStateFn(zero1_state)
+    energy_measurement=qubit_hamiltonian^X
+    measurable_expression = StateFn(energy_measurement, is_measurement=True).compose(state)
+    expectation = AerPauliExpectation().convert(measurable_expression)
+    sampler = CircuitSampler(qi).convert(expectation)
+    return sampler.eval()
 def calculate_energy_overlap(unitary1,unitary2,num_qubits,hamiltonian,qi,nuc_rep,include_custom=True,complex=False):
-    qc=QuantumCircuit()
-    qr=QuantumRegister(num_qubits+1,"q")
-    controlled_unitary1=unitary1.control(1)
-    controlled_unitary2=unitary2.control(1)
-    qc.add_register( qr )
-    qc.h(0)
-    qc.x(0)
-    qc.append(controlled_unitary1,qr)
-    qc.x(0)
-    qc.append(controlled_unitary2,qr)
-    state=CircuitStateFn(qc)
-    overlap_measurement=I
-    for i in range(num_qubits-1):
-        overlap_measurement=overlap_measurement^I
-    if complex==False:
-        hamiltonian_to_measure=hamiltonian^(X)
-        overlap_measurement=overlap_measurement^X
-    else:
-        hamiltonian_to_measure=hamiltonian^(X+1j*Y)
-        overlap_measurement=overlap_measurement^(X+1j*Y)
-    measurable_expression = StateFn(hamiltonian_to_measure, is_measurement=True).compose(state)
-    measurable_overlap=StateFn(overlap_measurement, is_measurement=True).compose(state)
-    if include_custom:
-        expectation_energy = AerPauliExpectation().convert(measurable_expression)
-        expectation_overlap=AerPauliExpectation().convert(measurable_overlap)
-    else:
-        expectation_energy = PauliExpectation().convert(measurable_expression)
-        expectation_overlap=PauliExpectation().convert(measurable_overlap)
-    sampler_energy = CircuitSampler(qi).convert(expectation_energy)
-    sampler_overlap = CircuitSampler(qi).convert(expectation_overlap)
-    return sampler_energy.eval()+sampler_overlap.eval()*nuc_rep,sampler_overlap.eval()
-def calculate_energy_overlap_method2(unitary1,unitary2,num_qubits,hamiltonian,qi,nuc_rep,include_custom=True,complex=False):
     qc=QuantumCircuit()
     qr=QuantumRegister(num_qubits+1,"q")
     controlled_unitary1=unitary1.control(1)

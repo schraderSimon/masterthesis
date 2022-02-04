@@ -28,7 +28,7 @@ from qiskit import Aer, transpile
 from qiskit.providers.aer import AerSimulator
 
 from qiskit.algorithms.optimizers import *
-from qiskit_nature.circuit.library import UCC,UCCSD, HartreeFock, PUCCD
+from qiskit_nature.circuit.library import UCC,UCCSD, HartreeFock, PUCCD, SUCCD
 from qiskit.circuit.library import EfficientSU2, QAOAAnsatz
 from qiskit_nature.algorithms import VQEUCCFactory
 from qiskit_nature.converters.second_quantization import QubitConverter
@@ -255,7 +255,7 @@ def UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitC
     )
     init_pt=0.02*(np.random.rand(len(var_form.parameters))-0.5)
     return var_form, init_pt
-def SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None,generalized=False):
+def SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None,generalized=False,include_singles=True):
     if initial_state is None:
         initial_state = HartreeFock(
                 num_spin_orbitals=num_spin_orbitals,
@@ -269,7 +269,7 @@ def SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=Qubit
         qubit_converter=qubit_converter,
         reps=reps,
         generalized=generalized,
-        include_singles=(True,True)
+        include_singles=(include_singles,include_singles)
     )
     init_pt=0.02*(np.random.rand(len(var_form.parameters))-0.5)
     return var_form, init_pt
@@ -313,7 +313,7 @@ def kUpUCCSD_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=Q
     """
     init_pt=10*0.1*(np.random.rand(len(var_form.parameters))-0.5)
     return var_form, init_pt
-def get_01_state(unitary1,unitary2,num_qubits,backend):
+def get_01_state(unitary1,unitary2,num_qubits,backend=None):
     qc=QuantumCircuit()
     qr=QuantumRegister(num_qubits+1,"q")
     controlled_unitary1=unitary1.control(1)
@@ -324,7 +324,10 @@ def get_01_state(unitary1,unitary2,num_qubits,backend):
     qc.append(controlled_unitary1,qr)
     qc.x(0)
     qc.append(controlled_unitary2,qr)
-    newcirc=transpile(qc,backend=backend,optimization_level=1)
+    if backend is None:
+        newcirc=qc
+    else:
+        newcirc=transpile(qc,backend=backend,optimization_level=1)
     return newcirc
 def get_energy_expectations(zero1_state,op_list,qi):
     print("Starting shit")

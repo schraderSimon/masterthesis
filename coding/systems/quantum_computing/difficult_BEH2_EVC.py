@@ -44,12 +44,12 @@ optimizer=SciPyOptimizer("BFGS")#L_BFGS_B()
 numPyEigensolver=NumPyEigensolver()
 
 qubit_converter=QubitConverter(mapper=JordanWignerMapper())
-UCC_UCC2_params=loadmat("SHIT_BeH2_UCC_vals.mat")
+UCC_UCC2_params=loadmat("SHIT_BeH2_UCC_vals_new.mat")
 
 UCC_2_params=UCC_UCC2_params["UCC_1"]
 xvals=UCC_UCC2_params["xvals"][0]
 #sample_x=[0,1,2,3,4]
-sample_x=[0,0.1,0.2,0.3,0.4]
+sample_x=[0,1,2,3,4]
 occdict1={"A1":6,"B1":0,"B2":0}
 occdict2={"A1":4,"B1":2,"B2":0}
 occdict3={"A1":4,"B1":0,"B2":2}
@@ -126,7 +126,7 @@ for k,sample_x_val in enumerate(sample_x): #Get circuits
     x=xvals[idx]
     print(x)
     UCC_2_param=UCC_2_params[idx]
-    UCC_2_ansatz_f,initial_point=UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter,reps=1,generalized=False)
+    UCC_2_ansatz_f,initial_point=SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter,reps=1,generalized=False,include_singles=False)
     UCC_2_ansatz=UCC_2_ansatz_f.assign_parameters(UCC_2_param)
     #UCC_2_ansatz=HartreeFock(num_spin_orbitals=num_spin_orbitals,num_particles=num_particles,qubit_converter=qubit_converter)
     #Trasform to procrustes basis

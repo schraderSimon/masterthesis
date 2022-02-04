@@ -9,11 +9,11 @@ qreg q[6];
 
 
 rz(0) q[0];
-rz(0) q[1];
-rz(pi*1.0) q[2];
-rz(0) q[3];
+rz(pi*1.0) q[1];
+rz(0) q[2];
+rz(pi*1.0) q[3];
 rz(0) q[4];
-rz(0) q[5];
+rz(pi*1.0) q[5];
 
 // Gate: PhasedISWAP**-1.0
 rz(pi*0.25) q[3];
@@ -31,15 +31,15 @@ rz(pi*0.25) q[4];
 
 rz(0) q[4];
 
-// Gate: PhasedISWAP**0.06753627743133635
+// Gate: PhasedISWAP**-1.0
 rz(pi*0.25) q[2];
 rz(pi*-0.25) q[3];
 cx q[2],q[3];
 h q[2];
 cx q[3],q[2];
-rz(pi*0.0337681387) q[2];
+sdg q[2];
 cx q[3],q[2];
-rz(pi*-0.0337681387) q[2];
+s q[2];
 h q[2];
 cx q[2],q[3];
 rz(pi*-0.25) q[2];
@@ -61,15 +61,15 @@ cx q[4],q[5];
 rz(pi*-0.25) q[4];
 rz(pi*0.25) q[5];
 
-// Gate: PhasedISWAP**-1.0
+// Gate: PhasedISWAP**-0.11135479440831952
 rz(pi*0.25) q[1];
 rz(pi*-0.25) q[2];
 cx q[1],q[2];
 h q[1];
 cx q[2],q[1];
-sdg q[1];
+rz(pi*-0.0556773972) q[1];
 cx q[2],q[1];
-s q[1];
+rz(pi*0.0556773972) q[1];
 h q[1];
 cx q[1],q[2];
 rz(pi*-0.25) q[1];
@@ -78,29 +78,29 @@ rz(pi*0.25) q[2];
 rz(0) q[5];
 rz(0) q[2];
 
-// Gate: PhasedISWAP**-1.0
+// Gate: PhasedISWAP**-0.3352140792162283
 rz(pi*0.25) q[3];
 rz(pi*-0.25) q[4];
 cx q[3],q[4];
 h q[3];
 cx q[4],q[3];
-sdg q[3];
+rz(pi*-0.1676070396) q[3];
 cx q[4],q[3];
-s q[3];
+rz(pi*0.1676070396) q[3];
 h q[3];
 cx q[3],q[4];
 rz(pi*-0.25) q[3];
 rz(pi*0.25) q[4];
 
-// Gate: PhasedISWAP**0.0722190795511045
+// Gate: PhasedISWAP**-0.31189668318442665
 rz(pi*0.25) q[0];
 rz(pi*-0.25) q[1];
 cx q[0],q[1];
 h q[0];
 cx q[1],q[0];
-rz(pi*0.0361095398) q[0];
+rz(pi*-0.1559483416) q[0];
 cx q[1],q[0];
-rz(pi*-0.0361095398) q[0];
+rz(pi*0.1559483416) q[0];
 h q[0];
 cx q[0],q[1];
 rz(pi*-0.25) q[0];
@@ -109,63 +109,15 @@ rz(pi*0.25) q[1];
 rz(0) q[4];
 rz(0) q[1];
 
-// Gate: PhasedISWAP**0.0016517497316754376
-rz(pi*0.25) q[2];
-rz(pi*-0.25) q[3];
-cx q[2],q[3];
-h q[2];
-cx q[3],q[2];
-rz(pi*0.0008258749) q[2];
-cx q[3],q[2];
-rz(pi*-0.0008258749) q[2];
-h q[2];
-cx q[2],q[3];
-rz(pi*-0.25) q[2];
-rz(pi*0.25) q[3];
-
-rz(0) q[3];
-
 // Gate: PhasedISWAP**-1.0
-rz(pi*0.25) q[1];
-rz(pi*-0.25) q[2];
-cx q[1],q[2];
-h q[1];
-cx q[2],q[1];
-sdg q[1];
-cx q[2],q[1];
-s q[1];
-h q[1];
-cx q[1],q[2];
-rz(pi*-0.25) q[1];
-rz(pi*0.25) q[2];
-
-rz(0) q[2];
-
-// Gate: PhasedISWAP**-1.0
-rz(pi*0.25) q[3];
-rz(pi*-0.25) q[4];
-cx q[3],q[4];
-h q[3];
-cx q[4],q[3];
-sdg q[3];
-cx q[4],q[3];
-s q[3];
-h q[3];
-cx q[3],q[4];
-rz(pi*-0.25) q[3];
-rz(pi*0.25) q[4];
-
-rz(0) q[4];
-
-// Gate: PhasedISWAP**-0.1815711027788048
 rz(pi*0.25) q[2];
 rz(pi*-0.25) q[3];
 cx q[2],q[3];
 h q[2];
 cx q[3],q[2];
-rz(pi*-0.0907855514) q[2];
+sdg q[2];
 cx q[3],q[2];
-rz(pi*0.0907855514) q[2];
+s q[2];
 h q[2];
 cx q[2],q[3];
 rz(pi*-0.25) q[2];
@@ -187,7 +139,38 @@ cx q[4],q[5];
 rz(pi*-0.25) q[4];
 rz(pi*0.25) q[5];
 
+// Gate: PhasedISWAP**-1.0
+rz(pi*0.25) q[1];
+rz(pi*-0.25) q[2];
+cx q[1],q[2];
+h q[1];
+cx q[2],q[1];
+sdg q[1];
+cx q[2],q[1];
+s q[1];
+h q[1];
+cx q[1],q[2];
+rz(pi*-0.25) q[1];
+rz(pi*0.25) q[2];
+
 rz(0) q[5];
+rz(0) q[2];
+
+// Gate: PhasedISWAP**0.6745885131364512
+rz(pi*0.25) q[2];
+rz(pi*-0.25) q[3];
+cx q[2],q[3];
+h q[2];
+cx q[3],q[2];
+rz(pi*0.3372942566) q[2];
+cx q[3],q[2];
+rz(pi*-0.3372942566) q[2];
+h q[2];
+cx q[2],q[3];
+rz(pi*-0.25) q[2];
+rz(pi*0.25) q[3];
+
+rz(0) q[3];
 
 // Gate: PhasedISWAP**-1.0
 rz(pi*0.25) q[3];

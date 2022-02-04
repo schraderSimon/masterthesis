@@ -102,14 +102,14 @@ optimal_params=None
 UCC_1_params=[]
 UCC_2_params=[]
 
-for k,x in enumerate(x_of_interest):
+for k,x in enumerate(sample_x):
     hamiltonian,num_particles,num_spin_orbitals,nuc_rep,orig_group=get_basis_Hamiltonian(molecule,x,qi,mo_coeff_min[k],basis="STO-6G",active_space=active_space,nelec=nelec,symmetry='C2v',irreps=irreps[k])
     qubit_hamiltonian=qubit_converter.convert(hamiltonian,num_particles=num_particles)
     num_qubits=qubit_hamiltonian.num_qubits
     result = numPyEigensolver.compute_eigenvalues(qubit_hamiltonian)
     E_exact[k]=np.real(result.eigenvalues[0]+nuc_rep)
     print("Start finding Ansatz")
-    ansatz,initial_point=SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter,reps=1,generalized=False)
+    ansatz,initial_point=SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter,reps=2,generalized=False,include_singles=False)
     if optimal_params is None:
         optimal_params=initial_point
     unitary,energy,optimal_params=get_unitary(qubit_hamiltonian,ansatz,optimizer,qi,include_custom=True,initial_point=optimal_params,nuc_rep=nuc_rep)

@@ -76,10 +76,7 @@ for k,x in enumerate(xs):
     R=np.linalg.inv(mo_coeff_min[k])@procrustes_state
     R=R[1:,1:]
     n_qubits=len(active_space)
-    qubits = cirq.LineQubit.range(n_qubits)
-    circuit = cirq.Circuit(openfermion.bogoliubov_transform(qubits,R))
-    circuit_as_unitary=cirq.unitary(circuit)
-    circuit_as_unitary[abs(circuit_as_unitary)<1e-14]=0
+
 
     hamiltonian,num_particles,num_spin_orbitals,nuc_rep,orig_group=get_basis_Hamiltonian(molecule,x,qi,mo_coeff_min[k],basis=basis,active_space=active_space,nelec=nelec,symmetry='C2v',irreps=irreps[k])
     qubit_hamiltonian=qubit_converter.convert(hamiltonian)

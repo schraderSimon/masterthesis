@@ -6,7 +6,7 @@ def molecule(x):
     y = lambda x: 2.54 - 0.46*x
     atom="H  " + str(-y(x)) + " 0 " + str(x) + "; H " + str(y(x)) + " 0  " + str(x) + "; Be 0 0 0"
     return atom
-basis="STO-3G"
+basis="STO-6G"
 occdict1={"A1":6,"B1":0,"B2":0}
 occdict2={"A1":4,"B1":2,"B2":0}
 occdict3={"A1":4,"B1":0,"B2":2}
@@ -22,7 +22,7 @@ for k,x in enumerate(xs):
     mo_coeff_temp=[]
     mo_en_temp=[]
     for i in [0]:
-        mf = scf.UHF(mol)
+        mf = scf.RHF(mol)
         mf.verbose=0
         mf.irrep_nelec=occdicts[i]
         e=mf.kernel(verbose=0)
@@ -30,7 +30,7 @@ for k,x in enumerate(xs):
         ncas, nelecas = (6,8)
         mycas = mcscf.CASCI(mf, 6, 4)
         e, civec = cisolver.kernel(nelec=mol.nelec)
-        print('E = %.12f  2S+1 = %.7f' %(e, cisolver.spin_square(civec, mf.mo_coeff[0].shape[1], mol.nelec)[1]))
+        print('E = %.12f  2S+1 = %.7f' %(e, cisolver.spin_square(civec, mf.mo_coeff.shape[1], mol.nelec)[1]))
         EFCI[k,i]=cisolver.kernel(verbose=0,nelec=(3,3))[0]
         #ECAS[k,i]=mycas.kernel(verbose=0)[0]
     print(EFCI[k,0])

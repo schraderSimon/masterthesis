@@ -45,13 +45,14 @@ def construct_pyscf_system_rhf_ref(
     molecule,
     basis="cc-pvdz",
     add_spin=True,
-    anti_symmetrize=True,
+    anti_symmetrize=False,
     np=None,
     verbose=False,
     charge=0,
     cart=False,
     reference_state=None,
     mix_states=False,
+    return_C=False,
     **kwargs,
 ):
     """Convenience function setting up a closed-shell atom or a molecule from
@@ -156,7 +157,12 @@ def construct_pyscf_system_rhf_ref(
 
     system = SpatialOrbitalSystem(n, bs)
     system.change_basis(C)
-
+    if return_C:
+        return (
+            system.construct_general_orbital_system(anti_symmetrize=anti_symmetrize)
+            if add_spin
+            else system
+        ), C
     return (
         system.construct_general_orbital_system(anti_symmetrize=anti_symmetrize)
         if add_spin

@@ -1,20 +1,16 @@
-from pyscf import gto, scf, ao2mo, fci, mcscf
 import numpy as np
 import matplotlib.pyplot as plt
-from pyscf import gto, cc,scf, ao2mo,fci
+from pyscf import gto, cc,scf, ao2mo,fci, mcscf
+import scipy
 np.set_printoptions(linewidth=300,precision=10,suppress=True)
 from scipy.linalg import block_diag, eig, orth
 from numba import jit
-from matrix_operations import *
-from helper_functions import *
 from scipy.optimize import minimize, root,newton
 from qiskit_nature.properties.second_quantization.electronic import ElectronicEnergy, ParticleNumber
 from qiskit_nature.properties.second_quantization.electronic.electronic_structure_driver_result import ElectronicStructureDriverResult
 from qiskit_nature.properties.second_quantization.electronic.bases import ElectronicBasis, ElectronicBasisTransform
 from qiskit.opflow.list_ops import ListOp
 from qiskit_nature.properties import GroupedProperty
-import numpy as np
-import matplotlib.pyplot as plt
 from qiskit.algorithms import NumPyEigensolver,VQE
 #from qiskit.aqua.algorithms import VQE
 from qiskit_nature.properties.second_quantization.electronic.integrals import (
@@ -25,7 +21,7 @@ from qiskit_nature.properties.second_quantization.electronic.integrals import (
 )
 from qiskit_nature.properties.second_quantization.electronic.bases import ElectronicBasis
 from qiskit import Aer, transpile
-from qiskit.providers.aer import AerSimulator
+from qiskit.providers.aer import AerSimulator, QasmSimulator
 
 from qiskit.algorithms.optimizers import *
 from qiskit_nature.circuit.library import UCC,UCCSD, HartreeFock, PUCCD, SUCCD
@@ -46,11 +42,12 @@ from qiskit.opflow.primitive_ops import Z2Symmetries, PauliOp
 from scipy.io import loadmat, savemat
 import sys
 import warnings
+import openfermion, cirq
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 def orthogonal_procrustes(mo_new,reference_mo):
-    A=reference_mo.T
+    A=reference_mo
     B=mo_new.T
-    M=B@A.T
+    M=B@A
     U,s,Vt=scipy.linalg.svd(M)
     return U@Vt, 0
 
@@ -253,7 +250,7 @@ def UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitC
         reps=reps,
         generalized=generalized,
     )
-    init_pt=0.02*(np.random.rand(len(var_form.parameters))-0.5)
+    init_pt=(np.random.rand(len(var_form.parameters))-0.5)
     return var_form, init_pt
 def SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None,generalized=False,include_singles=True):
     if initial_state is None:
@@ -271,7 +268,7 @@ def SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=Qubit
         generalized=generalized,
         include_singles=(include_singles,include_singles)
     )
-    init_pt=0.02*(np.random.rand(len(var_form.parameters))-0.5)
+    init_pt=0.1*(np.random.rand(len(var_form.parameters))-0.5)
     return var_form, init_pt
 
 def UPCCSD_excitation_generator(num_particles,num_spin_orbitals):

@@ -1,46 +1,60 @@
 from measure_overlap import *
-
 def molecule(x):
     return "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x)
 from qiskit.circuit import ParameterVector
 from qiskit.quantum_info import Statevector
 from optimparallel import minimize_parallel
-"""
+import dask
 def multi_run_wrapper(args):
    return cost_function(*args)
 
-def cost_function(x,previous_states,ansatz,vqe,qubit_hamiltonian):
-    energy=vqe_cost=vqe.get_energy_evaluation(qubit_hamiltonian)(x)
-    print("Energy: %f"%energy)
+def cost_function(x,previous_states,ansatz,qubit_hamiltonian,printing=True):
+    energy=vqe_cost(x)
     overlapSquared=0
     price=0
     stateVec=Statevector(ansatz.assign_parameters(x))
     for i in range(len(previous_states)):
         ovlp=stateVec.inner(previous_states[i])
-        price+=abs(ovlp)**2*overlap_params[i]
+        price+=abs(ovlp)**8*overlap_params[i]
+    if printing:
+        print("Energy %f, price: %f"%(energy,price))
     energy+=price
-    print("Price: %f"%price)
+    del stateVec
     return energy
-def derivative_function(x,previous_states,ansatz,vqe,qubit_hamiltonian):
-    zero_pred=cost_function(x,previous_states,ansatz,vqe,qubit_hamiltonian)
+def derivative_function(x,previous_states,ansatz,qubit_hamiltonian):
+    global daskThrottle
+    global client
+
+    if daskThrottle==0:
+        client=Client()
+    if daskThrottle%7==6:
+        client.close()
+        client=Client()
     derivparams = []
-    delta=1e-8
+    delta=1.5*1e-8
+    copy = np.array(x)
+    derivparams.append(copy)
     for i in range(len(x)):
         copy = np.array(x)
         copy[i] += delta
         derivparams.append(copy)
-    data=[[derivparams[i],previous_states,ansatz,vqe,qubit_hamiltonian] for i in range(len(x))]
-    results=pool.map(multi_run_wrapper, data)
-    derivs = np.array([ (r - zero_pred)/delta for r in results ])
+    data=[[derivparams[i],previous_states,ansatz,qubit_hamiltonian,False] for i in range(len(x)+1)]
+
+    futures=client.map(multi_run_wrapper, data)
+    results=client.gather(futures)
+    del futures
+    derivs = np.array([ (r - results[0])/delta for r in results[1:]])
+    del results
+    del data
+    daskThrottle+=1
     return derivs
 
 def VQCES_algorithm_parallel(qubit_hamiltonian,prev_params,previous_unitaries,overlap_params,ansatz,initial_point,nuc_rep,num_qubits,qi,method="BFGS"):
     previous_states=[]
-    vqe = VQE(ansatz=ansatz,include_custom=True,quantum_instance=qi)
     for unitary in previous_unitaries:
         previous_states.append(Statevector(unitary))
     print("Running VQCES_algorithm")
-    res=minimize(cost_function, initial_point,args=(previous_states,ansatz,vqe,qubit_hamiltonian),jac=derivative_function,method="BFGS")
+    res=minimize(cost_function, initial_point,args=(previous_states,ansatz,qubit_hamiltonian),jac=derivative_function,options={"maxiter":100},method="BFGS")
     print("Done VQCES_algorithm")
     best_unitary=ansatz.assign_parameters(res.x)
     state=CircuitStateFn(best_unitary)
@@ -50,42 +64,12 @@ def VQCES_algorithm_parallel(qubit_hamiltonian,prev_params,previous_unitaries,ov
     sampler = CircuitSampler(qi).convert(expectation)
     energy=sampler.eval()
     return best_unitary, energy, res.x
-"""
-def VQCES_algorithm(qubit_hamiltonian,prev_params,previous_unitaries,overlap_params,ansatz,initial_point,nuc_rep,num_qubits,qi,method="BFGS"):
-    previous_states=[]
-    vqe = VQE(ansatz=ansatz,include_custom=True,quantum_instance=qi)
-    vqe_cost=vqe.get_energy_evaluation(qubit_hamiltonian)
-    for unitary in previous_unitaries:
-        previous_states.append(Statevector(unitary))
-    def cost_function(x):
-        energy=vqe_cost(x)
-        overlapSquared=0
-        price=0
-        stateVec=Statevector(ansatz.assign_parameters(x))
-        for i in range(len(prev_params)):
-            ovlp=stateVec.inner(previous_states[i])
-            price+=abs(ovlp)**2*overlap_params[i]
-        energy+=price
-        print(price)
-        return energy
-    print("Running VQCES_algorithm")
-    res=minimize(cost_function, initial_point,method="BFGS")
-    print("Done VQCES_algorithm")
-    best_unitary=ansatz.assign_parameters(res.x)
-    state=CircuitStateFn(best_unitary)
-    energy_measurement=qubit_hamiltonian
-    measurable_expression = StateFn(energy_measurement, is_measurement=True).compose(state)
-    expectation = AerPauliExpectation().convert(measurable_expression)
-    sampler = CircuitSampler(qi).convert(expectation)
-    energy=sampler.eval()
-    return best_unitary, energy, res.x
-import multiprocessing
-from itertools import repeat
-
 from dask.distributed import Client
 if __name__=="__main__":
+    global daskThrottle
+    daskThrottle=0
     basis="STO-6G"
-    exc = Client()
+    client = Client()
     ref_x=2
     mol = mol = gto.M(atom=molecule(ref_x), basis=basis,unit="Bohr")
     mol.build()
@@ -101,7 +85,7 @@ if __name__=="__main__":
     E_k2=np.zeros(len(sample_x))
     backend = QasmSimulator(method='statevector')
 
-    backend.set_options(executor=exc, max_job_size=1,statevector_parallel_threshold=7,statevector_sample_measure_opt=7)
+    #backend.set_options(executor=exc, max_job_size=1,statevector_parallel_threshold=7,statevector_sample_measure_opt=7)
     seed=np.random.randint(100000)
     qi = QuantumInstance(backend=backend, seed_simulator=seed, seed_transpiler=seed)
 
@@ -111,7 +95,6 @@ if __name__=="__main__":
     tapering_value=[1,1,1]
     qubit_converter_symmetry=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True,z2symmetry_reduction=tapering_value)
     optimal_params=None
-    #pool=multiprocessing.Pool(7)
     energies=np.zeros(len(sample_x))
     E_exact=np.zeros(len(sample_x))
     active_space=[1,2,3,4,5,6]
@@ -129,7 +112,9 @@ if __name__=="__main__":
         e_exact=np.real(result.eigenvalues[0]+nuc_rep)
         E_exact[k]=e_exact
         ansatz,initial_point=UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter_symmetry,reps=2,generalized=False)
-        unitary,energy,optimal_params=VQCES_algorithm(qubit_hamiltonian,params,previous_unitaries,overlap_params,ansatz,initial_point,nuc_rep,num_qubits,qi,method="BFGS")
+        vqe = VQE(ansatz=ansatz,include_custom=True,quantum_instance=qi)
+        vqe_cost=vqe.get_energy_evaluation(qubit_hamiltonian)
+        unitary,energy,optimal_params=VQCES_algorithm_parallel(qubit_hamiltonian,params,previous_unitaries,overlap_params,ansatz,initial_point,nuc_rep,num_qubits,qi,method="BFGS")
         energy+=nuc_rep
         previous_unitaries.append(unitary)
         params.append(optimal_params)
@@ -138,4 +123,4 @@ if __name__=="__main__":
     dicterino={}
     dicterino["xvals"]=sample_x
     dicterino["UCC_2"]=params
-    savemat("BeH2_params_EXCITED_UCC2.mat",dicterino)
+    savemat("BeH2_params_EXCITED_UCC2_power8_overlapParam3.mat",dicterino)

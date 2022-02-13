@@ -19,10 +19,11 @@ from qiskit_nature.properties.second_quantization.electronic.integrals import (
     TwoBodyElectronicIntegrals,
     IntegralProperty,
 )
+import openfermion, cirq
 from qiskit_nature.properties.second_quantization.electronic.bases import ElectronicBasis
 from qiskit import Aer, transpile
 from qiskit.providers.aer import AerSimulator, QasmSimulator
-
+from qiskit.extensions import Initialize
 from qiskit.algorithms.optimizers import *
 from qiskit_nature.circuit.library import UCC,UCCSD, HartreeFock, PUCCD, SUCCD
 from qiskit.circuit.library import EfficientSU2, QAOAAnsatz
@@ -422,17 +423,18 @@ def find_symmetry(molecule,x,qi,qubit_converter_nosymmetry,active_space,nelec,ba
     minimal=int(np.argmin(vals))
     tapering_value=get_tapering_value(minimal,len(qubit_op_new))
     return tapering_value
-def optimize_stepwise(num_particles,num_spin_orbitals,num_qubits,qubit_converter,hamiltonian,ansatz_func,ansatz_0,optimizer,qi,include_custom=True,k=3,initial_point=None):
-    #k=1
-    ansatz,initpoint=ansatz_func(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter,reps=1)
-    unitary,energy,optimal_params=get_unitary(hamiltonian,ansatz,optimizer,qi,include_custom=True,initial_point=initpoint,nuc_rep=nuc_rep)
-    print("i=0: %f"%energy)
-    for i in range(2,k+1):
-        ansatz,trash=ansatz_func(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter,reps=i)
-        initial_point=np.concatenate([optimal_params,20*0.05*(np.random.rand(len(initpoint))-0.5)])
-        unitary,energy,optimal_params=get_unitary(hamiltonian,ansatz,optimizer,qi,include_custom=True,initial_point=initial_point,nuc_rep=nuc_rep)
-        print("i=%d: %f"%(i,energy))
     return unitary,energy,optimal_params
+def get_transformation_circuit(R,active_space,nelec):
+    n_qubits=len(active_space)
+    qubits = cirq.LineQubit.range(n_qubits)
+    circuit = cirq.Circuit(openfermion.bogoliubov_transform(qubits,R))
+    circuit_qasm=circuit.to_qasm()
+    outfile=open("qasm_temp.txt","w")
+    outfile.write(circuit_qasm)
+    outfile.close()
+    circuit_qi=QuantumCircuit.from_qasm_file("qasm_temp.txt")
+    return circuit_to_gate(transpile(circuit_qi,optimization_level=3))
+
 if __name__=="__main__":
     basis="STO-6G"
     ref_x=2

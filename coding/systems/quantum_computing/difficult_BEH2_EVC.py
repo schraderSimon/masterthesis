@@ -3,7 +3,6 @@ from pyscf import gto, scf, ao2mo, fci, mcscf
 import numpy as np
 import matplotlib.pyplot as plt
 from pyscf import gto, cc,scf, ao2mo,fci
-import openfermion, cirq
 
 np.set_printoptions(linewidth=300,precision=10,suppress=True)
 def molecule(x):
@@ -83,43 +82,6 @@ qubit_hamiltonian=qubit_converter.convert(hamiltonian,num_particles=num_particle
 #qubit_hamiltonian=qubit_hamiltonian.reduce()
 print(qubit_hamiltonian)
 num_qubits=qubit_hamiltonian.num_qubits
-
-
-def get_transformation_circuit(R,active_space,nelec):
-    n_qubits=len(active_space)
-    qubits = cirq.LineQubit.range(n_qubits)
-    circuit = cirq.Circuit(openfermion.bogoliubov_transform(qubits,R))
-    circuit_qasm=circuit.to_qasm()
-    outfile=open("qasm_temp.txt","w")
-    outfile.write(circuit_qasm)
-    outfile.close()
-    circuit_qi=QuantumCircuit.from_qasm_file("qasm_temp.txt")
-    return circuit_to_gate(transpile(circuit_qi,optimization_level=3))
-###
-"""
-sample_x_val=3
-idx = (np.abs(xvals - sample_x_val)).argmin()
-x=xvals[idx]
-print(x)
-UCC_2_param=UCC_2_params[idx]
-UCC_2_ansatz_f,initial_point=UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=qubit_converter,reps=1,generalized=False)
-UCC_2_ansatz=UCC_2_ansatz_f.assign_parameters(UCC_2_param)
-mo_coeff=mo_coeff_min[idx]
-hamiltonian, num_particles,num_spin_orbitals, nuc_rep,newGroup=get_basis_Hamiltonian(molecule,x,qi,mo_coeff,basis=basis,active_space=active_space,nelec=nelec,symmetry='C2v',irreps=irreps[k])
-state=CircuitStateFn(UCC_2_ansatz)
-qubit_hamiltonian=qubit_converter.convert(hamiltonian).reduce()
-measurable_expression = StateFn(qubit_hamiltonian, is_measurement=True).compose(state)
-expectation = AerPauliExpectation().convert(measurable_expression)
-sampler = CircuitSampler(qi).convert(expectation)
-value=sampler.eval()
-print("Energy at x=3: %f"%(value+nuc_rep))
-from qiskit.quantum_info import Statevector
-out=Statevector(UCC_2_ansatz)
-for k,elem in enumerate(out):
-    if abs(elem)>1e-6:
-        print(format(k,"b").zfill(num_spin_orbitals), " ", np.real(elem))
-"""
-###
 for k,sample_x_val in enumerate(sample_x): #Get circuits
     print("Baemp")
     idx = (np.abs(xvals - sample_x_val)).argmin()

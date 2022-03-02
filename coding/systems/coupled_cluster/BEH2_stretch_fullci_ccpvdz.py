@@ -1,14 +1,10 @@
 from rccsd_gs import *
-import numpy as np
-import matplotlib.pyplot as plt
-from pyscf import gto, cc,scf, ao2mo,fci
 import sys
-np.set_printoptions(linewidth=300,precision=10,suppress=True)
-from scipy.linalg import block_diag, eig, orth
+sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+from func_lib import *
 from numba import jit
 from matrix_operations import *
-from helper_functions import *
-from mpl_toolkits.axes_grid1 import ImageGrid
+from helper_functions import *from mpl_toolkits.axes_grid1 import ImageGrid
 basis = 'cc-pVDZ'
 basis_set = bse.get_basis(basis, fmt='nwchem')
 charge = 0

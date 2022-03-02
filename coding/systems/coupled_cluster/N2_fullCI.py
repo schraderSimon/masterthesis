@@ -1,10 +1,7 @@
-from pyscf import gto, cc,scf, ao2mo,fci
 from rccsd_gs import *
-import numpy as np
-import matplotlib.pyplot as plt
 import sys
-np.set_printoptions(linewidth=300,precision=10,suppress=True)
-from scipy.linalg import block_diag, eig, orth
+sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+from func_lib import *
 from numba import jit
 from matrix_operations import *
 from helper_functions import *

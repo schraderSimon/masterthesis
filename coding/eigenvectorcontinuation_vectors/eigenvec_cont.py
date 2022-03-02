@@ -1,6 +1,43 @@
 import numpy as np
 import sys
 import matplotlib.pyplot as plt
+np.set_printoptions(linewidth=200,precision=5,suppress=True)
+def generalized_eigenvector(T,S,threshold=1e-8,symmetric=True):
+    """Solves the generalized eigenvector problem.
+    Input:
+    T: The symmetric matrix
+    S: The overlap matrix
+    symmetric: Wether the matrices T, S are symmetric
+    Returns: The lowest eigenvalue & eigenvector
+    """
+    ###The purpose of this procedure here is to remove all very small eigenvalues of the overlap matrix for stability
+    s, U=np.linalg.eigh(S) #Diagonalize S (overlap matrix, Hermitian by definition)
+    U=np.fliplr(U)
+    s=s[::-1] #Order from largest to lowest; S is an overlap matrix, hence we won't
+    s=s[s>threshold] #Keep only largest eigenvalues
+    spowerminushalf=s**(-0.5) #Take s
+    snew=np.zeros((len(U),len(spowerminushalf)))
+    sold=np.diag(spowerminushalf)
+    snew[:len(s),:]=sold
+    s=snew
+
+
+    ###Canonical orthogonalization
+    X=U@s
+    Tstrek=X.T@T@X
+    if symmetric:
+        epsilon, Cstrek = np.linalg.eigh(Tstrek)
+    else:
+        epsilon, Cstrek = np.linalg.eig(Tstrek)
+    idx = epsilon.argsort()[::1] #Order by size (non-absolute)
+    epsilon = epsilon[idx]
+    Cstrek = Cstrek[:,idx]
+    C=X@Cstrek
+    lowest_eigenvalue=epsilon[0]
+    lowest_eigenvector=C[:,0]
+    return lowest_eigenvalue,lowest_eigenvector
+
+
 def eigenvec_cont(x,M,solv):
     """
     Implements the eigenvector continuation algorithm for the lowest eigenvalue.
@@ -25,21 +62,12 @@ def eigenvec_cont(x,M,solv):
         for j in range(len(solv)):
             S[i,j]=solv[i].T@solv[j]
             T[i,j]=solv[i]@mv_prod[j]
+    if len(solv)==5:
+        print(S)
+        s,U=np.linalg.eigh(S)
+        from numpyarray_to_latex import to_ltx
 
-    """Perform Løwdin orthogonalization of the basis"""
-    s, U=np.linalg.eigh(S)
-    s=np.diag(s)
-    X=U@np.linalg.inv(np.sqrt(s))@U.T
-    Tstrek=X.T@T@X
-    epsilon, Cstrek = np.linalg.eigh(Tstrek)
-    idx = epsilon.argsort()[::1]
-    epsilon = epsilon[idx]
-    Cstrek = Cstrek[:,idx]
-    C=X@Cstrek
-
-    lowest_eigenvalue=epsilon[0]
-    lowest_eigenvector=C[:,0]
-    return lowest_eigenvalue,lowest_eigenvector
+    return generalized_eigenvector(T,S,threshold=1e-6,symmetric=True)
 def find_lowest_eigenvectors(matrix,xarr,num_levels=1,symmetric=False):
     """For each x in xarr, returns the lowest eigenvalue and eigenvector of a matrix function M(x)"""
     eigenvectors=np.zeros((len(xarr)*num_levels,matrix(0).shape[0])) #

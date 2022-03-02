@@ -1,46 +1,13 @@
-import warnings
-import scipy
-import numpy as np
+import sys
+sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+from func_lib import *
 from quantum_systems import (
     BasisSet,
     SpatialOrbitalSystem,
     GeneralOrbitalSystem,
     QuantumSystem,
 )
-def orthogonal_procrustes(mo_new,reference_mo):
-    A=reference_mo.T
-    B=mo_new.T
-    M=B@A.T
-    U,s,Vt=scipy.linalg.svd(M)
-    return U@Vt, 0
-def localize_procrustes(mol,mo_coeff,mo_occ,ref_mo_coeff,mix_states=False):
-    """Performs the orthgogonal procrustes on the occupied and the unoccupied molecular orbitals.
-    ref_mo_coeff is the mo_coefs of the reference state.
-    If "mix_states" is True, then mixing of occupied and unoccupied MO's is allowed.
-    """
-    if mix_states==False:
-        mo=mo_coeff[:,mo_occ>0]
-        premo=ref_mo_coeff[:,mo_occ>0]
-        R,scale=orthogonal_procrustes(mo,premo)
-        mo=mo@R
-
-        mo_coeff[:,mo_occ>0]=np.array(mo)
-        mo_unocc=mo_coeff[:,mo_occ<=0]
-        premo=ref_mo_coeff[:,mo_occ<=0]
-        R,scale=orthogonal_procrustes(mo_unocc,premo)
-        mo_unocc=mo_unocc@R
-
-        mo_coeff[:,mo_occ<=0]=np.array(mo_unocc)
-
-
-    elif mix_states==True:
-        mo=mo_coeff[:,:]
-        premo=ref_mo_coeff[:,:]
-        R,scale=orthogonal_procrustes(mo,premo)
-        mo=mo@R
-
-        mo_coeff[:,:]=np.array(mo)
-    return mo_coeff
+import pyscf
 def construct_pyscf_system_rhf_ref(
     molecule,
     basis="cc-pvdz",
@@ -53,6 +20,7 @@ def construct_pyscf_system_rhf_ref(
     reference_state=None,
     mix_states=False,
     return_C=False,
+    weights=None,
     **kwargs,
 ):
     """Convenience function setting up a closed-shell atom or a molecule from
@@ -140,7 +108,7 @@ def construct_pyscf_system_rhf_ref(
     if reference_state is None:
         C = np.asarray(hf.mo_coeff)
     else:
-        C=localize_procrustes(mol,hf.mo_coeff,hf.mo_occ,ref_mo_coeff=reference_state,mix_states=mix_states)
+        C=localize_procrustes(mol,hf.mo_coeff,hf.mo_occ,ref_mo_coeff=reference_state,mix_states=mix_states,weights=weights)
     h = pyscf.scf.hf.get_hcore(mol)
     s = mol.intor_symmetric("int1e_ovlp")
     u = mol.intor("int2e").reshape(l, l, l, l).transpose(0, 2, 1, 3)
@@ -163,6 +131,85 @@ def construct_pyscf_system_rhf_ref(
             if add_spin
             else system
         ), C
+    return (
+        system.construct_general_orbital_system(anti_symmetrize=anti_symmetrize)
+        if add_spin
+        else system
+    )
+def construct_pyscf_system_rhf_natorb(
+    molecule,
+    basis="cc-pvdz",
+    add_spin=True,
+    anti_symmetrize=False,
+    np=None,
+    verbose=False,
+    charge=0,
+    cart=False,
+    reference_natorbs=None,
+    reference_noons=None,
+    reference_overlap=None,
+    return_natorbs=True,
+    weights=None,
+    **kwargs,
+):
+    if np is None:
+        import numpy as np
+    mol = pyscf.gto.Mole()
+    mol.unit = "bohr"
+    mol.charge = charge
+    mol.cart = cart
+    mol.build(atom=molecule, basis=basis, **kwargs)
+    nuclear_repulsion_energy = mol.energy_nuc()
+
+    n = mol.nelectron
+    assert (
+        n % 2 == 0
+    ), "We require closed shell, with an even number of particles"
+
+    l = mol.nao
+
+    hf = pyscf.scf.RHF(mol)
+    hf_energy = hf.kernel()
+
+    if not hf.converged:
+        warnings.warn("RHF calculation did not converge")
+
+    if verbose:
+        print(f"RHF energy: {hf.e_tot}")
+
+    charges = mol.atom_charges()
+    coords = mol.atom_coords()
+    nuc_charge_center = np.einsum("z,zx->x", charges, coords) / charges.sum()
+    mol.set_common_orig_(nuc_charge_center)
+    if reference_noons is None:
+        mymp=pyscf.mp.RMP2(hf).run()
+        new_noons,C=pyscf.mcscf.addons.make_natural_orbitals(mymp)
+    else:
+        mymp=pyscf.mp.RMP2(hf).run()
+        noons,natorbs=pyscf.mcscf.addons.make_natural_orbitals(mymp)
+        new_noons,C=similiarize_natural_orbitals(reference_noons,reference_natorbs,noons,natorbs,mol.nelec,mol.intor("int1e_ovlp"),reference_overlap)
+    h = pyscf.scf.hf.get_hcore(mol)
+    s = mol.intor_symmetric("int1e_ovlp")
+    u = mol.intor("int2e").reshape(l, l, l, l).transpose(0, 2, 1, 3)
+    position = mol.intor("int1e_r").reshape(3, l, l)
+
+    bs = BasisSet(l, dim=3, np=np)
+    bs.h = h
+    bs.s = s
+    bs.u = u
+    bs.nuclear_repulsion_energy = nuclear_repulsion_energy
+    bs.particle_charge = -1
+    bs.position = position
+    bs.change_module(np=np)
+
+    system = SpatialOrbitalSystem(n, bs)
+    system.change_basis(C)
+    if return_natorbs:
+        return (
+            system.construct_general_orbital_system(anti_symmetrize=anti_symmetrize)
+            if add_spin
+            else system
+        ), C, new_noons, mol.intor("int1e_ovlp")
     return (
         system.construct_general_orbital_system(anti_symmetrize=anti_symmetrize)
         if add_spin

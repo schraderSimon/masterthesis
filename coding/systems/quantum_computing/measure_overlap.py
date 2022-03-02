@@ -19,11 +19,11 @@ from qiskit_nature.properties.second_quantization.electronic.integrals import (
     TwoBodyElectronicIntegrals,
     IntegralProperty,
 )
+from qiskit.extensions import UnitaryGate, Initialize
 import openfermion, cirq
 from qiskit_nature.properties.second_quantization.electronic.bases import ElectronicBasis
-from qiskit import Aer, transpile
+from qiskit import Aer, transpile, execute
 from qiskit.providers.aer import AerSimulator, QasmSimulator
-from qiskit.extensions import Initialize
 from qiskit.algorithms.optimizers import *
 from qiskit_nature.circuit.library import UCC,UCCSD, HartreeFock, PUCCD, SUCCD
 from qiskit.circuit.library import EfficientSU2, QAOAAnsatz
@@ -44,7 +44,92 @@ from scipy.io import loadmat, savemat
 import sys
 import warnings
 import openfermion, cirq
+from qiskit.quantum_info.operators import Operator
+from qiskit.quantum_info import Statevector
+from pyscf import gto, scf, ao2mo, fci, mcscf
+import numpy as np
+import matplotlib.pyplot as plt
+from pyscf import gto, cc,scf, ao2mo,fci
+np.set_printoptions(linewidth=300,precision=10,suppress=True)
+from scipy.linalg import block_diag, eig, orth
+from numba import jit
+from matrix_operations import *
+from helper_functions import *
+from scipy.optimize import minimize, root,newton
+from qiskit_nature.properties.second_quantization.electronic import ElectronicEnergy, ParticleNumber
+from qiskit_nature.properties.second_quantization.electronic.electronic_structure_driver_result import ElectronicStructureDriverResult
+from qiskit_nature.properties.second_quantization.electronic.bases import ElectronicBasis, ElectronicBasisTransform
+
+from qiskit_nature.properties import GroupedProperty
+import numpy as np
+import matplotlib.pyplot as plt
+from qiskit.algorithms import NumPyEigensolver,VQE
+#from qiskit.aqua.algorithms import VQE
+from qiskit_nature.properties.second_quantization.electronic.integrals import (
+    ElectronicIntegrals,
+    OneBodyElectronicIntegrals,
+    TwoBodyElectronicIntegrals,
+    IntegralProperty,
+)
+from qiskit_nature.properties.second_quantization.electronic.bases import ElectronicBasis
+from qiskit import Aer, transpile
+from qiskit.providers.aer import AerSimulator
+
+from qiskit.algorithms.optimizers import *
+from qiskit_nature.circuit.library import UCC,UCCSD, HartreeFock, PUCCD
+from qiskit.circuit.library import EfficientSU2, QAOAAnsatz
+from qiskit_nature.algorithms import VQEUCCFactory
+from qiskit_nature.converters.second_quantization import QubitConverter
+from qiskit_nature.mappers.second_quantization import JordanWignerMapper, ParityMapper,BravyiKitaevMapper, BravyiKitaevSuperFastMapper
+from qiskit.utils import QuantumInstance
+from qiskit.quantum_info.operators import Operator, Pauli
+from qiskit.opflow import X, Y, Z, I
+from qiskit.opflow import CircuitStateFn, StateFn, TensoredOp
+from qiskit.opflow import PauliExpectation, CircuitSampler, StateFn, AerPauliExpectation, MatrixExpectation
+from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
+from qiskit.converters import circuit_to_gate
+from qiskit.tools.visualization import circuit_drawer
+from qiskit_nature.transformers.second_quantization.electronic import ActiveSpaceTransformer, FreezeCoreTransformer
+from qiskit.opflow.primitive_ops import Z2Symmetries
+import sys
+import warnings
+
 warnings.filterwarnings('ignore', category=DeprecationWarning)
+def generalized_eigenvector(T,S,threshold=1e-8,symmetric=True):
+    """Solves the generalized eigenvector problem.
+    Input:
+    T: The symmetric matrix
+    S: The overlap matrix
+    symmetric: Wether the matrices T, S are symmetric
+    Returns: The lowest eigenvalue & eigenvector
+    """
+    ###The purpose of this procedure here is to remove all very small eigenvalues of the overlap matrix for stability
+    s, U=np.linalg.eigh(S) #Diagonalize S (overlap matrix, Hermitian by definition)
+    U=np.fliplr(U)
+    s=s[::-1] #Order from largest to lowest; S is an overlap matrix, hence we won't
+    s=s[s>threshold] #Keep only largest eigenvalues
+    spowerminushalf=s**(-0.5) #Take s
+    snew=np.zeros((len(U),len(spowerminushalf)))
+    sold=np.diag(spowerminushalf)
+    snew[:len(s),:]=sold
+    s=snew
+
+
+    ###Canonical orthogonalization
+    X=U@s
+    Tstrek=X.T@T@X
+    if symmetric:
+        epsilon, Cstrek = np.linalg.eigh(Tstrek)
+    else:
+        epsilon, Cstrek = np.linalg.eig(Tstrek)
+    idx = epsilon.argsort()[::1] #Order by size (non-absolute)
+    epsilon = epsilon[idx]
+    Cstrek = Cstrek[:,idx]
+    C=X@Cstrek
+    lowest_eigenvalue=epsilon[0]
+    lowest_eigenvector=C[:,0]
+    return lowest_eigenvalue,lowest_eigenvector
+
 def orthogonal_procrustes(mo_new,reference_mo):
     A=reference_mo
     B=mo_new.T
@@ -311,6 +396,129 @@ def kUpUCCSD_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=Q
     """
     init_pt=10*0.1*(np.random.rand(len(var_form.parameters))-0.5)
     return var_form, init_pt
+get_bin = lambda x, n: format(x, 'b').zfill(n)
+def standard_LCU(unitaries,parameters,num_qubits,backend=None):
+    number_ancillas=int(np.ceil(np.log2(len(unitaries))))
+    number_circuit_qubits=number_ancillas+num_qubits
+    qc=QuantumCircuit()
+    qr=QuantumRegister(number_circuit_qubits,"q")
+    cr=ClassicalRegister(number_ancillas,"c")
+    qc.add_register(qr)
+    qc.add_register(cr)
+    V0=np.pad(np.sqrt(parameters),(0,int(2**number_ancillas-len(parameters))))
+    V0=V0/np.linalg.norm(V0)
+    c=np.sum(V0**2)
+    XL=np.random.rand(len(V0),len(V0))
+    XL[:,0]=V0
+    V,R=np.linalg.qr(XL)
+    if R[0,0]<0:
+        V[:,0]=-V[:,0]
+    V_gate=UnitaryGate(Operator(V))
+    controlled_unitaries=[]
+    for k in range(len(unitaries)):
+        controlled_unitaries.append(unitaries[k].control(number_ancillas,ctrl_state=get_bin(k,number_ancillas)[::1]))
+    qc.append(V_gate,qargs=list(np.arange(0,number_ancillas))[::1])
+    print(Statevector(qc))
+    print(Statevector(qc).probabilities_dict())
+    for k,uni in enumerate(controlled_unitaries):
+        qc.append(uni,qr)
+    print(Statevector(qc))
+    print(Statevector(qc).probabilities_dict())
+    qc.append(V_gate.inverse(),qargs=list(np.arange(0,number_ancillas))[::1])
+    print(Statevector(qc))
+    print(Statevector(qc).probabilities_dict())
+    qc.measure(list(np.arange(0,number_ancillas)),list(np.arange(0,number_ancillas)))
+    qc.draw(output="mpl")
+    plt.show()
+    job = execute(qc, backend, shots=10000)
+    result = job.result()
+    outputstate = result.get_statevector(qc)
+    print(result.get_counts())
+    c=np.sqrt(result.get_counts()["0"])
+    print("c: %f"%c)
+    print(outputstate)
+    print(Statevector(outputstate).probabilities_dict())#.draw(output="repr")
+def LCU_2(left_unitaries,right_unitaries,left_parameters,right_parameters,num_qubits,backend=None):
+    number_ancillas=int(np.ceil(np.log2(len(left_unitaries))))
+    number_circuit_qubits=number_ancillas+num_qubits+1
+    qc=QuantumCircuit()
+    qr=QuantumRegister(number_circuit_qubits,"q")
+    cr=ClassicalRegister(number_ancillas*2,"c")
+    qc.add_register(qr)
+    qc.add_register(cr)
+    controlled_unitaries_left=[]
+    controlled_unitaries_right=[]
+    V_L0=np.pad(np.sqrt(left_parameters),(0,int(2**number_ancillas-len(left_parameters))))
+    V_L0=V_L0/np.linalg.norm(V_L0)
+    c1=np.sum(V_L0**2)
+    print(c1)
+    V_R0=np.pad(np.sqrt(right_parameters),(0,int(2**number_ancillas-len(right_parameters))))
+    V_R0=V_R0/np.linalg.norm(V_R0)
+    c2=np.sum(V_R0**2)
+    print(c2)
+    XL=np.random.rand(len(V_L0),len(V_L0))
+    XL[:,0]=V_L0
+    V_L,R=np.linalg.qr(XL)
+    if R[0,0]<0:
+        V_L[:,0]=-V_L[:,0]
+    XR=np.random.rand(len(V_R0),len(V_R0))
+    XR[:,0]=V_R0
+    V_R,R=np.linalg.qr(XR)
+    if R[0,0]<0:
+        V_R[:,0]=-V_R[:,0]
+    V_L_gate=UnitaryGate(Operator(V_L))
+    V_R_gate=UnitaryGate(Operator(V_R))
+    controlled_VL=V_L_gate.control(num_ctrl_qubits=1, label=None, ctrl_state="0")
+    controlled_VR=V_R_gate.control(num_ctrl_qubits=1, label=None, ctrl_state="1")
+    for k,unitary in enumerate(left_unitaries):
+        controlled_unitaries_left.append(unitary.control(number_ancillas+1,ctrl_state=get_bin(k,number_ancillas)+"0"))
+    for k in range(len(right_unitaries)):
+        controlled_unitaries_right.append(right_unitaries[k].control(number_ancillas+1,ctrl_state=get_bin(k,number_ancillas)+"1"))
+    qc.h(0)
+    qc.append(controlled_VL,qargs=list(np.arange(0,number_ancillas+1)))
+
+    for k,uni in enumerate(controlled_unitaries_left):
+        qc.append(uni,qr)
+
+    qc.append(controlled_VL.inverse(),qargs=list(np.arange(0,number_ancillas+1)))
+    qc.measure(list(np.arange(1,number_ancillas+1)),list(np.arange(0,number_ancillas)))
+    qc.append(controlled_VR,qargs=list(np.arange(0,number_ancillas+1)))
+    for k,unitary in enumerate(controlled_unitaries_right):
+        qc.append(unitary,qr)
+
+    qc.append(controlled_VR.inverse(),qargs=list(np.arange(0,number_ancillas+1)))
+
+    qc.measure(list(np.arange(1,number_ancillas+1)),list(np.arange(number_ancillas,2*number_ancillas)))
+    qc.decompose().draw(output="mpl")
+    #plt.show()
+    shots=10000
+    job = execute(qc, backend, shots=shots)
+    result = job.result()
+    print(result.get_counts())
+    p1=0
+    for i in range(2):
+        try:
+            p1+=result.get_counts()["%d0"%i]/shots
+        except KeyError:
+            pass
+    p2=0
+    for i in range(2):
+        try:
+            p2+=result.get_counts()["0%d"%i]/shots/p1
+        except KeyError:
+            pass
+    outputstate = result.get_statevector(qc)
+    overlap_exp=(I^I^X)#+1j*(I^I^Y)
+    matrix=Operator(overlap_exp).data
+    vec=Statevector(outputstate).data
+    print("Overlap is found to be")
+    c1=1/np.sqrt(2*(p1-1/2))
+    c2=1/np.sqrt(2*(p2*p1-1/(2*c1**2)))
+    print(1/(2*c1**2*p1*p2),1/(2*c2**2*p1*p2))
+    print((c1**2+c2**2)/(2*c1*c2)*vec.T@matrix@vec)
+    print(p1*p2*(c1*c2)*vec.T@matrix@vec)
+    print(Statevector(outputstate))
+    print(Statevector(outputstate).probabilities_dict())#.draw(output="repr")
 def get_01_state(unitary1,unitary2,num_qubits,backend=None):
     qc=QuantumCircuit()
     qr=QuantumRegister(num_qubits+1,"q")

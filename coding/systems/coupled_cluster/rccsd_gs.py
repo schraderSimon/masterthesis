@@ -1,18 +1,74 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from qs_ref import construct_pyscf_system_rhf_ref
-from coupled_cluster.rccsd import RCCSD, TDRCCSD
+from qs_ref import *
 import basis_set_exchange as bse
-from pyscf import gto, scf
+from coupled_cluster.rccsd import RCCSD, TDRCCSD
 from coupled_cluster.rccsd import rhs_t
 from coupled_cluster.rccsd import energies as rhs_e
-from scipy.linalg import eig
-import scipy
 from opt_einsum import contract
 from full_cc import orthonormalize_ts, orthonormalize_ts_choice
 from scipy.optimize import minimize, root,newton
-import autograd
-def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="procrustes"):
+
+def setUpsamples_naturalOrbitals(sample_x,molecule_func,basis):
+    t1s=[]
+    t2s=[]
+    l1s=[]
+    l2s=[]
+    sample_energies=[]
+    reference_natorb_list=[]
+    reference_overlap_list=[]
+    reference_noons_list=[]
+    system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_natorb(
+        molecule=molecule_func(*sample_x[0]),
+        basis=basis,
+        add_spin=False,
+        anti_symmetrize=False,
+        reference_natorbs=None,
+        reference_noons=None,
+        reference_overlap=None,
+        return_natorbs=True,
+    )
+    reference_overlap_list.append(S_ref)
+    reference_natorb_list.append(natorbs_ref)
+    reference_noons_list.append(noons_ref)
+    rccsd = RCCSD(system, verbose=False)
+    ground_state_tolerance = 1e-12
+    rccsd.compute_ground_state(
+        t_kwargs=dict(tol=ground_state_tolerance),
+        l_kwargs=dict(tol=ground_state_tolerance),
+    )
+    t, l = rccsd.get_amplitudes()
+    t1s.append(t[0])
+    t2s.append(t[1])
+    l1s.append(l[0])
+    l2s.append(l[1])
+    sample_energies.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+    for x in sample_x[1:]:
+        system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_natorb(
+            molecule=molecule_func(*x),
+            basis=basis,
+            add_spin=False,
+            anti_symmetrize=False,
+            reference_natorbs=natorbs_ref,
+            reference_noons=noons_ref,
+            reference_overlap=S_ref,
+            return_natorbs=True,
+        )
+        reference_overlap_list.append(S_ref)
+        reference_natorb_list.append(natorbs_ref)
+        reference_noons_list.append(noons_ref)
+        rccsd = RCCSD(system, verbose=False)
+        ground_state_tolerance = 5e-15
+        rccsd.compute_ground_state(
+            t_kwargs=dict(tol=ground_state_tolerance),
+            l_kwargs=dict(tol=ground_state_tolerance),
+        )
+        t, l = rccsd.get_amplitudes()
+        t1s.append(t[0])
+        t2s.append(t[1])
+        l1s.append(l[0])
+        l2s.append(l[1])
+        sample_energies.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+    return t1s,t2s,l1s,l2s,sample_energies,reference_natorb_list,reference_overlap_list,reference_noons_list
+def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="procrustes",weights=None):
     t1s=[]
     t2s=[]
     l1s=[]
@@ -25,10 +81,11 @@ def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="
             add_spin=False,
             anti_symmetrize=False,
             reference_state=rhf_mo_ref,
-            mix_states=mix_states
+            mix_states=mix_states,
+            weights=weights
         )
         rccsd = RCCSD(system, verbose=False)
-        ground_state_tolerance = 1e-10
+        ground_state_tolerance = 5e-15
         rccsd.compute_ground_state(
             t_kwargs=dict(tol=ground_state_tolerance),
             l_kwargs=dict(tol=ground_state_tolerance),
@@ -40,12 +97,12 @@ def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="
         l2s.append(l[1])
         sample_energies.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
     return t1s,t2s,l1s,l2s,sample_energies
-def solve_evc(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states=False,run_cc=True,cc_approx=True,type="procrustes"):
+def solve_evc(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,mix_states=False,run_cc=True,cc_approx=True,type=None,tol=3e-8,weights=None):
     """
     x_alphas: The sample geometries inpupt
     molecule: The function which returns the molecule
     basis: The basis set used
-    rhf_mo_ref: The reference state
+    reference_natorbs: The reference state OR the natorbs. Either a matrix or a list
     t1s, t2s, l1s, l2s: The set of CC-coefficients to build the system with
     run_cc: Wether to solve the CC equations as well or not.
     cc_approx: Wether to get an approximative CC state or not
@@ -55,14 +112,20 @@ def solve_evc(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states
     E_ownmethod=[]
     E_diffguess=[]
     E_RHF=[]
-    for x_alpha in x_alphas:
+    for k,x_alpha in enumerate(x_alphas):
+        if isinstance(reference_natorbs,list):
+            ref_state=reference_natorbs[k]
+        else:
+            ref_state=reference_natorbs
         system = construct_pyscf_system_rhf_ref(
             molecule=molecule_func(*x_alpha),
             basis=basis,
             add_spin=False,
             anti_symmetrize=False,
-            reference_state=rhf_mo_ref,
+            reference_state=ref_state,
             mix_states=mix_states,
+            weights=weights
+
         )
         ESCF=system.compute_reference_energy().real
         if run_cc:
@@ -90,19 +153,84 @@ def solve_evc(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states
                 H[i,j]=overlap*exp_energy
                 extra=contract("ia,ai->",l1s[j],t1_error)+contract("ijab,ai,bj->",l2s[j],X1,t1_error)+0.25*contract("ijab,abij->",l2s[j],t2_error)
                 H[i,j]=H[i,j]+extra
-        e,cl,c=eig(scipy.linalg.pinv(S,atol=3e-8)@H,left=True)
+        """
+        e,cl,c=eig(scipy.linalg.pinv(S,atol=tol)@H,left=True)
 
         idx = np.real(e).argsort()
         e = e[idx]
         c = c[:,idx]
         cl = cl[:,idx]
         E_approx.append(np.real(e[0]))
+        """
+        #E_approx.append(schur_lowestEigenValue(H,S))
+        E_approx.append(guptri_Eigenvalue(H,S))
+        print (E_approx[-1],E_CCSD[-1])
         if cc_approx:
             t1own,t2own=best_CC_fit(t1s,t2s,np.real(c[:,0])/np.sum(np.real(c[:,0])))
             own_energy=gccsolver.ccsdenergy(t1own,t2own)+ESCF
             E_ownmethod.append(own_energy)
     return E_CCSD,E_approx,E_diffguess,E_RHF,E_ownmethod
-def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states=False,random_picks=0,type="procrustes",optimal=True):
+def solve_evc_natorb(x_alphas,molecule_func,basis,natorbs,t1s,t2s,l1s,l2s,run_cc=True,cc_approx=True,tol=3e-8):
+    """
+    x_alphas: The sample geometries inpupt
+    molecule: The function which returns the molecule
+    basis: The basis set used
+    rhf_mo_ref: The reference state
+    t1s, t2s, l1s, l2s: The set of CC-coefficients to build the system with
+    run_cc: Wether to solve the CC equations as well or not.
+    cc_approx: Wether to get an approximative CC state or not
+    """
+    E_CCSD=[]
+    E_approx=[]
+    E_ownmethod=[]
+    E_diffguess=[]
+    E_RHF=[]
+    for k,x_alpha in enumerate(x_alphas):
+        system = construct_pyscf_system_rhf_ref(
+            molecule=molecule_func(*x_alpha),
+            basis=basis,
+            add_spin=False,
+            anti_symmetrize=False,
+            reference_state=natorbs[k],
+            mix_states=False,
+            weights=None
+
+        )
+        ESCF=system.compute_reference_energy().real
+        if run_cc:
+            try:
+                rccsd = RCCSD(system, verbose=False)
+                ground_state_tolerance = 1e-10
+                rccsd.compute_ground_state(
+                    t_kwargs=dict(tol=ground_state_tolerance)                )
+                E_CCSD.append(ESCF+rccsd.compute_energy().real)
+            except:
+                E_CCSD.append(np.nan)
+        H=np.zeros((len(t1s),len(t1s)))
+        S=np.zeros((len(t1s),len(t1s)))
+        for i, xi in enumerate(t1s):
+            f = system.construct_fock_matrix(system.h, system.u)
+            t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1s[i], t2s[i], system.o, system.v, np)
+            t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1s[i], t2s[i], system.o, system.v, np)
+            exp_energy=rhs_e.compute_rccsd_ground_state_energy(f, system.u, t1s[i], t2s[i], system.o, system.v, np)+ESCF
+            for j, xj in enumerate(t1s):
+                X1=t1s[i]-t1s[j]
+                X2=t2s[i]-t2s[j]
+                overlap=1+contract("ia,ai->",l1s[j],X1)+0.5*contract("ijab,ai,bj->",l2s[j],X1,X1)+0.25*contract("ijab,abij->",l2s[j],X2)
+                S[i,j]=overlap
+
+                H[i,j]=overlap*exp_energy
+                extra=contract("ia,ai->",l1s[j],t1_error)+contract("ijab,ai,bj->",l2s[j],X1,t1_error)+0.25*contract("ijab,abij->",l2s[j],t2_error)
+                H[i,j]=H[i,j]+extra
+        E_approx.append(guptri_Eigenvalue(H,S))
+        print (E_approx[-1],E_CCSD[-1])
+        if cc_approx:
+            t1own,t2own=best_CC_fit(t1s,t2s,np.real(c[:,0])/np.sum(np.real(c[:,0])))
+            own_energy=gccsolver.ccsdenergy(t1own,t2own)+ESCF
+            E_ownmethod.append(own_energy)
+    return E_CCSD,E_approx,E_diffguess,E_RHF,E_ownmethod
+
+def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states=False,random_picks=0,type="procrustes",optimal=True,weights=None):
     def system_jacobian(system):
         f = system.construct_fock_matrix(system.h, system.u)
         no=system.n
@@ -142,10 +270,10 @@ def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_state
                     removed_t2[picky-lenT1]=flattened_t2[picky-lenT1]
             removed_t1=removed_t1.reshape(t1.shape)
             removed_t2=removed_t2.reshape(t2.shape)
-            #t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np) #Original idea
-            #t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np) #Original idea
-            t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, removed_t1, removed_t2, system.o, system.v, np) #Simens idea
-            t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, removed_t1, removed_t2, system.o, system.v, np) #Simens idea
+            t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np) #Original idea
+            t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np) #Original idea
+            #t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, removed_t1, removed_t2, system.o, system.v, np) #Simens idea
+            #t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, removed_t1, removed_t2, system.o, system.v, np) #Simens idea
             ts=[np.concatenate((t1s[i],t2s[i]),axis=None) for i in range(len(t1s))]
             t_error=np.concatenate((t1_error,t2_error),axis=None)
             projection_errors=np.zeros(len(t1s))
@@ -205,7 +333,8 @@ def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_state
             add_spin=False,
             anti_symmetrize=False,
             reference_state=rhf_mo_ref,
-            mix_states=mix_states
+            mix_states=mix_states,
+            weights=weights
         )
         f = system.construct_fock_matrix(system.h, system.u)
         ESCF=system.compute_reference_energy().real
@@ -235,7 +364,7 @@ def solve_evc2(x_alphas,molecule_func,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_state
     return energy
 
 
-def get_reference_determinant(molecule_func,refx,basis,charge):
+def get_reference_determinant(molecule_func,refx,basis,charge=0):
     mol = gto.Mole()
     mol.unit = "bohr"
     mol.charge = charge
@@ -244,7 +373,27 @@ def get_reference_determinant(molecule_func,refx,basis,charge):
     hf = scf.RHF(mol)
     hf.kernel()
     return np.asarray(hf.mo_coeff)
-
+def get_natural_orbitals(molecule_func,xvals,basis,natorbs_ref,noons_ref,Sref):
+    natorbs_list=[]
+    overlaps_list=[]
+    noons_list=[]
+    for x in xvals:
+        mol = gto.Mole()
+        mol.unit = "bohr"
+        mol.charge = 0
+        mol.cart = False
+        mol.build(atom=molecule_func(*x), basis=basis)
+        hf = scf.RHF(mol)
+        hf.kernel()
+        mymp=mp.RMP2(hf).run()
+        noons,natorbs=mcscf.addons.make_natural_orbitals(mymp)
+        S=mol.intor("int1e_ovlp")
+        noons_ref,natorbs_ref=similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,mol.nelec,S,Sref)
+        natorbs_list.append(natorbs_ref)
+        Sref=S
+        overlaps_list.append(S)
+        noons_list.append(noons)
+    return natorbs_list,noons_list
 # System and basis parameters
 if __name__=="__main__":
     basis = 'cc-pVDZ'
@@ -263,7 +412,7 @@ if __name__=="__main__":
     geom_alphas=[[x] for x in geom_alphas1]
 
     t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
-    energy_simen_random=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,random_picks=0.1,optimal=True,type="procrustes")
+    energy_simen_random=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,random_picks=0.1,optimal=True,type="procrustes",weights=weights)
     E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,run_cc=True,cc_approx=False,type="procrustes")
     plt.plot(geom_alphas1,E_CCSDx,label="CCSD")
     plt.plot(geom_alphas1,E_approx,label="CCSD WF")

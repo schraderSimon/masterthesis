@@ -4,13 +4,13 @@ sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/l
 from func_lib import *
 from numba import jit
 from matrix_operations import *
-from helper_functions import *basis = '6-31G*'
+from helper_functions import *
+
+basis = '6-31G*'
 basis_set = bse.get_basis(basis, fmt='nwchem')
 charge = 0
 molecule=lambda x:  "H 0 0 0; F 0 0 %f"%x
 refx=[1.75]
-print(molecule(*refx))
-reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
 sample_geometry=[np.linspace(1.5,5,6)]#,np.linspace(1.5,3,15),np.linspace(1.5,5,15)]
 
 fig,axes=plt.subplots(1,max([2,len(sample_geometry)]),sharey=True)
@@ -27,11 +27,11 @@ for i in range(len(sample_geometry)):
     sample_geom1=np.array(sample_geom).flatten()
     geom_alphas1=np.linspace(1.75,5,30)
     geom_alphas=[[x] for x in geom_alphas1]
-
-    t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
-    E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,run_cc=True,cc_approx=False,type="procrustes")
+    t1s,t2s,l1s,l2s,sample_energies,reference_natorb_list,reference_overlap_list,reference_noons_list=setUpsamples_naturalOrbitals(sample_geom,molecule,basis_set)
+    natorbs,noons=get_natural_orbitals(molecule,geom_alphas,basis_set,reference_natorb_list[0],reference_noons_list[0],reference_overlap_list[0])
+    E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,natorbs,t1s,t2s,l1s,l2s,run_cc=True,cc_approx=False,tol=3e-8)
     print(E_approx,E_CCSDx)
-    #energy_simen=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,type="procrustes")
+    #energy_simen=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,type="procrustes",weights=weights)
     #energy_simen_random=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,random_picks=0.1,type="procrustes")
 
 
@@ -42,8 +42,11 @@ for i in range(len(sample_geometry)):
     axes[i].plot(sample_geom,sample_energies,"*",label="Sample points")
     axes[i].set_xlabel("distance (Bohr)")
     axes[i].plot(geom_alphas,E_FCI_i(geom_alphas),label="FCI")
-handles, labels = axes[-1].get_legend_handles_labels()
+handles, labels = axes[0].get_legend_handles_labels()
 fig.legend(handles, labels, loc='upper left')
 plt.tight_layout()
 plt.savefig("Afrika.pdf")
+print(E_CCSDx)
+print(E_approx)
+#print(energy_simen)
 plt.show()

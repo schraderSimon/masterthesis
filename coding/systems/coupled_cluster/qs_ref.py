@@ -21,6 +21,7 @@ def construct_pyscf_system_rhf_ref(
     mix_states=False,
     return_C=False,
     weights=None,
+    truncation=1000000,
     **kwargs,
 ):
     """Convenience function setting up a closed-shell atom or a molecule from
@@ -124,7 +125,8 @@ def construct_pyscf_system_rhf_ref(
     bs.change_module(np=np)
 
     system = SpatialOrbitalSystem(n, bs)
-    system.change_basis(C)
+    #system.change_basis(C)
+    system.change_basis(C[:,:truncation])
     if return_C:
         return (
             system.construct_general_orbital_system(anti_symmetrize=anti_symmetrize)
@@ -150,6 +152,7 @@ def construct_pyscf_system_rhf_natorb(
     reference_overlap=None,
     return_natorbs=True,
     weights=None,
+    truncation=1000000,
     **kwargs,
 ):
     if np is None:
@@ -203,7 +206,7 @@ def construct_pyscf_system_rhf_natorb(
     bs.change_module(np=np)
 
     system = SpatialOrbitalSystem(n, bs)
-    system.change_basis(C)
+    system.change_basis(C[:,:truncation])
     if return_natorbs:
         return (
             system.construct_general_orbital_system(anti_symmetrize=anti_symmetrize)

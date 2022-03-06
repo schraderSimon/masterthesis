@@ -2,6 +2,7 @@ import sys
 sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
 from func_lib import *
 def molecule(x):
+    return "F 0 0 0; H 0 0 %f"%x
     return "H 0 %f 0; O 0 0 0; H 0 0 %f"%(x,x)
 def orthogonal_procrustes(mo_new,reference_mo):
     A=reference_mo
@@ -9,9 +10,9 @@ def orthogonal_procrustes(mo_new,reference_mo):
     M=B@A
     U,s,Vt=scipy.linalg.svd(M)
     return U@Vt, 0
-xs=np.linspace(1,3,21)
+xs=np.linspace(1.5,5,71)
 x=1
-basis="cc-pVTZ"
+basis="aug-cc-pVTZ"
 mol=gto.M(atom=molecule(x),basis=basis,spin=0,unit="bohr")
 S=mol.intor("int1e_ovlp")
 Sref=mol.intor("int1e_ovlp")
@@ -47,10 +48,6 @@ for i,x in enumerate(xs):
     mymp=mp.RMP2(myhf)
     mymp.conv_tol=1e-10
     mymp.run()
-    #rdm1 =mymp.make_rdm1()  # Add the correlation part
-    #noons,natorbs=scipy.linalg.eigh(rdm1)
-    #noons=noons[::-1]
-    #natorbs=linalg.fractional_matrix_power(S, -0.5)@(natorbs.T[::-1]).T
     noons,natorbs=mcscf.addons.make_natural_orbitals(mymp)
     R=linalg.fractional_matrix_power(S, 0.5)@natorbs
     k=6
@@ -63,7 +60,7 @@ for i,x in enumerate(xs):
     natorbs_ref=new_natorbs
     natorbss.append(new_natorbs)
     Sref=S
-choices=np.random.choice(np.arange(len(noonss[0])),size=len(noonss[0])//5, replace=False)
+choices=np.random.choice(np.arange(len(noonss[0])),size=len(noonss[0])//1, replace=False)
 axes[1].set_title("Non-analtyical eigenvectors")
 axes[0].set_title("Analtyical eigenvectors")
 axes[0].plot(xs,np.array(noonss)[:,choices])

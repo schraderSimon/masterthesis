@@ -10,6 +10,9 @@ from scipy.optimize import linear_sum_assignment
 
 import warnings
 import sys
+import matplotlib
+matplotlib.rcParams.update({'font.size': 12})
+
 np.set_printoptions(linewidth=300,precision=3,suppress=True)
 def localize_cholesky(mol,mo_coeffc,mo_occ):
     mo=cholesky_coefficientmatrix(mo_coeffc[:,mo_occ>0])
@@ -20,7 +23,6 @@ def localize_cholesky(mol,mo_coeffc,mo_occ):
     mo_coeffc[:,mo_occ<=0]=np.array(mo_unocc)
     print(mo_coeffc)
     return mo_coeffc
-np.set_printoptions(linewidth=300,precision=10,suppress=True)
 def basischange(C_old,overlap_AOs_newnew,neh):
     C_old=C_old.copy()
     def overlap_p(L,R):
@@ -45,7 +47,7 @@ def basischange(C_old,overlap_AOs_newnew,neh):
     C_new[:,:neh]=C_new_occ
     C_new[:,neh:]=C_new_unocc
     return C_new
-def orthogonal_procrustes(mo_new,reference_mo,weights=None):
+def orthogonal_procrustes(mo_new,reference_mo,weights=None,printf=False):
     A=mo_new
     B=reference_mo.copy()
     if weights is not None:
@@ -113,6 +115,7 @@ def guptri_Eigenvalue(H,S):
     return np.real(e[0])
     return kstr[0]
 def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sref):
+    #TODO: BUG TO FIX!!!
     pairs_ref=[]
     pairs=[]
     #For each pair of natural orbitals, make it procrustes-similar to the reference
@@ -122,7 +125,7 @@ def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sre
     while i<len(noons_ref):
         if i+1==len(noons_ref):
             break
-        if abs(np.log(noons_ref[i])-np.log(noons_ref[i+1]))<1e-7:
+        if abs(np.log(noons_ref[i])-np.log(noons_ref[i+1]))<1e-6:
             pairs_ref.append((i,i+1))
             i+=2
         else:
@@ -131,18 +134,26 @@ def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sre
     while i<len(noons):
         if i+1==len(noons):
             break
-        if abs(np.log(noons[i])-np.log(noons[i+1]))<1e-7:
+        if abs(np.log(noons[i])-np.log(noons[i+1]))<1e-6:
             pairs.append((i,i+1))
             i+=2
         else:
             i+=1
-
+    #Having found the pairs, I have to "match" them. This is done via...procrustifying :)
+    fits=np.zeros(len(pairs))
     for i in range(len(pairs)):
-        new_orbs,t=orthogonal_procrustes(natorbs[:,pairs[i]],natorbs_ref[:,pairs_ref[i]])
+        for j in range(len(pairs_ref)):
+            new_orbs,t=orthogonal_procrustes(natorbs[:,pairs[i]],natorbs_ref[:,pairs_ref[j]])
+            fit=np.linalg.norm(natorbs[:,pairs[i]]@new_orbs-natorbs_ref[:,pairs_ref[j]])
+            fits[j]=fit
+        best_fit=np.argmin(fits)
+        new_orbs,t=orthogonal_procrustes(natorbs[:,pairs[i]],natorbs_ref[:,pairs_ref[best_fit]],printf=True)
         natorbs[:,pairs[i]]=natorbs[:,pairs[i]]@new_orbs
+    np.set_printoptions(linewidth=300,precision=3,suppress=True)
+    print(natorbs)
     print(pairs_ref,len(pairs_ref))
     print(pairs,len(pairs))
-    similarities=natorbs_ref.T@scipy.linalg.fractional_matrix_power(Sref,0.5)@scipy.linalg.fractional_matrix_power(S,0.5)@natorbs
+    similarities=natorbs_ref.T@np.real(scipy.linalg.fractional_matrix_power(Sref,0.5))@np.real(scipy.linalg.fractional_matrix_power(S,0.5))@natorbs
     assignment = linear_sum_assignment(-np.abs(similarities))[1]
     signs=[]
     for i in range(len(similarities)):
@@ -150,5 +161,5 @@ def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sre
     natorbs=natorbs[:,assignment]*np.array(signs)
     noons=noons[assignment]
     pairs=[]
-
+    print(natorbs)
     return noons, natorbs

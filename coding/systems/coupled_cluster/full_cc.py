@@ -8,6 +8,7 @@ from numba import jit
 from matrix_operations import *
 from helper_functions import *
 from scipy.optimize import minimize, root,newton
+from sklearn.decomposition import PCA
 @jit(parallel=True,nopython=True)
 def make_spinints_aokjemi(dim,energy_basis_2e_mol_chem,alternating):
     spinints_AO_kjemi=np.zeros((dim,dim,dim,dim))
@@ -202,7 +203,46 @@ def orthonormalize_ts(t1s,t2s):
         t1_new.append(new_t1)
         t2_new.append(new_t2)
     return t1_new,t2_new
+def orthonormalize_ts_pca(t1s,t2s,nos,nvs):
 
+    t_tot=[]
+    a,i=t1s[0].shape
+    avg_norm=0
+    for j in range(len(t1s)):
+        #t1_contr=np.einsum("ai,bk->abik",t1s[j],t1s[j])
+        #t_tot.append(np.concatenate((t1s[j],0.5*t1_contr+0.25*t2s[j]),axis=None))
+        t_tot.append(np.concatenate((t1s[j],t2s[j]),axis=None))
+        avg_norm+=np.sum(np.abs(t_tot[-1]))
+    avg_norm/=len(t1s)
+    t_tot=np.array(t_tot).T
+    #t0_old=np.concatenate((t1s[0],t2s[0][np.ix_(nvs,nvs,nos,nos)]),axis=None)
+    t0_old=np.concatenate((t1s[0],t2s[0]),axis=None)
+    pca=PCA()
+    #print(t_tot.shape)
+    #print(t_tot.T@t_tot)
+    t_tot=np.array(pca.fit_transform(t_tot)).T
+    diags=np.sqrt(np.diag(t_tot@t_tot.T))**(-1)
+    print(diags)
+    t_tot=(diags*t_tot.T).T
+    diags=np.sqrt(np.diag(t_tot@t_tot.T))
+    #print(t_tot.shape)
+    print(diags)
+    #U,s,Vt=svd(t_tot,full_matrices=False)
+    #t_tot=(U@Vt).T
+
+    t1_new=[]
+    t2_new=[]
+    for j in range(len(t1s)):
+        new_t1=np.reshape(t_tot[j,:a*i],(a,i))
+        new_t2=np.reshape(t_tot[j,a*i:],(a,a,i,i))
+        t1_new.append(new_t1)
+        t2_new.append(new_t2)
+    start_guess=[]
+    for i in range(len(t1s)):
+        #start_guess.append(t0_old@np.concatenate((t1_new[i],t2_new[i][np.ix_(nvs,nvs,nos,nos)]),axis=None))
+        start_guess.append(t0_old@np.concatenate((t1_new[i],t2_new[i]),axis=None))
+    print(start_guess)
+    return t1_new,t2_new, start_guess
 def make_mol(molecule,x,basis="6-31G",charge=0):
 	mol=gto.Mole()
 	mol.atom=molecule(*x)

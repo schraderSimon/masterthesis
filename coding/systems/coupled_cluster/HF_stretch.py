@@ -31,22 +31,21 @@ for i in range(len(sample_geometry)):
         sample_geom1=sample_geometry[i][j]
         sample_geom=[[x] for x in sample_geom1]
         sample_geom1=np.array(sample_geom).flatten()
-        geom_alphas1=np.linspace(1.5,5,71)
+        geom_alphas1=np.linspace(1.5,5,5)
         geom_alphas=[[x] for x in geom_alphas1]
 
         t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
         E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,run_cc=True,cc_approx=False,type="procrustes")
         print(E_approx,E_CCSDx)
         energy_simen=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,type="procrustes")
-        energy_simen_random=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,random_picks=0.1,type="procrustes")
+        energy_simen_random=solve_removed_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,occs=1,virts=0.3)
 
 
         axes[i][j].plot(geom_alphas1,E_CCSDx,label="CCSD")
         axes[i][j].plot(geom_alphas1,E_approx,label="WF-CCEVC")
         axes[i][j].plot(geom_alphas1,energy_simen,label="AMP-CCEVC")
-        axes[i][j].plot(geom_alphas1,energy_simen_random,label="AMP-CCEVC (10%)")
+        axes[i][j].plot(geom_alphas1,energy_simen_random,label=r"AMP-CCEVC (p_v=30\%)")
         axes[i][j].plot(sample_geom,sample_energies,"*",label="Sample points")
-        axes[i][j].set_xlabel("distance (Bohr)")
         axes[i][j].plot(geom_alphas,E_FCI_i(geom_alphas),label="FCI")
 handles, labels = axes[-1][-1].get_legend_handles_labels()
 fig.legend(handles, labels,loc=7)

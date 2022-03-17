@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from scipy import linalg
 from pyscf import gto, scf, mcscf, fci, cc, mp,ao2mo
 from guptri_py import *
-from scipy.linalg import eig, qz, block_diag, eig, orth, fractional_matrix_power, expm
+from scipy.linalg import norm, eig, qz, block_diag, eig, orth, fractional_matrix_power, expm
 from scipy.interpolate import interp1d
 from scipy.optimize import linear_sum_assignment
 
@@ -14,6 +14,14 @@ import matplotlib
 matplotlib.rcParams.update({'font.size': 12})
 
 np.set_printoptions(linewidth=300,precision=3,suppress=True)
+def make_mol(molecule,x,basis="6-31G",charge=0):
+	mol=gto.Mole()
+	mol.atom=molecule(*x)
+	mol.basis = basis
+	mol.unit= "Bohr"
+	mol.charge=charge
+	mol.build()
+	return mol
 def localize_cholesky(mol,mo_coeffc,mo_occ):
     mo=cholesky_coefficientmatrix(mo_coeffc[:,mo_occ>0])
     mo=swappistan(mo)
@@ -21,7 +29,6 @@ def localize_cholesky(mol,mo_coeffc,mo_occ):
     mo_unocc=cholesky_coefficientmatrix(mo_coeffc[:,mo_occ<=0])
     mo_unocc=swappistan(mo_unocc)
     mo_coeffc[:,mo_occ<=0]=np.array(mo_unocc)
-    print(mo_coeffc)
     return mo_coeffc
 def basischange(C_old,overlap_AOs_newnew,neh):
     C_old=C_old.copy()
@@ -47,6 +54,26 @@ def basischange(C_old,overlap_AOs_newnew,neh):
     C_new[:,:neh]=C_new_occ
     C_new[:,neh:]=C_new_unocc
     return C_new
+def make_mol(molecule,x,basis="6-31G"):
+	mol=gto.Mole()
+	if isinstance(x,list):
+		mol.atom=molecule(*x)
+	else:
+		mol.atom=molecule(x)
+	mol.basis = basis
+	mol.unit= "Bohr"
+	mol.build()
+	return mol
+def get_reference_determinant(molecule_func,refx,basis,charge):
+    mol = gto.Mole()
+    mol.unit = "bohr"
+    mol.charge = charge
+    mol.cart = False
+    mol.build(atom=molecule_func(*refx), basis=basis)
+    hf = scf.RHF(mol)
+    hf.kernel()
+    return hf.mo_coeff#np.asarray(localize_cholesky(mol,hf.mo_coeff,hf.mo_occ))
+
 def orthogonal_procrustes(mo_new,reference_mo,weights=None,printf=False):
     A=mo_new
     B=reference_mo.copy()
@@ -115,7 +142,6 @@ def guptri_Eigenvalue(H,S):
     return np.real(e[0])
     return kstr[0]
 def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sref):
-    #TODO: BUG TO FIX!!!
     pairs_ref=[]
     pairs=[]
     #For each pair of natural orbitals, make it procrustes-similar to the reference
@@ -150,9 +176,7 @@ def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sre
         new_orbs,t=orthogonal_procrustes(natorbs[:,pairs[i]],natorbs_ref[:,pairs_ref[best_fit]],printf=True)
         natorbs[:,pairs[i]]=natorbs[:,pairs[i]]@new_orbs
     np.set_printoptions(linewidth=300,precision=3,suppress=True)
-    print(natorbs)
-    print(pairs_ref,len(pairs_ref))
-    print(pairs,len(pairs))
+
     similarities=natorbs_ref.T@np.real(scipy.linalg.fractional_matrix_power(Sref,0.5))@np.real(scipy.linalg.fractional_matrix_power(S,0.5))@natorbs
     assignment = linear_sum_assignment(-np.abs(similarities))[1]
     signs=[]
@@ -161,5 +185,4 @@ def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sre
     natorbs=natorbs[:,assignment]*np.array(signs)
     noons=noons[assignment]
     pairs=[]
-    print(natorbs)
     return noons, natorbs

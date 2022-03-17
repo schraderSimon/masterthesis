@@ -3,16 +3,15 @@ sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/l
 from func_lib import *
 def molecule(x):
     return "F 0 0 0; H 0 0 %f"%x
-    return "H 0 %f 0; O 0 0 0; H 0 0 %f"%(x,x)
 def orthogonal_procrustes(mo_new,reference_mo):
     A=reference_mo
     B=mo_new.T
     M=B@A
     U,s,Vt=scipy.linalg.svd(M)
     return U@Vt, 0
-xs=np.linspace(1.5,5,71)
+xs=np.linspace(1.5,5,36)
 x=1
-basis="aug-cc-pVTZ"
+basis="aug-cc-pVDZ"
 mol=gto.M(atom=molecule(x),basis=basis,spin=0,unit="bohr")
 S=mol.intor("int1e_ovlp")
 Sref=mol.intor("int1e_ovlp")
@@ -71,5 +70,5 @@ axes[0].set_ylabel("Natural occupation number")
 #axes[1].set_ylabel("Natural occupation number")
 axes[0].set_yscale("log")
 axes[1].set_yscale("log")
-plt.savefig("natorbs_dissosciation.pdf")
+plt.savefig("natorbs_dissosciation_HF.pdf")
 plt.show()

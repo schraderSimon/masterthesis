@@ -1,12 +1,6 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from pyscf import gto, scf,cc
-from scipy.linalg import block_diag, eig, orth
-import copy
-from numpy.linalg import norm
 import sys
-np.set_printoptions(linewidth=300,precision=10,suppress=True)
-
+sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+from func_lib import *
 sys.path.append("../../eigenvectorcontinuation/")
 from matrix_operations import *
 from helper_functions import *
@@ -20,85 +14,9 @@ def localize_cholesky(mol,mo_coeffc,mo_occ):
     mo_coeffc[:,mo_occ<=0]=np.array(mo_unocc)
     return mo_coeffc
 
-def orthogonal_procrustes(mo_new,reference_mo):
-    A=reference_mo.T
-    B=mo_new.T
-    M=B@A.T
-    U,s,Vt=scipy.linalg.svd(M)
-    return U@Vt, 0
-def localize_procrustes(mol,mo_coeff,mo_occ,ref_mo_coeff,mix_states=False):
-    """Performs the orthgogonal procrustes on the occupied and the unoccupied molecular orbitals.
-    ref_mo_coeff is the mo_coefs of the reference state.
-    If "mix_states" is True, then mixing of occupied and unoccupied MO's is allowed.
-    """
-
-    if mix_states==False:
-        mo=mo_coeff[:,mo_occ>0]
-        premo=ref_mo_coeff[:,mo_occ>0]
-        R,scale=orthogonal_procrustes(mo,premo)
-        mo=mo@R
-
-        mo_coeff[:,mo_occ>0]=np.array(mo)
-        mo_unocc=mo_coeff[:,mo_occ<=0]
-        premo=ref_mo_coeff[:,mo_occ<=0]
-        R,scale=orthogonal_procrustes(mo_unocc,premo)
-        mo_unocc=mo_unocc@R
-
-        mo_coeff[:,mo_occ<=0]=np.array(mo_unocc)
-
-
-    elif mix_states==True:
-        mo=mo_coeff[:,:]
-        premo=ref_mo_coeff[:,:]
-        R,scale=orthogonal_procrustes(mo,premo)
-        mo=mo@R
-
-        mo_coeff[:,:]=np.array(mo)
-    return mo_coeff
-def basischange(C_old,overlap_AOs_newnew,neh):
-    def overlap_p(L,R):
-        return np.einsum("i,j,ij->",L,R,overlap_AOs_newnew)
-    C_old=C_old.copy()
-    C_occ=C_old[:,:neh]
-
-    S_occ=np.einsum("mi,vj,mv->ij",C_occ,C_occ,overlap_AOs_newnew)
-    S_eig,S_U=np.linalg.eigh(S_occ)
-    S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-    C_new_occ=np.einsum("ij,mj->mi",S_powerminusonehalf,C_occ)
-    #Remove C_occ part from the unoccupied matrices...
-
-    C_unocc=C_old[:,neh:]
-    for unocc_col in range(C_unocc.shape[1]):
-        for occ_col in range(C_new_occ.shape[1]):
-            C_unocc[:,unocc_col]-=C_new_occ[:,occ_col]*overlap_p(C_new_occ[:,occ_col],C_unocc[:,unocc_col])
-    S_unocc=np.einsum("mi,vj,mv->ij",C_unocc,C_unocc,overlap_AOs_newnew)
-    S_eig,S_U=np.linalg.eigh(S_unocc)
-    S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-    C_new_unocc=np.einsum("ij,mj->mi",S_powerminusonehalf,C_unocc)
-    C_new=np.zeros_like(C_old)
-    C_new[:,:neh]=C_new_occ
-    C_new[:,neh:]=C_new_unocc
-    return C_new
-def make_mol(molecule,x,basis="6-31G"):
-    mol=gto.Mole()
-    mol.atom=molecule(x)
-    mol.basis = basis
-    mol.unit= "Bohr"
-    mol.build()
-    return mol
-def get_reference_determinant(molecule_func,refx,basis,charge):
-    mol = gto.Mole()
-    mol.unit = "bohr"
-    mol.charge = charge
-    mol.cart = False
-    mol.build(atom=molecule_func(*refx), basis=basis)
-    hf = scf.RHF(mol)
-    hf.kernel()
-    return np.asarray(localize_cholesky(mol,hf.mo_coeff,hf.mo_occ))
-
 molecule=lambda x: "F 0 0 0; H 0 0 %f"%x
 #molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
-basis="6-31G"
+basis="cc-pVTZ"
 molecule_name="HF"
 x_sol=np.linspace(1.3,4,55)
 #x_sol=np.array([1.9,2.5])
@@ -150,7 +68,7 @@ for i,x in enumerate(x_sol):
     print("Cholesky: %.10f"%norms_coefficientmatrix[2,i])
     print("Gen Procrustes: %.10f"%norms_coefficientmatrix[3,i])
     print(" GenTransformed: %.10f"%norms_coefficientmatrix[4,i])
-labels=["Procrustes", "Converted", "Choleksy", "General Procrustes", "General converted"]
+labels=["Procrustes", "Converted", "Choleksy", "Gen. Procrustes", "Gen. converted"]
 fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True)
 ax1.set_title(r"$||C(x)-C(x_{{ref}})||$")
 ax2.set_title(r"$||T_2(x)-T_2(x_{{ref}})||$")
@@ -159,8 +77,8 @@ for i in range(len(labels)):
     ax2.plot(x_sol,norms_T2[i,:],label=labels[i])
 ax1.legend()
 ax2.legend()
-ax2.set_xlabel("Interatomic distance (Bohr)")
-ax1.set_xlabel("Interatomic distance (Bohr)")
+ax2.set_xlabel(r"Interatomic distance $x$ (Bohr)")
+ax1.set_xlabel(r"Interatomic distance $x$ (Bohr)")
 plt.tight_layout()
 plt.savefig("HF_coefficient_norms.pdf")
 plt.show()

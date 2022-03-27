@@ -190,19 +190,27 @@ def orthonormalize_ts(t1s,t2s):
         t_tot.append(np.concatenate((t1s[j],t2s[j]),axis=None))
         avg_norm+=np.sum(np.abs(t_tot[-1]))
     avg_norm/=len(t1s)
-    t_tot=np.array(t_tot).T
+    t_tot=np.array(t_tot)
+    t_tot_old=t_tot.copy()
+    t_tot=t_tot.T
     U,s,Vt=svd(t_tot,full_matrices=False)
+    #U,R=scipy.linalg.qr(t_tot,mode="economic")
     t_tot=(U@Vt).T
-
     t1_new=[]
     t2_new=[]
+    coefs=np.zeros((len(t1s),len(t1s)))
+    for j in range(len(t1s)):
+        for k in range(len(t1s)):
+            print(t_tot_old[j,:].shape)
+            coefs[j,k]=t_tot_old[j,:]@t_tot[k,:]
+
     for j in range(len(t1s)):
         new_t1=np.reshape(t_tot[j,:a*i],(a,i))
         #new_t2=(4*np.reshape(t_tot[j,a*i:],(a,a,i,i))-2*np.einsum("ai,bk->abik",new_t1,new_t1))
         new_t2=np.reshape(t_tot[j,a*i:],(a,a,i,i))
         t1_new.append(new_t1)
         t2_new.append(new_t2)
-    return t1_new,t2_new
+    return t1_new,t2_new,coefs
 def orthonormalize_ts_pca(t1s,t2s,nos,nvs):
 
     t_tot=[]

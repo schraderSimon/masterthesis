@@ -8,20 +8,20 @@ from full_cc import orthonormalize_ts, orthonormalize_ts_choice, orthonormalize_
 from scipy.optimize import minimize, root,newton
 import time
 class sucess():
+    """Mini helper class that resembles scipy's OptimizeResult."""
     def __init__(self,x,success,nfev):
         self.x=x
         self.success=success
         self.nfev=nfev
-def own_root_diis(error_function,start_guess,args,jac,method=None,options={"xtol":1e-3,"maxfev":25}):
+def own_root_diis(error_function,start_guess,args,jac,method=None,options={"xtol":1e-3,"maxfev":25},diis_start=2,diis_dim=5):
     guess=start_guess
-    error=error_function(guess,*args)
     xtol=options["xtol"]
     maxfev=options["maxfev"]
     iter=0
     errors=[]
     amplitudes=[]
     updates=[]
-    diis_start=2
+    error=10*xtol #Placeholder to enter while loop
     while np.max(np.abs(error))>xtol and iter<diis_start:
         jacobian=jac(guess,*args)
 
@@ -35,6 +35,7 @@ def own_root_diis(error_function,start_guess,args,jac,method=None,options={"xtol
         iter+=1
     while np.max(np.abs(error))>xtol and iter<maxfev:
 
+        #Calculate DIIS B-matrix from Jacobian guess update
         B_matrix=np.zeros((len(updates)+1,len(updates)+1))
         for i,ei in enumerate(updates):
             for j, ej in enumerate(updates):
@@ -46,37 +47,22 @@ def own_root_diis(error_function,start_guess,args,jac,method=None,options={"xtol
         sol[-1]=-1
         weights=np.linalg.solve(B_matrix,sol)
         input=np.zeros(len(updates[0]))
-        errsum=np.zeros(len(updates[0]))
+        #errsum=np.zeros(len(updates[0]))
         for i,w in enumerate(weights[:-1]):
-            input+=w*amplitudes[i]
-            errsum+=w*updates[i]
-        print("DIIS: ",input)
+            input+=w*amplitudes[i] #Calculate new approximate ampltiude guess vector
+            #errsum+=w*updates[i]
 
         jacobian=jac(input,*args)
         error=error_function(input,*args)
-        update=-np.linalg.inv(jacobian)@error
+        update=-np.linalg.inv(jacobian)@error #Calculate update vector
         guess=input+update
-        print("NEW: ",guess)
         errors.append(error)
         updates.append(update)
         amplitudes.append(guess)
-        if len(errors)>=5:
+        if len(errors)>=diis_dim: #Reduce DIIS space to dimensionality threshold
             errors.pop(0)
             amplitudes.pop(0)
             updates.pop(0)
-        iter+=1
-    success=iter<maxfev
-    return sucess(guess,success,iter)
-def own_root(error_function,start_guess,args,jac,method=None,options={"xtol":1e-3,"maxfev":25}):
-    guess=start_guess
-    error=error_function(guess,*args)
-    xtol=options["xtol"]
-    maxfev=options["maxfev"]
-    iter=0
-    while np.max(np.abs(error))>xtol and iter<maxfev:
-        jacobian=jac(guess,*args)
-        guess=guess-np.linalg.inv(jacobian)@error
-        error=error_function(guess,*args)
         iter+=1
     success=iter<maxfev
     return sucess(guess,success,iter)
@@ -225,6 +211,261 @@ def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="
         l2s.append(l[1])
         sample_energies.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
     return t1s,t2s,l1s,l2s,sample_energies
+
+class EVCSolver():
+    def __init__(self,x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,sample_x=None,mix_states=False,natorb_truncation=None):
+        self.x_alphas=x_alphas
+        self.molecule_func=molecule_func
+        self.sample_x=sample_x
+        self.basis=basis
+        self.reference_natorbs=reference_natorbs
+        self.t1s=t1s
+        self.t2s=t2s
+        self.l1s=l1s
+        self.l2s=l2s
+        self.mix_states=mix_states
+        self.natorb_truncation=natorb_truncation
+        self.num_params=np.prod(t1s[0].shape)+np.prod(t2s[0].shape)
+    def construct_H_S(self,system):
+        RHF_energy=system.compute_reference_energy().real
+        H=np.zeros((len(self.t1s),len(self.t1s)))
+        S=np.zeros((len(self.t1s),len(self.t1s)))
+        for i, xi in enumerate(t1s):
+            f = system.construct_fock_matrix(system.h, system.u)
+            t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)
+            t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)
+            exp_energy=rhs_e.compute_rccsd_ground_state_energy(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)+RHF_energy
+            for j, xj in enumerate(t1s):
+                X1=self.t1s[i]-self.t1s[j]
+                X2=self.t2s[i]-self.t2s[j]
+                overlap=1+contract("ia,ai->",self.l1s[j],X1)+0.5*contract("ijab,ai,bj->",self.l2s[j],X1,X1)+0.25*contract("ijab,abij->",self.l2s[j],X2)
+                S[i,j]=overlap
+
+                H[i,j]=overlap*exp_energy
+                extra=contract("ia,ai->",self.l1s[j],t1_error)+contract("ijab,ai,bj->",self.l2s[j],X1,t1_error)+0.25*contract("ijab,abij->",self.l2s[j],t2_error)
+                H[i,j]=H[i,j]+extra
+        return H,S
+    def solve_WFCCEVC(self):
+        E_WFCCEVC=[]
+        for k,x_alpha in enumerate(self.x_alphas):
+            if isinstance(self.reference_natorbs,list):
+                ref_state=self.reference_natorbs[k]
+            else:
+                ref_state=self.reference_natorbs
+            system = construct_pyscf_system_rhf_ref(
+                molecule=self.molecule_func(*x_alpha),
+                basis=self.basis,
+                add_spin=False,
+                anti_symmetrize=False,
+                reference_state=ref_state,
+                mix_states=self.mix_states,
+                truncation=self.natorb_truncation
+            )
+            H,S=self.construct_H_S(system)
+            E_WFCCEVC.append(guptri_Eigenvalue(H,S))
+        return E_WFCCEVC
+    def solve_CCSD(self):
+        E_CCSD=[]
+        for k,x_alpha in enumerate(self.x_alphas):
+            if isinstance(self.reference_natorbs,list):
+                ref_state=self.reference_natorbs[k]
+            else:
+                ref_state=self.reference_natorbs
+            system = construct_pyscf_system_rhf_ref(
+                molecule=self.molecule_func(*x_alpha),
+                basis=self.basis,
+                add_spin=False,
+                anti_symmetrize=False,
+                reference_state=ref_state,
+                mix_states=self.mix_states,
+                truncation=self.natorb_truncation
+            )
+            try:
+                print("Starting to calculate ground state energy")
+                rccsd = RCCSD(system, verbose=False)
+                ground_state_tolerance = 1e-7
+                rccsd.compute_ground_state(t_kwargs=dict(tol=ground_state_tolerance))
+                E_CCSD.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+            except:
+                E_CCSD.append(np.nan)
+        return E_CCSD
+    def solve_AMP_CCSD(self,occs=1,virts=0.5):
+        energy=[]
+        start_guess=np.full(len(t1s),1/len(t1s))
+        t1s_orth,t2s_orth,coefs=orthonormalize_ts(self.t1s,self.t2s)
+        self.t1s=t1s_orth
+        self.t2s=t2s_orth
+        t2=np.zeros(self.t2s[0].shape)
+        for i in range(len(t1s)):
+            t2+=self.t2s[i]
+        t1_v_ordering=contract=np.einsum("abij->a",t2**2)
+        t1_o_ordering=contract=np.einsum("abij->i",t2**2)
+        important_o=np.argsort(t1_o_ordering)[::-1]
+        important_v=np.argsort(t1_v_ordering)[::-1]
+        pickerino=np.zeros(self.t2s[0].shape)
+        if occs is None:
+            occs_local=self.t2s[0].shape[2]
+        elif occs<1.1:
+            occs_local=int(self.t2s[0].shape[0]*occs)
+        else:
+            occs_local=occs
+        if virts is None:
+            virts_local=self.t2s[0].shape[0]//2
+        elif virts<1.1:
+            virts_local=int(self.t2s[0].shape[0]*virts)
+        else:
+            virts_local=virts
+        pickerino[np.ix_(important_v[:virts_local],important_v[:virts_local],important_o[:occs_local],important_o[:occs_local])]=1
+        self.picks=pickerino.reshape(self.t2s[0].shape)
+        self.picks=(self.picks*(-1)+1).astype(bool)
+
+        self.cutoff=occs_local**2*virts_local**2
+        self.nos=important_o[:occs_local]
+        self.nvs=important_v[:virts_local]
+        self.num_iterations=[]
+        for k,x_alpha in enumerate(self.x_alphas):
+            if isinstance(self.reference_natorbs,list):
+                ref_state=self.reference_natorbs[k]
+            else:
+                ref_state=self.reference_natorbs
+            system = construct_pyscf_system_rhf_ref(
+                molecule=self.molecule_func(*x_alpha),
+                basis=self.basis,
+                add_spin=False,
+                anti_symmetrize=False,
+                reference_state=ref_state,
+                mix_states=self.mix_states,
+                truncation=self.natorb_truncation
+            )
+            f = system.construct_fock_matrix(system.h, system.u)
+            ESCF=system.compute_reference_energy().real
+            self._system_jacobian(system)
+            closest_sample_x=np.argmin(abs(np.array(self.sample_x)-x_alpha))
+            start_guess=coefs[:,closest_sample_x]
+            sol=self._own_root_diis(start_guess,args=[system],options={"xtol":1e-3,"maxfev":100})
+            final=sol.x
+            print(final)
+            self.num_iterations.append(sol.nfev)
+            t1=np.zeros(t1s[0].shape)
+            t2=np.zeros(t2s[0].shape)
+            for i in range(len(self.t1s)):
+                t1+=final[i]*self.t1s[i] #Starting guess
+                t2+=final[i]*self.t2s[i] #Starting guess
+            t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
+            t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
+            newEn=rhs_e.compute_rccsd_ground_state_energy(f, system.u, t1, t2, system.o, system.v, np)+ESCF
+            energy.append(newEn)
+        return energy
+    def _system_jacobian(self,system):
+        f = system.construct_fock_matrix(system.h, system.u)
+        no=system.n
+        nv=system.l-system.n
+        t1_Jac=np.zeros((nv,no))
+        t2_Jac=np.zeros((nv,nv,no,no))
+        for a in range(nv):
+            for i in range(no):
+                t1_Jac[a,i]=f[a+no,a+no]-f[i,i]
+        for a in range(nv):
+            for b in range(nv):
+                for i in range(no):
+                    for j in range(no):
+                        t2_Jac[a,b,i,j]=f[a+no,a+no]-f[i,i]+f[b+no,b+no]-f[j,j]
+        self.t1_Jac=t1_Jac
+        self.t2_Jac=t2_Jac
+    def _error_function(self,params,system):
+        t1=np.zeros(self.t1s[0].shape)
+        t2=np.zeros(self.t2s[0].shape)
+
+        for i in range(len(t1s)):
+            t1+=params[i]*self.t1s[i] #Starting guess
+            t2+=params[i]*self.t2s[i] #Starting guess
+
+        f = system.construct_fock_matrix(system.h, system.u)
+        #t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
+        t1_error = rhs_t.compute_t_1_amplitudes_REDUCED_new(f, system.u, t1, t2, system.o, system.v, np,self.picks,self.nos,self.nvs) #Original idea
+        t2_error = rhs_t.compute_t_2_amplitudes_REDUCED_new(f, system.u, t1, t2, system.o, system.v, np,self.picks,self.nos,self.nvs) #Original idea
+        ts=[np.concatenate((self.t1s[i],self.t2s[i]),axis=None) for i in range(len(self.t1s))]
+        t_error=np.concatenate((t1_error,t2_error),axis=None)
+        projection_errors=np.zeros(len(self.t1s))
+        t1_error_flattened=t1_error.flatten()
+        t2_error_flattened=t2_error.flatten()
+        for i in range(len(projection_errors)):
+            projection_errors[i]+=t1_error_flattened@self.t1s[i].flatten()
+            projection_errors[i]+=t2_error_flattened@self.t2s[i].flatten()
+        return projection_errors
+    def _jacobian_function(self,params,system):
+        t1=np.zeros(self.t1s[0].shape)
+        t2=np.zeros(self.t2s[0].shape)
+        Ts=[]
+        for i in range(len(t1s)):
+            t1+=params[i]*self.t1s[i] #Starting guess
+            t2+=params[i]*self.t2s[i] #Starting guess
+            #Ts.append(t2s[i][picks].flatten())
+            Ts.append(self.t2s[i].flatten())
+        jacobian_matrix=np.zeros((len(params),len(params)))
+        for i in range(len(params)):
+            for j in range(i,len(params)):
+                jacobian_matrix[j,i]+=contract("k,k,k->",self.t1s[i].flatten(),self.t1s[j].flatten(),self.t1_Jac.flatten())
+                #jacobian_matrix[j,i]+=contract("k,k,k->",Ts[i],Ts[j],t2_Jac[picks].flatten())
+                jacobian_matrix[j,i]+=contract("k,k,k->",Ts[i],Ts[j],self.t2_Jac.flatten())
+                jacobian_matrix[i,j]=jacobian_matrix[j,i]
+        return jacobian_matrix
+    def _own_root_diis(self,start_guess,args,options={"xtol":1e-3,"maxfev":25},diis_start=2,diis_dim=5):
+        guess=start_guess
+        xtol=options["xtol"]
+        maxfev=options["maxfev"]
+        iter=0
+        errors=[]
+        amplitudes=[]
+        updates=[]
+        error=10*xtol #Placeholder to enter while loop
+        while np.max(np.abs(error))>xtol and iter<diis_start:
+            jacobian=self._jacobian_function(guess,*args)
+
+            error=self._error_function(guess,*args)
+            update=-np.linalg.inv(jacobian)@error
+            guess=guess+update
+            print(error)
+            errors.append(error)
+            updates.append(update)
+            amplitudes.append(guess)
+            iter+=1
+        while np.max(np.abs(error))>xtol and iter<maxfev:
+
+            #Calculate DIIS B-matrix from Jacobian guess update
+            B_matrix=np.zeros((len(updates)+1,len(updates)+1))
+            for i,ei in enumerate(updates):
+                for j, ej in enumerate(updates):
+                    B_matrix[i,j]=np.dot(ei,ej)
+            for i in range(len(updates)+1):
+                B_matrix[i,-1]=B_matrix[-1,i]=-1
+            B_matrix[-1,-1]=0
+            sol=np.zeros(len(updates)+1)
+            sol[-1]=-1
+            weights=np.linalg.solve(B_matrix,sol)
+            input=np.zeros(len(updates[0]))
+            #errsum=np.zeros(len(updates[0]))
+            for i,w in enumerate(weights[:-1]):
+                input+=w*amplitudes[i] #Calculate new approximate ampltiude guess vector
+                #errsum+=w*updates[i]
+
+            jacobian=self._jacobian_function(input,*args)
+            error=self._error_function(input,*args)
+            print(error)
+            update=-np.linalg.inv(jacobian)@error #Calculate update vector
+            guess=input+update
+            errors.append(error)
+            updates.append(update)
+            amplitudes.append(guess)
+            if len(errors)>=diis_dim: #Reduce DIIS space to dimensionality threshold
+                errors.pop(0)
+                amplitudes.pop(0)
+                updates.pop(0)
+            iter+=1
+        success=iter<maxfev
+        print("Num iter: %d"%iter)
+        return sucess(guess,success,iter)
+
 def solve_evc(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,mix_states=False,run_cc=True,cc_approx=True,type=None,tol=3e-8,weights=None,truncation=1000000):
     """
     x_alphas: The sample geometries inpupt
@@ -254,7 +495,6 @@ def solve_evc(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,mix
             mix_states=mix_states,
             weights=weights,
             truncation=truncation
-
         )
         ESCF=system.compute_reference_energy().real
         if run_cc:
@@ -351,7 +591,11 @@ def solve_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,mi
             t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np) #Original idea
             t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np) #Original idea
             end = time.time()
+            nonlocal tot_time
+            nonlocal times
             print("Time: %f"%(end-start))
+            tot_time+=end-start
+            times.append(end-start)
             ts=[np.concatenate((t1s[i],t2s[i]),axis=None) for i in range(len(t1s))]
             t_error=np.concatenate((t1_error,t2_error),axis=None)
             projection_errors=np.zeros(len(t1s))
@@ -390,7 +634,7 @@ def solve_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,mi
     print("Picks: %f, Total amount: %f"%(random_number,totamount))
     picks=np.random.choice(totamount,random_number,replace=False)# Random choice
     #Alternatively, we cn take the 10 percent most important amplitudes!
-    t1s,t2s=orthonormalize_ts(t1s,t2s)
+    t1s,t2s,coefs=orthonormalize_ts(t1s,t2s)
     def pick_largest():
         T=np.zeros_like(np.concatenate((t1s[0],t2s[0]),axis=None))
         t1=np.zeros(t1s[0].shape)
@@ -400,7 +644,9 @@ def solve_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,mi
             t2+=1/len(t2s)*t2s[i] #Starting guess
             T+=np.concatenate((t1s[i],t2s[i]),axis=None)
         index_order=np.argsort(np.abs(T))
-        return index_order[len(index_order)-random_number:], T[index_order[len(index_order)-random_number]]
+        picks=index_order[len(index_order)-random_number:]
+        cutoff=T[index_order[len(index_order)-random_number]]
+        return picks, cutoff
     if optimal:
         picks,cutoff=pick_largest()
         print("Smallest picked: %e"%cutoff)
@@ -419,12 +665,13 @@ def solve_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,mi
             weights=weights,
             truncation=truncation
         )
-        start = time.time()
+
         f = system.construct_fock_matrix(system.h, system.u)
         ESCF=system.compute_reference_energy().real
         t1_Jac,t2_Jac=system_jacobian(system)
         jacob=jacobian_function
-
+        tot_time=0
+        times=[]
         sol=own_root_diis(error_function,start_guess,args=(system,t1s,t2s,t1_Jac,t2_Jac,picks),jac=jacob,method="hybr",options={"xtol":1e-3,"maxfev":100})#,method="broyden1")
         print("Error")
         print(error_function(sol.x,system,t1s,t2s,t1_Jac,t2_Jac,picks))
@@ -445,7 +692,8 @@ def solve_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,mi
         if sol.success==False:
             newEn=np.nan
         energy.append(newEn)
-        end = time.time()
+        #print("Total time: %f"%tot_time)
+        print(times)
     return energy
 
 
@@ -482,15 +730,15 @@ def get_natural_orbitals(molecule_func,xvals,basis,natorbs_ref=None,noons_ref=No
         overlaps_list.append(S)
         noons_list.append(noons)
     return natorbs_list,noons_list,overlaps_list
-def solve_removed_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,mix_states=False,occs=None,virts=None,truncation=1000000):
+def solve_removed_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,sample_x=None,mix_states=False,occs=None,virts=None,truncation=1000000):
     def pick_largest_alt():
         T=np.zeros(totamount)
         t2=np.zeros(t2s[0].shape)
         for i in range(len(t1s)):
             T+=t2s[i].flatten()
             t2+=t2s[i]
-        t1_v_ordering=contract=np.einsum("abij->a",np.abs(t2))
-        t1_o_ordering=contract=np.einsum("abij->i",np.abs(t2))
+        t1_v_ordering=contract=np.einsum("abij->a",t2**2)
+        t1_o_ordering=contract=np.einsum("abij->i",t2**2)
         important_o=np.argsort(t1_o_ordering)[::-1]
         important_v=np.argsort(t1_v_ordering)[::-1]
         pickerino=np.zeros(t2s[0].shape)
@@ -539,7 +787,11 @@ def solve_removed_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1
             t1_error = rhs_t.compute_t_1_amplitudes_REDUCED_new(f, system.u, t1, t2, system.o, system.v, np,picks,nos,nvs) #Original idea
             t2_error = rhs_t.compute_t_2_amplitudes_REDUCED_new(f, system.u, t1, t2, system.o, system.v, np,picks,nos,nvs) #Original idea
             end = time.time()
-            print("Time: %f"%(end-start))
+            nonlocal tot_time
+            nonlocal times
+            #print("Time: %f"%(end-start))
+            tot_time+=end-start
+            times.append(end-start)
             ts=[np.concatenate((t1s[i],t2s[i]),axis=None) for i in range(len(t1s))]
             t_error=np.concatenate((t1_error,t2_error),axis=None)
             projection_errors=np.zeros(len(t1s))
@@ -576,8 +828,10 @@ def solve_removed_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1
     totamount=(np.prod(t2s[0].shape))
     picks,cutoff,nos,nvs=pick_largest_alt()
     #t1s,t2s,start_guess=orthonormalize_ts_pca(t1s,t2s,nos,nvs)
-    t1s,t2s=orthonormalize_ts(t1s,t2s)
+    t1s,t2s,coefs=orthonormalize_ts(t1s,t2s)
     picks=(picks*(-1)+1).astype(bool)
+    times=[]
+    num_iterations=[]
     for k,x_alpha in enumerate(x_alphas):
         if isinstance(reference_natorbs,list):
             ref_state=reference_natorbs[k]
@@ -593,20 +847,23 @@ def solve_removed_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1
             weights=None,
             truncation=truncation
         )
-        start=time.time()
         f = system.construct_fock_matrix(system.h, system.u)
         ESCF=system.compute_reference_energy().real
         t1_Jac,t2_Jac=system_jacobian(system)
         jacob=jacobian_function
-
+        tot_time=0
+        closest_sample_x=np.argmin(abs(np.array(sample_x)-x_alpha))
+        start_guess=coefs[:,closest_sample_x]
         sol=own_root_diis(error_function,start_guess,args=(system,t1s,t2s,t1_Jac,t2_Jac,picks,nos,nvs),jac=jacob,method="hybr",options={"xtol":1e-3,"maxfev":100})#,method="broyden1")
         print("Error")
+
         print(error_function(sol.x,system,t1s,t2s,t1_Jac,t2_Jac,picks,nos,nvs))
         try:
             print("Converged: ",sol.success, " number of iterations:",sol.nit)
         except:
             print("Converged: ",sol.success, " number of iterations:",sol.nfev)
         final=sol.x
+        num_iterations.append(sol.nfev)
         print(final)
         t1=np.zeros(t1s[0].shape)
         t2=np.zeros(t2s[0].shape)
@@ -616,6 +873,7 @@ def solve_removed_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1
         t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
         t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
         print("Maximal projection error:T1: %f, T2: %f"%(np.max(t1_error), np.max(t2_error)))
+        #print("Total time: %f"%tot_time)
         newEn=rhs_e.compute_rccsd_ground_state_energy(f, system.u, t1, t2, system.o, system.v, np)+ESCF
         if sol.success==False:
             pass
@@ -624,7 +882,7 @@ def solve_removed_evc2(x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1
 
     return energy
 if __name__=="__main__":
-    basis = '6-31G**'
+    basis = '6-31G*'
     basis_set = bse.get_basis(basis, fmt='nwchem')
     charge = 0
     #molecule =lambda arr: "Be 0.0 0.0 0.0; H 0.0 0.0 %f; H 0.0 0.0 -%f"%(arr,arr)
@@ -633,25 +891,30 @@ if __name__=="__main__":
     refx=[2]
     print(molecule(*refx))
     reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-    sample_geom1=np.linspace(2,4,5)
+    sample_geom1=np.linspace(2,4,2)
     #sample_geom1=[2.5,3.0,6.0]
     sample_geom=[[x] for x in sample_geom1]
     sample_geom1=np.array(sample_geom).flatten()
-    geom_alphas1=np.linspace(2,5.0,13)
+    geom_alphas1=np.linspace(2,5.0,5)
     geom_alphas=[[x] for x in geom_alphas1]
 
     t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
-    print("Cheap")
-    energy_simen_random=solve_removed_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,occs=1,virts=1)
-    print("Expensive")
-    energy_simen_exact=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s)
+    evcsolver=EVCSolver(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False,natorb_truncation=None)
+    #E_WF=evcsolver.solve_WFCCEVC()
+    E_AMP=evcsolver.solve_AMP_CCSD(occs=1,virts=0.3)
+
+    E_CCSDx=evcsolver.solve_CCSD()
+
+    #print("Cheap")
+    energy_simen_random=solve_removed_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False,occs=1,virts=0.3)
+    #print("Expensive")
+    #energy_simen_exact=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s)
     #energy_simen_exact=solve_removed_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,occs=1,virts=1)
 
 
-    E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,run_cc=True,cc_approx=False,type="procrustes")
-    plt.plot(geom_alphas1,E_CCSDx,label="CCSD")
-    plt.plot(geom_alphas1,E_approx,label="CCSD WF")
-    plt.plot(geom_alphas1,energy_simen_random,label="CCSD AMP")
-    plt.plot(geom_alphas1,energy_simen_exact,label="CCSD AMP exact")
+    #E_CCSDx,E_WF,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=False,run_cc=True,cc_approx=False,type="procrustes")
+    plt.plot(geom_alphas1,E_CCSDx,label="CCSD") #plt.plot(geom_alphas1,E_WF,label="CCSD WF")
+    plt.plot(geom_alphas1,E_AMP,label="CCSD AMP")
+    plt.plot(geom_alphas1,energy_simen_random,label="CCSD AMP 2")
     plt.legend()
     plt.show()

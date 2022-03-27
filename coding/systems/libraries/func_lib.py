@@ -7,12 +7,12 @@ from guptri_py import *
 from scipy.linalg import norm, eig, qz, block_diag, eig, orth, fractional_matrix_power, expm
 from scipy.interpolate import interp1d
 from scipy.optimize import linear_sum_assignment
-
+from opt_einsum import contract
 import warnings
 import sys
 import matplotlib
-matplotlib.rcParams.update({'font.size': 12})
-
+matplotlib.rcParams.update({'font.size': 20})
+matplotlib.rcParams.update({'lines.linewidth': 2})
 np.set_printoptions(linewidth=300,precision=3,suppress=True)
 def make_mol(molecule,x,basis="6-31G",charge=0):
 	mol=gto.Mole()
@@ -22,6 +22,10 @@ def make_mol(molecule,x,basis="6-31G",charge=0):
 	mol.charge=charge
 	mol.build()
 	return mol
+def get_Smat(AO_overlap,HF_coefficients_left,HF_coefficients_right):
+	print(AO_overlap.shape,HF_coefficients_left.shape,HF_coefficients_right.shape)
+	determinant_matrix=contract("ab,ai,bj->ij",AO_overlap,HF_coefficients_left,HF_coefficients_right)
+	return determinant_matrix
 def localize_cholesky(mol,mo_coeffc,mo_occ):
     mo=cholesky_coefficientmatrix(mo_coeffc[:,mo_occ>0])
     mo=swappistan(mo)

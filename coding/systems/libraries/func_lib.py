@@ -12,7 +12,7 @@ import warnings
 import sys
 import matplotlib
 matplotlib.rcParams.update({'font.size': 20})
-matplotlib.rcParams.update({'lines.linewidth': 2})
+matplotlib.rcParams.update({'lines.linewidth': 3})
 np.set_printoptions(linewidth=300,precision=3,suppress=True)
 def make_mol(molecule,x,basis="6-31G",charge=0):
 	mol=gto.Mole()
@@ -77,7 +77,21 @@ def get_reference_determinant(molecule_func,refx,basis,charge):
     hf = scf.RHF(mol)
     hf.kernel()
     return hf.mo_coeff#np.asarray(localize_cholesky(mol,hf.mo_coeff,hf.mo_occ))
-
+def CCSD_energy_curve(molecule_func,xvals,basis):
+	E=[]
+	for x in xvals:
+		mol = gto.Mole()
+		mol.unit = "bohr"
+		mol.build(atom=molecule_func(*x), basis=basis)
+		hf = scf.RHF(mol)
+		hf.kernel()
+		mycc = cc.CCSD(hf)
+		mycc.kernel()
+		if mycc.converged:
+			E.append(mycc.e_tot)
+		else:
+			E.append(np.nan)
+	return E
 def orthogonal_procrustes(mo_new,reference_mo,weights=None,printf=False):
     A=mo_new
     B=reference_mo.copy()

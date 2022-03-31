@@ -174,6 +174,7 @@ class EVCSolver():
         self.mix_states=mix_states
         self.natorb_truncation=natorb_truncation
         self.num_params=np.prod(t1s[0].shape)+np.prod(t2s[0].shape)
+        self.coefs=None
     def construct_H_S(self,system):
         RHF_energy=system.compute_reference_energy().real
         H=np.zeros((len(self.t1s),len(self.t1s)))
@@ -241,6 +242,8 @@ class EVCSolver():
         energy=[]
         start_guess=np.full(len(self.t1s),1/len(self.t1s))
         t1s_orth,t2s_orth,coefs=orthonormalize_ts(self.t1s,self.t2s)
+        if self.coefs is None:
+            self.coefs=coefs
         self.t1s=t1s_orth
         self.t2s=t2s_orth
         t2=np.zeros(self.t2s[0].shape)
@@ -291,9 +294,9 @@ class EVCSolver():
             ESCF=system.compute_reference_energy().real
             self._system_jacobian(system)
             closest_sample_x=np.argmin(abs(np.array(self.sample_x)-x_alpha))
-            start_guess=coefs[:,closest_sample_x]
+            start_guess=self.coefs[:,closest_sample_x]
             self.times_temp=[]
-            sol=self._own_root_diis(start_guess,args=[system],options={"xtol":1e-3,"maxfev":100})
+            sol=self._own_root_diis(start_guess,args=[system],options={"xtol":1e-5,"maxfev":40})
             final=sol.x
             print(final)
             self.num_iterations.append(sol.nfev)
@@ -306,7 +309,10 @@ class EVCSolver():
             t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
             t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
             newEn=rhs_e.compute_rccsd_ground_state_energy(f, system.u, t1, t2, system.o, system.v, np)+ESCF
-            energy.append(newEn)
+            if sol.success==False:
+                energy.append(np.nan)
+            else:
+                energy.append(newEn)
         return energy
     def _system_jacobian(self,system):
         f = system.construct_fock_matrix(system.h, system.u)
@@ -337,6 +343,9 @@ class EVCSolver():
         start=time.time()
         t1_error = rhs_t.compute_t_1_amplitudes_REDUCED_new(f, system.u, t1, t2, system.o, system.v, np,self.picks,self.nos,self.nvs) #Original idea
         t2_error = rhs_t.compute_t_2_amplitudes_REDUCED_new(f, system.u, t1, t2, system.o, system.v, np,self.picks,self.nos,self.nvs) #Original idea
+        print(params)
+        print(np.max(abs(t2_error)))
+        print(np.max(abs(t1_error)))
         end=time.time()
         self.times_temp.append(end-start)
         ts=[np.concatenate((self.t1s[i],self.t2s[i]),axis=None) for i in range(len(self.t1s))]
@@ -376,7 +385,6 @@ class EVCSolver():
         error=10*xtol #Placeholder to enter while loop
         while np.max(np.abs(error))>xtol and iter<diis_start:
             jacobian=self._jacobian_function(guess,*args)
-
             error=self._error_function(guess,*args)
             update=-np.linalg.inv(jacobian)@error
             guess=guess+update
@@ -397,12 +405,16 @@ class EVCSolver():
             B_matrix[-1,-1]=0
             sol=np.zeros(len(updates)+1)
             sol[-1]=-1
-            weights=np.linalg.solve(B_matrix,sol)
             input=np.zeros(len(updates[0]))
+            try:
+                weights=np.linalg.solve(B_matrix,sol)
+                for i,w in enumerate(weights[:-1]):
+                    input+=w*amplitudes[i] #Calculate new approximate ampltiude guess vector
+                    #errsum+=w*updates[i]
+            except numpy.linalg.LinAlgError:
+                input=guess
             #errsum=np.zeros(len(updates[0]))
-            for i,w in enumerate(weights[:-1]):
-                input+=w*amplitudes[i] #Calculate new approximate ampltiude guess vector
-                #errsum+=w*updates[i]
+
 
             jacobian=self._jacobian_function(input,*args)
             error=self._error_function(input,*args)
@@ -457,7 +469,7 @@ def get_natural_orbitals(molecule_func,xvals,basis,natorbs_ref=None,noons_ref=No
     return natorbs_list,noons_list,overlaps_list
 
 if __name__=="__main__":
-    basis = '6-31G*'
+    basis = '6-31G'
     basis_set = bse.get_basis(basis, fmt='nwchem')
     charge = 0
     #molecule =lambda arr: "Be 0.0 0.0 0.0; H 0.0 0.0 %f; H 0.0 0.0 -%f"%(arr,arr)
@@ -470,18 +482,18 @@ if __name__=="__main__":
     #sample_geom1=[2.5,3.0,6.0]
     sample_geom=[[x] for x in sample_geom1]
     sample_geom1=np.array(sample_geom).flatten()
-    geom_alphas1=np.linspace(1.2,5.0,20)
+    geom_alphas1=np.linspace(1.2,5,10)
     geom_alphas=[[x] for x in geom_alphas1]
 
     t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
     evcsolver=EVCSolver(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False,natorb_truncation=None)
-    E_WF=evcsolver.solve_WFCCEVC()
+    #E_WF=evcsolver.solve_WFCCEVC()
     E_AMP_full=evcsolver.solve_AMP_CCSD(occs=1,virts=1)
     E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=0.5)
     E_CCSDx=evcsolver.solve_CCSD()
     print(E_approx,E_CCSDx)
     axes[i][j].plot(geom_alphas1,E_CCSDx,label="CCSD")
-    axes[i][j].plot(geom_alphas1,E_approx,label="WF-CCEVC")
+    #axes[i][j].plot(geom_alphas1,E_approx,label="WF-CCEVC")
     axes[i][j].plot(geom_alphas1,E_AMP_full,label=r"AMP-CCEVC (50$\%$)")
     axes[i][j].plot(geom_alphas1,E_AMP_red,label=r"AMP-CCEVC")
     #plt.plot(geom_alphas1,energy_simen_random,label="CCSD AMP 2")

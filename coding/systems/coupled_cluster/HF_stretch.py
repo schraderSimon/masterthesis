@@ -19,7 +19,7 @@ axes[0][0].set_ylabel("Energy (Hartree)")
 axes[0][0].set_yticks(np.linspace(-99.95,-100.2,6))
 axes[1][0].set_yticks(np.linspace(-99.95,-100.2,6))
 axes[1][0].set_ylabel("Energy (Hartree)")
-axes[0][1].set_xlabel("distance (Bohr)")
+axes[1][0].set_xlabel("distance (Bohr)")
 axes[1][1].set_xlabel("distance (Bohr)")
 axes[0][0].set_ylim([-100.2,-99.95])
 FCI_geoms=[1,1.25,1.5,1.75,2,2.25,2.5,2.75,3,3.5,4,5]
@@ -33,7 +33,7 @@ for i in range(len(sample_geometry)):
         sample_geom1=sample_geometry[i][j]
         sample_geom=[[x] for x in sample_geom1]
         sample_geom1=np.array(sample_geom).flatten()
-        geom_alphas1=np.linspace(1.2,5,39)
+        geom_alphas1=np.linspace(1.2,5,2)
         geom_alphas=[[x] for x in geom_alphas1]
 
         t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
@@ -49,7 +49,7 @@ for i in range(len(sample_geometry)):
         axes[i][j].plot(sample_geom,sample_energies,"*",label="Sample points")
         axes[i][j].plot(geom_alphas,E_FCI_i(geom_alphas),label="FCI")
 handles, labels = axes[-1][-1].get_legend_handles_labels()
-fig.legend(handles, labels,loc=7)
+fig.legend(handles, labels,loc="lower right")
 fig.tight_layout()
 fig.subplots_adjust(right=0.80)
 plt.savefig("HF_E_631G_FCI.pdf")

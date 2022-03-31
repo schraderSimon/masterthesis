@@ -21,7 +21,7 @@ axes[0][0].set_ylabel("Energy (Hartree)")
 axes[1][0].set_ylabel("Energy (Hartree)")
 axes[1][0].set_xlabel("distance (Bohr)")
 axes[1][1].set_xlabel("distance (Bohr)")
-#axes[0][0].set_ylim([-100.2,-99.95])
+axes[0][0].set_ylim([-109.3,-108.6])
 axes[0][0].set_xticks(np.linspace(2,7,6))
 for i in range(len(sample_geometry)):
     for j in range(len(sample_geometry)):
@@ -32,7 +32,7 @@ for i in range(len(sample_geometry)):
         axes[i][j].plot(sample_geometry[i][j],sample_energies[i][j],"*",color="black",label="Sample points",markersize=7)
         axes[i][j].grid()
 handles, labels = axes[-1][-1].get_legend_handles_labels()
-fig.legend(handles, labels, bbox_to_anchor=(1.0,0.4),loc="lower right")
+fig.legend(handles, labels, bbox_to_anchor=(1.0,0.32),loc="lower right")
 fig.tight_layout()
 fig.subplots_adjust(right=0.85)
 plt.savefig("N2_ccPVTZ.pdf")

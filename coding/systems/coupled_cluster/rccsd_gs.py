@@ -239,6 +239,10 @@ class EVCSolver():
                 E_CCSD.append(np.nan)
         return E_CCSD
     def solve_AMP_CCSD(self,occs=1,virts=0.5):
+        """
+        occs: The percentage (if below 1) or number (if above 1) of occupied orbitals to include in amplitude calculations
+        virts: The percentage (if below 1) or number (if above 1) of virtual orbitals to include in amplitude calculations
+        """
         energy=[]
         start_guess=np.full(len(self.t1s),1/len(self.t1s))
         t1s_orth,t2s_orth,coefs=orthonormalize_ts(self.t1s,self.t2s)
@@ -266,7 +270,9 @@ class EVCSolver():
             virts_local=int(self.t2s[0].shape[0]*virts)
         else:
             virts_local=virts
-        pickerino[np.ix_(important_v[:virts_local],important_v[:virts_local],important_o[:occs_local],important_o[:occs_local])]=1
+        self.used_o=important_o[:occs_local]
+        self.used_v=important_v[:virts_local]
+        pickerino[np.ix_(self.used_v,self.used_v,self.used_o,self.used_o)]=1
         self.picks=pickerino.reshape(self.t2s[0].shape)
         self.picks=(self.picks*(-1)+1).astype(bool)
 
@@ -275,7 +281,8 @@ class EVCSolver():
         self.nvs=important_v[:virts_local]
         self.num_iterations=[]
         self.times=[]
-
+        self.projection_errors=[]
+        projection_errors=[]
         for k,x_alpha in enumerate(self.x_alphas):
             if isinstance(self.reference_natorbs,list):
                 ref_state=self.reference_natorbs[k]
@@ -296,11 +303,12 @@ class EVCSolver():
             closest_sample_x=np.argmin(abs(np.array(self.sample_x)-x_alpha))
             start_guess=self.coefs[:,closest_sample_x]
             self.times_temp=[]
+
             sol=self._own_root_diis(start_guess,args=[system],options={"xtol":1e-5,"maxfev":40})
             final=sol.x
             print(final)
             self.num_iterations.append(sol.nfev)
-            self.times.append(self.times_temp)
+            self.times.append(np.sum(np.array(self.times_temp)))
             t1=np.zeros(self.t1s[0].shape)
             t2=np.zeros(self.t2s[0].shape)
             for i in range(len(self.t1s)):
@@ -308,6 +316,8 @@ class EVCSolver():
                 t2+=final[i]*self.t2s[i] #Starting guess
             t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
             t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
+            max_proj_error=np.max((np.max(abs(t1_error)),np.max(abs(t2_error)) ))
+            self.projection_errors.append(max_proj_error)
             newEn=rhs_e.compute_rccsd_ground_state_energy(f, system.u, t1, t2, system.o, system.v, np)+ESCF
             if sol.success==False:
                 energy.append(np.nan)
@@ -365,13 +375,15 @@ class EVCSolver():
             t1+=params[i]*self.t1s[i] #Starting guess
             t2+=params[i]*self.t2s[i] #Starting guess
             #Ts.append(t2s[i][picks].flatten())
-            Ts.append(self.t2s[i].flatten())
+            Ts.append(self.t2s[i][np.ix_(self.used_v,self.used_v,self.used_o,self.used_o)].flatten())
+
         jacobian_matrix=np.zeros((len(params),len(params)))
         for i in range(len(params)):
             for j in range(i,len(params)):
-                jacobian_matrix[j,i]+=contract("k,k,k->",self.t1s[i].flatten(),self.t1s[j].flatten(),self.t1_Jac.flatten())
+                t1_rel=self.t1s[i]
+                jacobian_matrix[j,i]+=contract("k,k,k->",self.t1s[i][np.ix_(self.used_v,self.used_o)].flatten(),self.t1s[j][np.ix_(self.used_v,self.used_o)].flatten(),self.t1_Jac[np.ix_(self.used_v,self.used_o)].flatten())
                 #jacobian_matrix[j,i]+=contract("k,k,k->",Ts[i],Ts[j],t2_Jac[picks].flatten())
-                jacobian_matrix[j,i]+=contract("k,k,k->",Ts[i],Ts[j],self.t2_Jac.flatten())
+                jacobian_matrix[j,i]+=contract("k,k,k->",Ts[i],Ts[j],self.t2_Jac[np.ix_(self.used_v,self.used_v,self.used_o,self.used_o)].flatten())
                 jacobian_matrix[i,j]=jacobian_matrix[j,i]
         return jacobian_matrix
     def _own_root_diis(self,start_guess,args,options={"xtol":1e-3,"maxfev":25},diis_start=2,diis_dim=5):

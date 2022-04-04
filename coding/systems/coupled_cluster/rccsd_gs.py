@@ -4,7 +4,7 @@ from coupled_cluster.rccsd import RCCSD, TDRCCSD
 from coupled_cluster.rccsd import rhs_t
 from coupled_cluster.rccsd import energies as rhs_e
 from opt_einsum import contract
-from full_cc import orthonormalize_ts, orthonormalize_ts_choice, orthonormalize_ts_pca
+
 from scipy.optimize import minimize, root,newton
 import time
 class sucess():
@@ -13,6 +13,47 @@ class sucess():
         self.x=x
         self.success=success
         self.nfev=nfev
+def orthonormalize_ts(t1s: list,t2s: list):
+    """
+    Given lists of t1 and t2 amplitudes, orthogonalizes the vectors t_1\osumt_2 using SVD in such a way that the span is the same.
+
+    Input:
+    t1s,t2s (lists): Lists of same lengths for t1 and t2 amplitudes
+
+    returns:
+    t1s,t2s (lists): Orthogonalized lists with the same span
+    coefs (matrix): The linear combinations to express original elements in terms of new elements
+    """
+    t_tot=[]
+    a,i=t1s[0].shape
+    avg_norm=0
+    for j in range(len(t1s)):
+        #t1_contr=np.einsum("ai,bk->abik",t1s[j],t1s[j])
+        #t_tot.append(np.concatenate((t1s[j],0.5*t1_contr+0.25*t2s[j]),axis=None))
+        t_tot.append(np.concatenate((t1s[j],t2s[j]),axis=None))
+        avg_norm+=np.sum(np.abs(t_tot[-1]))
+    avg_norm/=len(t1s)
+    t_tot=np.array(t_tot)
+    t_tot_old=t_tot.copy()
+    t_tot=t_tot.T
+    U,s,Vt=svd(t_tot,full_matrices=False)
+    #U,R=scipy.linalg.qr(t_tot,mode="economic")
+    t_tot=(U@Vt).T
+    t1_new=[]
+    t2_new=[]
+    coefs=np.zeros((len(t1s),len(t1s)))
+    for j in range(len(t1s)):
+        for k in range(len(t1s)):
+            print(t_tot_old[j,:].shape)
+            coefs[j,k]=t_tot_old[j,:]@t_tot[k,:]
+
+    for j in range(len(t1s)):
+        new_t1=np.reshape(t_tot[j,:a*i],(a,i))
+        #new_t2=(4*np.reshape(t_tot[j,a*i:],(a,a,i,i))-2*np.einsum("ai,bk->abik",new_t1,new_t1))
+        new_t2=np.reshape(t_tot[j,a*i:],(a,a,i,i))
+        t1_new.append(new_t1)
+        t2_new.append(new_t2)
+    return t1_new,t2_new,coefs
 
 def setUpsamples_naturalOrbitals_givenNatorbs(sample_x,molecule_func,basis,freeze_threshold,natorbs,noons,Ss,mindex):
     t1s=[]
@@ -61,9 +102,31 @@ def setUpsamples_naturalOrbitals_givenNatorbs(sample_x,molecule_func,basis,freez
         sample_energies.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
     return t1s,t2s,l1s,l2s,sample_energies
 
-def setUpsamples_naturalOrbitals(sample_x,molecule_func,basis,freeze_threshold=0,desired_samples=None):
+def setUpsamples_naturalOrbitals(all_x,molecule_func,basis,freeze_threshold=0,desired_samples=None):
+    """
+    Sets up natural orbitals and the corresponding lambda and t-amplitudes for a set of geometries.
+    Natural orbitals need to be calculated for each sample_x, even though we only want natural orbitals and cluster
+    amplitudes for "desired_samples", because we night a sufficiently small distance between natural orbitals in order
+    to categorize them correctly.
+
+    Input:
+    all_x (list): The geometries at which the molecule is constructed. Possibly the whole PES of interest
+    molecule_func (function->String): A function which returns a string
+        corresponding to a molecular geometry as function of parameters from all_x.
+    basis (string): The basis set.
+    freeze_threshold (float): Cutoff threshold for natural occupation numbers. Cutoff only occurs when
+    desired_samples (list): List of integers corresponding to indices in all_x. CCSD equations are only solved for those.
+
+    Returns:
+    t1s,t2s,l1s,l2s: CCSD ampltidue and lambda equations
+    sample_energies: CCSD Energies for the desired samples
+    reference_natorb_list: Coefficient matrices for natural orbitals at desired_samples
+    reference_overlap_list: The overlap matrices S at desired_samples
+    reference_noons_list: Natural occupation numbers at desired_samples
+    """
+
     if desired_samples is None:
-        desired_samples=np.array(np.arange(0,len(sample_x)),dtype=int)
+        desired_samples=np.array(np.arange(0,len(all_x)),dtype=int)
     t1s=[]
     t2s=[]
     l1s=[]
@@ -74,7 +137,7 @@ def setUpsamples_naturalOrbitals(sample_x,molecule_func,basis,freeze_threshold=0
     reference_noons_list=[]
     systems=[]
     natorbs_ref=noons_ref=S_ref=None
-    for k,x in enumerate(sample_x[:]):
+    for k,x in enumerate(all_x[:]):
         system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_natorb(
             molecule=molecule_func(*x),
             basis=basis,
@@ -93,7 +156,7 @@ def setUpsamples_naturalOrbitals(sample_x,molecule_func,basis,freeze_threshold=0
     natorbs_ref=noons_ref=S_ref=None
     (print(mindex,len(noons)))
     print("Finished first iteration")
-    for k,x in enumerate(sample_x[:]):
+    for k,x in enumerate(all_x[:]):
         system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_natorb(
             molecule=molecule_func(*x),
             basis=basis,
@@ -127,6 +190,24 @@ def setUpsamples_naturalOrbitals(sample_x,molecule_func,basis,freeze_threshold=0
         print("Calculated %d"%k)
     return t1s,t2s,l1s,l2s,sample_energies,reference_natorb_list,reference_overlap_list,reference_noons_list
 def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="procrustes",weights=None):
+    """
+    Sets up lambda and t-amplitudes for a set of geometries.
+
+    Input:
+    sample_x (list): The geometries at which the molecule is constructed.
+    molecule_func (function->String): A function which returns a string
+        corresponding to a molecular geometry as function of parameters from sample_x.
+    basis (string): The basis set.
+    rhf_mo_ref (matrix or list of matrices):
+        if matrix: Use Procrustes algorithm to use "best" HF reference, then calculate amplitudes based on that
+        if list: Use coefficient matrices in the list directly to calculate amplitudes from.
+    mix_states (bool): if general procrustes orbitals should be used.
+    weights: Outdated parameter
+
+    Returns:
+    t1s,t2s,l1s,l2s: CCSD ampltidue and lambda equations
+    sample_energies: CCSD Energies for the desired samples
+    """
     t1s=[]
     t2s=[]
     l1s=[]
@@ -161,8 +242,12 @@ def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="
     return t1s,t2s,l1s,l2s,sample_energies
 
 class EVCSolver():
-    def __init__(self,x_alphas,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,sample_x=None,mix_states=False,natorb_truncation=None):
-        self.x_alphas=x_alphas
+    """
+    Class to solve EVC equations. Contains both WF-CCEVC and AMP-CCEVC functions.
+    Ini
+    """
+    def __init__(self,all_x,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,sample_x=None,mix_states=False,natorb_truncation=None):
+        self.all_x=all_x
         self.molecule_func=molecule_func
         self.sample_x=sample_x
         self.basis=basis
@@ -175,47 +260,15 @@ class EVCSolver():
         self.natorb_truncation=natorb_truncation
         self.num_params=np.prod(t1s[0].shape)+np.prod(t2s[0].shape)
         self.coefs=None
-    def construct_H_S(self,system):
-        RHF_energy=system.compute_reference_energy().real
-        H=np.zeros((len(self.t1s),len(self.t1s)))
-        S=np.zeros((len(self.t1s),len(self.t1s)))
-        for i in range(len(self.t1s)):
-            f = system.construct_fock_matrix(system.h, system.u)
-            t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)
-            t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)
-            exp_energy=rhs_e.compute_rccsd_ground_state_energy(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)+RHF_energy
-            for j in range(len(self.t1s)):
-                X1=self.t1s[i]-self.t1s[j]
-                X2=self.t2s[i]-self.t2s[j]
-                overlap=1+contract("ia,ai->",self.l1s[j],X1)+0.5*contract("ijab,ai,bj->",self.l2s[j],X1,X1)+0.25*contract("ijab,abij->",self.l2s[j],X2)
-                S[i,j]=overlap
-
-                H[i,j]=overlap*exp_energy
-                extra=contract("ia,ai->",self.l1s[j],t1_error)+contract("ijab,ai,bj->",self.l2s[j],X1,t1_error)+0.25*contract("ijab,abij->",self.l2s[j],t2_error)
-                H[i,j]=H[i,j]+extra
-        return H,S
-    def solve_WFCCEVC(self):
-        E_WFCCEVC=[]
-        for k,x_alpha in enumerate(self.x_alphas):
-            if isinstance(self.reference_natorbs,list):
-                ref_state=self.reference_natorbs[k]
-            else:
-                ref_state=self.reference_natorbs
-            system = construct_pyscf_system_rhf_ref(
-                molecule=self.molecule_func(*x_alpha),
-                basis=self.basis,
-                add_spin=False,
-                anti_symmetrize=False,
-                reference_state=ref_state,
-                mix_states=self.mix_states,
-                truncation=self.natorb_truncation
-            )
-            H,S=self.construct_H_S(system)
-            E_WFCCEVC.append(guptri_Eigenvalue(H,S))
-        return E_WFCCEVC
     def solve_CCSD(self):
+        """
+        Solves the CCSD equations.
+
+        Returns:
+        E_CCSD (list): CCSD Energies at all_x.
+        """
         E_CCSD=[]
-        for k,x_alpha in enumerate(self.x_alphas):
+        for k,x_alpha in enumerate(self.all_x):
             if isinstance(self.reference_natorbs,list):
                 ref_state=self.reference_natorbs[k]
             else:
@@ -230,7 +283,6 @@ class EVCSolver():
                 truncation=self.natorb_truncation
             )
             try:
-                print("Starting to calculate ground state energy")
                 rccsd = RCCSD(system, verbose=False)
                 ground_state_tolerance = 1e-7
                 rccsd.compute_ground_state(t_kwargs=dict(tol=ground_state_tolerance))
@@ -238,13 +290,48 @@ class EVCSolver():
             except:
                 E_CCSD.append(np.nan)
         return E_CCSD
-    def solve_AMP_CCSD(self,occs=1,virts=0.5):
+
+
+    def solve_WFCCEVC(self):
         """
-        occs: The percentage (if below 1) or number (if above 1) of occupied orbitals to include in amplitude calculations
-        virts: The percentage (if below 1) or number (if above 1) of virtual orbitals to include in amplitude calculations
+        Solves the AMP_CCSD equations.
+
+        Returns:
+        E_WFCCEVC (list): WF-CCEVC Energies at all_x.
+        """
+        E_WFCCEVC=[]
+        for k,x_alpha in enumerate(self.all_x):
+            if isinstance(self.reference_natorbs,list):
+                ref_state=self.reference_natorbs[k]
+            else:
+                ref_state=self.reference_natorbs
+            system = construct_pyscf_system_rhf_ref(
+                molecule=self.molecule_func(*x_alpha),
+                basis=self.basis,
+                add_spin=False,
+                anti_symmetrize=False,
+                reference_state=ref_state,
+                mix_states=self.mix_states,
+                truncation=self.natorb_truncation
+            )
+            H,S=self._construct_H_S(system) #Get H and S as described in Ekstrøm & Hagen
+            E_WFCCEVC.append(guptri_Eigenvalue(H,S)) #Solve generalized eigenvector problem
+        return E_WFCCEVC
+
+    def solve_AMP_CCSD(self,occs=1,virts=0.5,xtol=1e-5,maxfev=40):
+        """
+        Solves the AMP_CCSD equations.
+
+        Input:
+        occs (float): The percentage (if below 1) or number (if above 1) of occupied orbitals to include in amplitude calculations
+        virts (float): The percentage (if below 1) or number (if above 1) of virtual orbitals to include in amplitude calculations
+        xtol (float): Convergence criterion for maximum amplitude error
+        maxfev (int): Maximal number of Newton's method iterations
+        Returns:
+        energy (list): AMP-CCEVC Energies at all_x.
         """
         energy=[]
-        start_guess=np.full(len(self.t1s),1/len(self.t1s))
+        start_guess=np.full(len(self.t1s),1/len(self.t1s)) #
         t1s_orth,t2s_orth,coefs=orthonormalize_ts(self.t1s,self.t2s)
         if self.coefs is None:
             self.coefs=coefs
@@ -283,7 +370,7 @@ class EVCSolver():
         self.times=[]
         self.projection_errors=[]
         projection_errors=[]
-        for k,x_alpha in enumerate(self.x_alphas):
+        for k,x_alpha in enumerate(self.all_x):
             if isinstance(self.reference_natorbs,list):
                 ref_state=self.reference_natorbs[k]
             else:
@@ -300,11 +387,11 @@ class EVCSolver():
             f = system.construct_fock_matrix(system.h, system.u)
             ESCF=system.compute_reference_energy().real
             self._system_jacobian(system)
-            closest_sample_x=np.argmin(abs(np.array(self.sample_x)-x_alpha))
+            closest_sample_x=np.argmin(np.linalg.norm(np.array(self.sample_x)-x_alpha,axis=1))
             start_guess=self.coefs[:,closest_sample_x]
             self.times_temp=[]
 
-            sol=self._own_root_diis(start_guess,args=[system],options={"xtol":1e-5,"maxfev":40})
+            sol=self._own_root_diis(start_guess,args=[system],options={"xtol":xtol,"maxfev":maxfev})
             final=sol.x
             print(final)
             self.num_iterations.append(sol.nfev)
@@ -324,7 +411,35 @@ class EVCSolver():
             else:
                 energy.append(newEn)
         return energy
+    def _construct_H_S(self,system):
+        """
+        Constructs H and S matrix as described in Ekstrøm and Hagen.
+        Input: quantum system containing molecular data and coefficient matrix
+
+        Returns: H and S matrices as expressed in terms of the sample basis.
+        """
+        RHF_energy=system.compute_reference_energy().real
+        H=np.zeros((len(self.t1s),len(self.t1s)))
+        S=np.zeros((len(self.t1s),len(self.t1s)))
+        for i in range(len(self.t1s)):
+            f = system.construct_fock_matrix(system.h, system.u)
+            t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)
+            t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)
+            exp_energy=rhs_e.compute_rccsd_ground_state_energy(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)+RHF_energy
+            for j in range(len(self.t1s)):
+                X1=self.t1s[i]-self.t1s[j]
+                X2=self.t2s[i]-self.t2s[j]
+                overlap=1+contract("ia,ai->",self.l1s[j],X1)+0.5*contract("ijab,ai,bj->",self.l2s[j],X1,X1)+0.25*contract("ijab,abij->",self.l2s[j],X2)
+                S[i,j]=overlap
+
+                H[i,j]=overlap*exp_energy
+                extra=contract("ia,ai->",self.l1s[j],t1_error)+contract("ijab,ai,bj->",self.l2s[j],X1,t1_error)+0.25*contract("ijab,abij->",self.l2s[j],t2_error)
+                H[i,j]=H[i,j]+extra
+        return H,S
     def _system_jacobian(self,system):
+        """
+        Construct quasi-newton jacobian for a given geometry.
+        """
         f = system.construct_fock_matrix(system.h, system.u)
         no=system.n
         nv=system.l-system.n
@@ -341,6 +456,16 @@ class EVCSolver():
         self.t1_Jac=t1_Jac
         self.t2_Jac=t2_Jac
     def _error_function(self,params,system):
+        """
+        Projection error given a set of pareters [c_1,...,c_L]
+
+        Input:
+        params (list): The parameters [c_1,...,c_L] for which to caluclate the error
+        system: The molecule with information
+
+        Returns:
+            List: Projection errors
+        """
         t1=np.zeros(self.t1s[0].shape)
         t2=np.zeros(self.t2s[0].shape)
 
@@ -353,9 +478,6 @@ class EVCSolver():
         start=time.time()
         t1_error = rhs_t.compute_t_1_amplitudes_REDUCED_new(f, system.u, t1, t2, system.o, system.v, np,self.picks,self.nos,self.nvs) #Original idea
         t2_error = rhs_t.compute_t_2_amplitudes_REDUCED_new(f, system.u, t1, t2, system.o, system.v, np,self.picks,self.nos,self.nvs) #Original idea
-        print(params)
-        print(np.max(abs(t2_error)))
-        print(np.max(abs(t1_error)))
         end=time.time()
         self.times_temp.append(end-start)
         ts=[np.concatenate((self.t1s[i],self.t2s[i]),axis=None) for i in range(len(self.t1s))]
@@ -368,6 +490,9 @@ class EVCSolver():
             projection_errors[i]+=t2_error_flattened@self.t2s[i].flatten()
         return projection_errors
     def _jacobian_function(self,params,system):
+        """
+        quasi-newton jacobian for a given geometry as expressed in terms of params [c_1,\dots,c_L]
+        """
         t1=np.zeros(self.t1s[0].shape)
         t2=np.zeros(self.t2s[0].shape)
         Ts=[]
@@ -387,6 +512,18 @@ class EVCSolver():
                 jacobian_matrix[i,j]=jacobian_matrix[j,i]
         return jacobian_matrix
     def _own_root_diis(self,start_guess,args,options={"xtol":1e-3,"maxfev":25},diis_start=2,diis_dim=5):
+        """Root finding algorithm based on quasi-newton and DIIS.
+
+        Input:
+        start_guess (list): Start guess for coefficients
+        args [list]: A list containing the system
+        options (dict): Tolerance (xtol) and number of maximum evaluations
+        diis_start: How many iterations to do before starting diis_start
+        diis_dim: Dimensionality of DIIS subspace
+
+        Returns:
+        Sucess object with final solution, number of iterations, and wether convergence was reached
+        """
         guess=start_guess
         xtol=options["xtol"]
         maxfev=options["maxfev"]
@@ -395,6 +532,8 @@ class EVCSolver():
         amplitudes=[]
         updates=[]
         error=10*xtol #Placeholder to enter while loop
+
+        #Calculate diis_start iterations without DIIS
         while np.max(np.abs(error))>xtol and iter<diis_start:
             jacobian=self._jacobian_function(guess,*args)
             error=self._error_function(guess,*args)
@@ -405,6 +544,8 @@ class EVCSolver():
             updates.append(update)
             amplitudes.append(guess)
             iter+=1
+
+        #DIIS algorithm
         while np.max(np.abs(error))>xtol and iter<maxfev:
 
             #Calculate DIIS B-matrix from Jacobian guess update
@@ -423,14 +564,13 @@ class EVCSolver():
                 for i,w in enumerate(weights[:-1]):
                     input+=w*amplitudes[i] #Calculate new approximate ampltiude guess vector
                     #errsum+=w*updates[i]
-            except numpy.linalg.LinAlgError:
+            except numpy.linalg.LinAlgError: #If DIIS matrix is singular, use most recent quasi-newton step
                 input=guess
             #errsum=np.zeros(len(updates[0]))
 
 
             jacobian=self._jacobian_function(input,*args)
             error=self._error_function(input,*args)
-            print(error)
             update=-np.linalg.inv(jacobian)@error #Calculate update vector
             guess=input+update
             errors.append(error)
@@ -506,8 +646,8 @@ if __name__=="__main__":
     print(E_approx,E_CCSDx)
     axes[i][j].plot(geom_alphas1,E_CCSDx,label="CCSD")
     #axes[i][j].plot(geom_alphas1,E_approx,label="WF-CCEVC")
-    axes[i][j].plot(geom_alphas1,E_AMP_full,label=r"AMP-CCEVC (50$\%$)")
-    axes[i][j].plot(geom_alphas1,E_AMP_red,label=r"AMP-CCEVC")
+    #axes[i][j].plot(geom_alphas1,E_AMP_full,label=r"AMP-CCEVC (50$\%$)")
+    #axes[i][j].plot(geom_alphas1,E_AMP_red,label=r"AMP-CCEVC")
     #plt.plot(geom_alphas1,energy_simen_random,label="CCSD AMP 2")
     plt.legend()
     plt.show()

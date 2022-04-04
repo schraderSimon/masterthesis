@@ -74,6 +74,14 @@ for k,x in enumerate(xc_array):
 kvals1=[3,6]
 kvals2=[6,12]
 kvals=[kvals1,kvals2]
+data={}
+data["Phi1_E"]=energies[:,0]
+data["Phi2_E"]=energies[:,1]
+data["xc_array"]=xc_array
+data["FCI"]=E_FCI
+energies_3=[[],[]]
+energies_6=[[],[]]
+geometry_energy_pair=[[],[]]
 for i in range(2):
     for j in range(2):
         if i==0:
@@ -89,19 +97,31 @@ for i in range(2):
             HF=eigvecsolver_RHF(sx[:k],basis,molecule=molecule,type="transform",coeff_matrices=coefficient_matrices[:k])
             energiesEC,eigenvectors=HF.calculate_energies(xc_array)
             axes[i,j].plot(xc_array,energiesEC,label="EC (%d pt.)"%(k))
+            if ki==0:
+                energies_3[i].append(energiesEC)
+            elif ki==1:
+                energies_6[i].append(energiesEC)
         axes[i,j].plot(xc_array,energies[:,0],label=r"RHF $|\Phi_1\rangle$")
         axes[i,j].plot(xc_array,energies[:,1],label=r"RHF $|\Phi_2\rangle$")
         axes[i,j].plot(xc_array,E_FCI,label="FCI")
         if i==0:
             energiesHF_sample=[ground_energies[k] for k in sample_indices[i][j]]
             axes[i,j].plot(sx,energiesHF_sample,"*",color="black",label="Sample pts.")
+            geometry_energy_pair[i].append(list(zip(sx,energiesHF_sample)))
         if i==1:
             energiesHF_sample=[energies[k,0] for k in sample_indices[i][j]]
             axes[i,j].plot(sx,energiesHF_sample,"*",color="black",label="Sample pts.")
-            energiesHF_sample=[energies[k,1] for k in sample_indices[i][j]]
-            axes[i,j].plot(sx,energiesHF_sample,"*",color="black")
+            energiesHF_sample2=[energies[k,1] for k in sample_indices[i][j]]
+            axes[i,j].plot(sx,energiesHF_sample2,"*",color="black")
+            geometry_energy_pair[i].append( list(zip( np.concatenate((sx,sx)) , np.concatenate((energiesHF_sample,energiesHF_sample2)) )) )
+data["energy3"]=energies_3
+data["energy6"]=energies_6
+data["samples"]=geometry_energy_pair
+file="energy_data/BeH2_data.bin"
+import pickle
+with open(file,"wb") as f:
+    pickle.dump(data,f)
 
-        #axes[i,j].set_title(name[i])
 
 handles, labels = axes[0][0].get_legend_handles_labels()
 axes[0][0].set_ylabel("Energy (Hartree)")

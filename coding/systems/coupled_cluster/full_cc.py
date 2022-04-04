@@ -9,6 +9,7 @@ from matrix_operations import *
 from helper_functions import *
 from scipy.optimize import minimize, root,newton
 from sklearn.decomposition import PCA
+from rccsd_gs import orthonormalize_ts
 @jit(parallel=True,nopython=True)
 def make_spinints_aokjemi(dim,energy_basis_2e_mol_chem,alternating):
     spinints_AO_kjemi=np.zeros((dim,dim,dim,dim))
@@ -151,7 +152,7 @@ def basischange(C_old,overlap_AOs_newnew,neh):
     C_new[:,neh:]=C_new_unocc
     return C_new
 
-
+"""
 def orthonormalize_ts_choice(t1s,t2s,choice):
     t_tot=[]
     t_tot_small=[]
@@ -179,38 +180,6 @@ def orthonormalize_ts_choice(t1s,t2s,choice):
         t1_new.append(new_t1)
         t2_new.append(new_t2)
     return t1_new,t2_new
-def orthonormalize_ts(t1s,t2s):
-
-    t_tot=[]
-    a,i=t1s[0].shape
-    avg_norm=0
-    for j in range(len(t1s)):
-        #t1_contr=np.einsum("ai,bk->abik",t1s[j],t1s[j])
-        #t_tot.append(np.concatenate((t1s[j],0.5*t1_contr+0.25*t2s[j]),axis=None))
-        t_tot.append(np.concatenate((t1s[j],t2s[j]),axis=None))
-        avg_norm+=np.sum(np.abs(t_tot[-1]))
-    avg_norm/=len(t1s)
-    t_tot=np.array(t_tot)
-    t_tot_old=t_tot.copy()
-    t_tot=t_tot.T
-    U,s,Vt=svd(t_tot,full_matrices=False)
-    #U,R=scipy.linalg.qr(t_tot,mode="economic")
-    t_tot=(U@Vt).T
-    t1_new=[]
-    t2_new=[]
-    coefs=np.zeros((len(t1s),len(t1s)))
-    for j in range(len(t1s)):
-        for k in range(len(t1s)):
-            print(t_tot_old[j,:].shape)
-            coefs[j,k]=t_tot_old[j,:]@t_tot[k,:]
-
-    for j in range(len(t1s)):
-        new_t1=np.reshape(t_tot[j,:a*i],(a,i))
-        #new_t2=(4*np.reshape(t_tot[j,a*i:],(a,a,i,i))-2*np.einsum("ai,bk->abik",new_t1,new_t1))
-        new_t2=np.reshape(t_tot[j,a*i:],(a,a,i,i))
-        t1_new.append(new_t1)
-        t2_new.append(new_t2)
-    return t1_new,t2_new,coefs
 def orthonormalize_ts_pca(t1s,t2s,nos,nvs):
 
     t_tot=[]
@@ -251,6 +220,7 @@ def orthonormalize_ts_pca(t1s,t2s,nos,nvs):
         start_guess.append(t0_old@np.concatenate((t1_new[i],t2_new[i]),axis=None))
     print(start_guess)
     return t1_new,t2_new, start_guess
+"""
 def make_mol(molecule,x,basis="6-31G",charge=0):
 	mol=gto.Mole()
 	mol.atom=molecule(*x)

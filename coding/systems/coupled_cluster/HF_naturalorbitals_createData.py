@@ -27,6 +27,8 @@ energies_AMPred=[[],[]]
 energies_CCSD=[[],[]]
 energies_sample=[[],[]]
 titles=[["Natural","Frozen Natural"],["Natural","Procrustes"]]
+virtsval=0.5
+
 for i in range(len(sample_geometry)):
     for j in range(len(sample_geometry)):
         if i==1 and j==1:
@@ -48,7 +50,7 @@ for i in range(len(sample_geometry)):
         evcsolver=EVCSolver(geom_alphas,molecule,basis_set,natorbs,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False,natorb_truncation=truncation)
         E_WF=evcsolver.solve_WFCCEVC()
         E_AMP_full=evcsolver.solve_AMP_CCSD(occs=1,virts=1)
-        E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=0.5)
+        E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=virtsval)
         E_CCSDx=evcsolver.solve_CCSD()
         energies_WF[i].append(E_WF)
         energies_AMP[i].append(E_AMP_full)
@@ -64,7 +66,7 @@ t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,refe
 evcsolver=EVCSolver(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False)
 E_WF=evcsolver.solve_WFCCEVC()
 E_AMP_full=evcsolver.solve_AMP_CCSD(occs=1,virts=1)
-E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=0.5)
+E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=virtsval)
 energies_WF[i].append(E_WF)
 energies_AMP[i].append(E_AMP_full)
 energies_AMPred[i].append(E_AMP_red)
@@ -82,7 +84,7 @@ energy_dict["samples"]=sample_geometry
 energy_dict["energy_samples"]=energies_sample
 energy_dict["titles"]=titles
 
-file="energy_data/HF_Natorb.bin"
+file="energy_data/HF_Natorb_%.2f.bin"%virtsval
 import pickle
 with open(file,"wb") as f:
     pickle.dump(energy_dict,f)

@@ -16,34 +16,45 @@ def molecule(x,y):
 refx=(1,1)
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
 n=30
-x=4*np.random.rand(n,2)+2
+x=4*np.random.rand(n,2)+2 #n random numbers between 2 and 6 for x and y directions
 sample_geom_new=[]
 for i in range(n):
     if (x[i,0]+x[i,1]) <=9 or (x[i,0]+x[i,1])>= 11.5:
         sample_geom_new.append([x[i,0],x[i,1]])
 sample_geom=np.concatenate((sample_geom_new,[[5.5,6],[6,5.5],[6,6]]))
-print(sample_geom)
+print(len(sample_geom))
 span=np.linspace(2,6,9)
 
 geom_alphas=[]
 for x in span:
     for y in span:
         geom_alphas.append((x,y))
-print(geom_alphas)
 x, y = np.meshgrid(span,span)
 
 #E_FCI=FCI_energy_curve(geom_alphas,basis,molecule,unit="Bohr")
 E_FCI=np.load("BeH2_2to6_FULLCI.npy")
+energy_dict={}
+t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
 
-mix_states=False
-t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=mix_states,type="procrustes")
-energy_simen_full=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=mix_states,type="procrustes")
-energy_simen_reduced=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=mix_states,random_picks=1000,type="procrustes")
-E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=mix_states,run_cc=True,cc_approx=False,type="procrustes")
-E_approx=np.asarray(E_approx).reshape((len(span),len(span)))
-E_CCSDx=np.asarray(E_CCSDx).reshape((len(span),len(span)))
-energy_simen_full=np.asarray(energy_simen_full).reshape((len(span),len(span)))
-energy_simen_reduced=np.asarray(energy_simen_reduced).reshape((len(span),len(span)))
+evcsolver=EVCSolver(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False)
+E_WF=evcsolver.solve_WFCCEVC()
+E_AMP_full=evcsolver.solve_AMP_CCSD(occs=1,virts=1)
+E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=0.5)
+energy_dict["num_samples"]=len(sample_geom)
+energy_dict["CCSD"]=CCSD_energy_curve(molecule,geom_alphas,basis)
+energy_dict["FCI"]=E_FCI
+energy_dict["AMP"]=E_AMP_full
+energy_dict["WF"]=E_WF
+energy_dict["AMPred"]=E_AMP_red
+energy_dict["x"]=x
+energy_dict["y"]=y
+energy_dict["samples"]=sample_geom
+import pickle
+file="energy_data/BeH2_2d_plot.bin"
+
+with open(file,"wb") as f:
+    pickle.dump(energy_dict,f)
+
 print("Grid")
 print(np.meshgrid(span,span))
 print("Error in CCSD")

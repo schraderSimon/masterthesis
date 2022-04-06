@@ -38,6 +38,10 @@ t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,refe
 
 evcsolver=EVCSolver(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False)
 E_WF=evcsolver.solve_WFCCEVC()
+WF=np.array(E_WF).reshape((9,9))
+FCI=np.array(E_FCI).reshape((9,9))
+WFerr=np.abs(WF-FCI)*1000
+print(WFerr)
 E_AMP_full=evcsolver.solve_AMP_CCSD(occs=1,virts=1)
 E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=0.5)
 energy_dict["num_samples"]=len(sample_geom)
@@ -50,7 +54,7 @@ energy_dict["x"]=x
 energy_dict["y"]=y
 energy_dict["samples"]=sample_geom
 import pickle
-file="energy_data/BeH2_2d_plot.bin"
+file="energy_data/BeH2_2d_plot_NOGUPTRI.bin"
 
 with open(file,"wb") as f:
     pickle.dump(energy_dict,f)

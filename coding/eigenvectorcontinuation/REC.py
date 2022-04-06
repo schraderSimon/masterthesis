@@ -5,10 +5,12 @@ import sys
 import scipy
 from matrix_operations import *
 from helper_functions import *
-np.set_printoptions(linewidth=200,precision=2,suppress=True)
+sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+from func_lib import *
+np.set_printoptions(linewidth=200,precision=4,suppress=True)
 import matplotlib
 class eigvecsolver_RHF():
-    def __init__(self,sample_points,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0,symmetry=False):
+    def __init__(self,sample_points,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0,symmetry=False,type="transform",coeff_matrices=None):
         """Initiate the solver.
         It Creates the HF coefficient matrices for the sample points for a given molecule.
 
@@ -17,7 +19,10 @@ class eigvecsolver_RHF():
         basis_type - atomic basis
         molecule - A function f(x), returning the molecule as function of x
         """
-        self.HF_coefficients=[] #The Hartree Fock coefficients solved at the sample points
+        if coeff_matrices is None:
+            self.HF_coefficients=[] #The Hartree Fock coefficients solved at the sample points
+        else:
+            self.HF_coefficients=coeff_matrices
         self.molecule=molecule
         self.basis_type=basis_type
         self.spin=spin
@@ -25,17 +30,20 @@ class eigvecsolver_RHF():
         self.symmetry=symmetry
         self.charge=charge
         self.sample_points=sample_points
+        self.type=type
         self.solve_HF()
     def solve_HF(self):
         """
         Create coefficient matrices for each sample point
         """
-        HF_coefficients=[]
-        for x in self.sample_points:
-            mol=self.build_molecule(x)
-            mf=mol.RHF().run(verbose=2,conv_tol=1e-8)
-            expansion_coefficients_mol= mf.mo_coeff[:, mf.mo_occ >=-1] #Use all
-            HF_coefficients.append(expansion_coefficients_mol)
+        HF_coefficients=self.HF_coefficients
+        mol=self.build_molecule(1)
+        if len(HF_coefficients)==0:
+            for x in self.sample_points:
+                mol=self.build_molecule(x)
+                mf=mol.RHF().run(verbose=2,conv_tol=1e-8)
+                expansion_coefficients_mol= mf.mo_coeff[:, mf.mo_occ >=-1] #Use all
+                HF_coefficients.append(expansion_coefficients_mol)
         self.HF_coefficients=HF_coefficients
         self.nMO_h=HF_coefficients[0].shape[0] #Number of molecular orbitals divided by two (for each spin)
         self.num_bas=self.nMO_h
@@ -61,20 +69,29 @@ class eigvecsolver_RHF():
         for index,xc in enumerate(xc_array):
             mol_xc=self.build_molecule(xc)
             new_HF_coefficients=[]
-            for i in range(len(self.sample_points)):
-                new_HF_coefficients.append(self.basischange(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:self.number_electronshalf])
+            for i in range(len(self.HF_coefficients)):
+                new_HF_coefficients.append(self.change_coefficients(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:self.number_electronshalf])
             S,T=self.calculate_ST_matrices(mol_xc,new_HF_coefficients)
             try:
-                eigval,eigvec=generalized_eigenvector(T,S)
+                eigval,eigvec=generalized_eigenvector(T,S,threshold=1e-12)
             except:
                 eigval=float('NaN')
                 eigvec=float('NaN')
             energy_array[index]=eigval
             eigvec_array.append(eigvec)
+        self.eigvecs=eigvec_array
         return energy_array,eigvec_array
-
+    def change_coefficients(self,C_old, S_new):
+        if self.type=="transform":
+            returnmat=basischange(C_old,S_new,self.number_electronshalf)
+        elif self.type=="procrustes":
+            C_new=np.real(fractional_matrix_power(S_new,-0.5))
+            #weights=np.zeros(len(C_new))
+            #weights[:self.number_electronshalf]=1
+            returnmat=localize_procrustes(None,C_new,None,C_old,mix_states=True,nelec=self.number_electronshalf,weights=None)
+        return returnmat
     def getdeterminant_matrix(self,AO_overlap,HF_coefficients_left,HF_coefficients_right):
-        determinant_matrix=np.einsum("ab,ai,bj->ij",AO_overlap,HF_coefficients_left,HF_coefficients_right)
+        determinant_matrix=contract("ab,ai,bj->ij",AO_overlap,HF_coefficients_left,HF_coefficients_right)
         return determinant_matrix
 
     def biorthogonalize(self,C_w,C_x,AO_overlap):
@@ -104,11 +121,11 @@ class eigvecsolver_RHF():
             "re-calculate HF coefficients"
             overlaps=np.zeros(len(self.sample_points))
             for i in range(len(self.sample_points)):
-                conv_sol=self.basischange(self.HF_coefficients[i][:,:self.number_electronshalf],mol_xc.intor("int1e_ovlp"))
+                conv_sol=self.change_coefficients(self.HF_coefficients[i][:,:self.number_electronshalf],overlap_basis)
                 determinant_matrix=self.getdeterminant_matrix(overlap_basis,true_HF_coeffmatrix,conv_sol)
                 overlap=self.getoverlap(determinant_matrix)
                 overlaps[i]=overlap
-            overlap_to_HF[index]=np.dot(overlaps,eigvecs[index])
+            overlap_to_HF[index]=np.dot(overlaps,self.eigvecs[index])
         return overlap_to_HF
     def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
         number_electronshalf=self.number_electronshalf
@@ -120,10 +137,12 @@ class eigvecsolver_RHF():
         for i in range(len(self.HF_coefficients)):
             for j in range(i,len(self.HF_coefficients)):
                 D,C_w,C_x=self.biorthogonalize(new_HF_coefficients[i],new_HF_coefficients[j],overlap_basis)
-                D_tilde=D[np.abs(D)>1e-15]
+                D_tilde=D[np.abs(D)>1e-12]
                 S_tilde=np.prod(D_tilde)**2 #Squared because this is RHF.
                 S=np.prod(D)**2
                 Smat[i,j]=Smat[j,i]=S
+                if S<1e-10:
+                    Smat[i,j]=Smat[j,i]=0
                 energy=self.energy_func(C_w,C_x,energy_basis_1e,energy_basis_2e,D)*S_tilde
                 #energy_naive=self.energy_func_naive(C_w,C_x,energy_basis_1e,energy_basis_2e,D)*S_tilde
                 #print(energy-energy_naive)
@@ -132,9 +151,9 @@ class eigvecsolver_RHF():
         return Smat,Tmat
     def energy_func_naive(self,C_w,C_x,onebodyp,twobodyp,D):
         twobody=ao2mo.get_mo_eri(twobodyp,(C_w,C_x,C_w,C_x),aosym="s1") #Works well and seems to me to be the correct one.
-        onebody=np.einsum("ki,lj,kl->ij",C_w,C_x,onebodyp)
-        alpha=np.arange(5)
-        beta=np.arange(5)
+        onebody=contract("ki,lj,kl->ij",C_w,C_x,onebodyp)
+        alpha=np.arange(3)
+        beta=np.arange(3)
         onebodydivD=np.diag(onebody)/D
         onebody_alpha=np.sum(onebodydivD)
         onebody_beta=np.sum(onebodydivD)
@@ -159,67 +178,34 @@ class eigvecsolver_RHF():
         energy2*=0.5
         return onebody_alpha+onebody_beta+energy2
     def energy_func(self,C_w,C_x,onebody,twobody,D):
-        number_of_zeros=len(D[np.abs(D)<1e-15])*2
-        zero_indices=np.where(np.abs(D)<1e-15)
+        number_of_zeros=len(D[np.abs(D)<1e-12])*2
+        zero_indices=np.where(np.abs(D)<1e-12)
+        D_tilde=D[np.abs(D)>1e-12]
+        S_tilde=np.prod(D_tilde)**2
         if number_of_zeros>2:
             return 0
         else:
             P_s=[]
             for i in range(self.number_electronshalf):
-                P_s.append(np.einsum("m,v->mv",C_w[:,i],C_x[:,i]))
-            P=P_s
-            for i in range(self.number_electronshalf):
-                P[i]=P[i]/D[i]
-            W=np.sum(P,axis=0)
+                P_s.append(contract("m,v->mv",C_w[:,i],C_x[:,i]))
+
             if number_of_zeros==2:
-                print("Bæmp")
                 H1=0
                 i=zero_indices[0][0]
-                J_contr=np.einsum("ms,ms->",P_s[i],np.einsum("vt,msvt->ms",P_s[i],twobody))
-                K_contr=np.einsum("ms,ms->",P_s[i],np.einsum("vt,mtvs->ms",P_s[i],twobody))
-                H2=J_contr-K_contr
+                J_contr=contract("sm,ms->",P_s[i],contract("tv,msvt->ms",P_s[i],twobody))
+                #twobody=ao2mo.get_mo_eri(twobody,(C_w,C_x,C_w,C_x),aosym="s1")
+                H2=J_contr#-K_contr
+                #H2=S_tilde*(twobody[i,i,i,i])
             elif number_of_zeros==0:
-                J_contr=4*np.einsum("sm,ms->",W,np.einsum("tv,msvt->ms",W,twobody))
-                K_contr=2*np.einsum("sm,ms->",W,np.einsum("tv,mtvs->ms",W,twobody))
-                H2=0.5*(J_contr-K_contr)
-                H1=2*np.einsum("mv,mv->",W,onebody)
+                P=P_s.copy()
+                for i in range(self.number_electronshalf):
+                    P[i]=P[i]/D[i]
+                W=np.sum(P,axis=0)
+                H2=0.5*contract("sm,ms->",W,4*contract("tv,msvt->ms",W,twobody)-2*contract("tv,mtvs->ms",W,twobody))
+                #K_contr=2*contract("sm,ms->",W,)
+                #H2=0.5*(J_contr-K_contr)
+                H1=2*contract("mv,mv->",W,onebody)
             return H2+H1
-    def basischange_alt(self,C_old,overlap_AOs_newnew): #This one works MUUUUCH BETTER!!! I suppose it "samples" more?
-        S_eig,S_U=np.linalg.eigh(overlap_AOs_newnew)
-        S_poweronehalf=S_U@np.diag(S_eig**0.5)@S_U.T
-        S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-        C_newbasis=S_poweronehalf@C_old #Basis change
-        q,r=np.linalg.qr(C_newbasis) #orthonormalise
-        return S_powerminusonehalf@q #change back
-    def basischange(self,C_old,overlap_AOs_newnew):
-        def overlap_p(L,R):
-            return np.einsum("i,j,ij->",L,R,overlap_AOs_newnew)
-        C_occ=C_old[:,:self.number_electronshalf]
-
-        S_occ=np.einsum("mi,vj,mv->ij",C_occ,C_occ,overlap_AOs_newnew)
-        S_eig,S_U=np.linalg.eigh(S_occ)
-        S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-        C_new_occ=np.einsum("ij,mj->mi",S_powerminusonehalf,C_occ)
-        #Remove C_occ part from the unoccupied matrices...
-
-        C_unocc=C_old[:,self.number_electronshalf:]
-        for unocc_col in range(C_unocc.shape[1]):
-            for occ_col in range(C_new_occ.shape[1]):
-                C_unocc[:,unocc_col]-=C_new_occ[:,occ_col]*overlap_p(C_new_occ[:,occ_col],C_unocc[:,unocc_col])
-        S_unocc=np.einsum("mi,vj,mv->ij",C_unocc,C_unocc,overlap_AOs_newnew)
-        S_eig,S_U=np.linalg.eigh(S_unocc)
-        S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-        C_new_unocc=np.einsum("ij,mj->mi",S_powerminusonehalf,C_unocc)
-        C_new=np.zeros_like(C_old)
-        C_new[:,:self.number_electronshalf]=C_new_occ
-        C_new[:,self.number_electronshalf:]=C_new_unocc
-        return C_new
-    def basischange_alt(self,C_old,overlap_AOs_newnew):
-        S=np.einsum("mi,vj,mv->ij",C_old,C_old,overlap_AOs_newnew)
-        S_eig,S_U=np.linalg.eigh(S)
-        S_powerminusonehalf=S_U@np.diag(S_eig**(-0.5))@S_U.T
-        C_new=np.einsum("ij,mj->mi",S_powerminusonehalf,C_old)
-        return C_new
 class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
     def data_creator(self):
         neh=self.number_electronshalf
@@ -283,8 +269,8 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
             mol_xc=self.build_molecule(xc)
             new_HF_coefficients=[]
             for i in range(len(self.sample_points)):
-                new_HF_coefficients.append(self.basischange(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))) #Actually take the WHOLE thing.
-                #new_HF_coefficients.append(self.basischange(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:self.number_electronshalf])
+                new_HF_coefficients.append(self.change_coefficients(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))) #Actually take the WHOLE thing.
+                #new_HF_coefficients.append(self.change_coefficients(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:self.number_electronshalf])
             self.all_new_HF_coefficients.append(new_HF_coefficients)
             S,T=self.calculate_ST_matrices(mol_xc,new_HF_coefficients)
             try:
@@ -296,7 +282,7 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
 
             eigval_array.append(eigvec)
         return energy_array,eigval_array
-    def calculate_ST_matrices(self,mol_xc,new_HF_coefficients,threshold=1e-8):
+    def calculate_ST_matrices(self,mol_xc,new_HF_coefficients,threshold=1e-12):
         number_electronshalf=self.number_electronshalf
         overlap_basis=mol_xc.intor("int1e_ovlp")
         energy_basis_1e=mol_xc.intor("int1e_kin")+mol_xc.intor("int1e_nuc")
@@ -334,15 +320,15 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
         print(np.max(np.abs(Tmat)))
         return Smat,Tmat
     def energy_func_naive(self,C_w_a,C_w_b,C_x_a,C_x_b,onebodyp,twobodyp,D_a,D_b,c1,c2):
-        number_of_zeros_alpha=len(D_a[np.abs(D_a)<1e-10])
-        number_of_zeros_beta=len(D_a[np.abs(D_b)<1e-10])
+        number_of_zeros_alpha=len(D_a[np.abs(D_a)<1e-12])
+        number_of_zeros_beta=len(D_a[np.abs(D_b)<1e-12])
         number_of_zeros=number_of_zeros_alpha+number_of_zeros_beta
         twobody_aaaa=ao2mo.get_mo_eri(twobodyp,(C_w_a,C_x_a,C_w_a,C_x_a),aosym="s1")
         twobody_bbbb=ao2mo.get_mo_eri(twobodyp,(C_w_b,C_x_b,C_w_b,C_x_b),aosym="s1")
         twobody_aabb=ao2mo.get_mo_eri(twobodyp,(C_w_a,C_x_a,C_w_b,C_x_b),aosym="s1")
         twobody_bbaa=ao2mo.get_mo_eri(twobodyp,(C_w_b,C_x_b,C_w_a,C_x_a),aosym="s1")
-        onebody_alpha=np.einsum("ki,lj,kl->ij",C_w_a,C_x_a,onebodyp)
-        onebody_beta=np.einsum("ki,lj,kl->ij",C_w_b,C_x_b,onebodyp)
+        onebody_alpha=contract("ki,lj,kl->ij",C_w_a,C_x_a,onebodyp)
+        onebody_beta=contract("ki,lj,kl->ij",C_w_b,C_x_b,onebodyp)
         alpha=np.arange(self.number_electronshalf)
         beta=np.arange(self.number_electronshalf)
 
@@ -350,8 +336,8 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
 
         if number_of_zeros>2:
             return 0
-        zero_indices_alpha=np.where(np.abs(D_a)<1e-10)
-        zero_indices_beta=np.where(np.abs(D_b)<1e-10)
+        zero_indices_alpha=np.where(np.abs(D_a)<1e-12)
+        zero_indices_beta=np.where(np.abs(D_b)<1e-12)
         H1=0; H2=0
         if number_of_zeros==2:
             if number_of_zeros_alpha==2:
@@ -411,7 +397,7 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
             H1=onebody_alphav+onebody_betav
             H2=energy2
         return H2+H1
-    def energy_func(self,C_w_a,C_w_b,C_x_a,C_x_b,onebody,twobody,D_a,D_b,c1=0,c2=0,threshold=1e-8):
+    def energy_func(self,C_w_a,C_w_b,C_x_a,C_x_b,onebody,twobody,D_a,D_b,c1=0,c2=0,threshold=1e-12):
         number_of_zeros_alpha=len(D_a[np.abs(D_a)<threshold])
         number_of_zeros_beta=len(D_a[np.abs(D_b)<threshold])
         number_of_zeros=number_of_zeros_alpha+number_of_zeros_beta
@@ -421,20 +407,20 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
         zero_indices_beta=np.where(np.abs(D_b)<threshold)
         P_s_a=[]
         for i in range(self.number_electronshalf):
-            P_s_a.append(np.einsum("m,v->mv",C_w_a[:,i],C_x_a[:,i]))
+            P_s_a.append(contract("m,v->mv",C_w_a[:,i],C_x_a[:,i]))
         P_s_b=[]
         for i in range(self.number_electronshalf):
-            P_s_b.append(np.einsum("m,v->mv",C_w_b[:,i],C_x_b[:,i]))
+            P_s_b.append(contract("m,v->mv",C_w_b[:,i],C_x_b[:,i]))
         P_a=P_s_a.copy()
         for i in range(self.number_electronshalf):
-            if np.abs(D_a[i])>1e-10:
+            if np.abs(D_a[i])>1e-12:
                 P_a[i]=P_a[i]/D_a[i]
             else:
                 P_a[i]=0*P_a[i] # No contribution to W as we can ignore the summation over i
         W_a=np.sum(P_a,axis=0)
         P_b=P_s_b.copy()
         for i in range(self.number_electronshalf):
-            if np.abs(D_b[i])>1e-10:
+            if np.abs(D_b[i])>1e-12:
                 P_b[i]=P_b[i]/D_b[i]
             else:
                 P_b[i]=0*P_b[i] # No contribution to W as we can ignore the summation over i
@@ -444,41 +430,33 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
             if number_of_zeros_alpha==2:
                 i=zero_indices_alpha[0][0]
                 j=zero_indices_alpha[0][1]
-                J_contr=np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,msvt->ms",P_s_a[j],twobody,optimize=True),optimize=True)
-                K_contr=np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,mtvs->ms",P_s_a[j],twobody,optimize=True),optimize=True)
-                H2=J_contr-K_contr
+                H2=contract("sm,ms->",P_s_a[i],contract("tv,msvt->ms",P_s_a[j],twobody)-contract("tv,mtvs->ms",P_s_a[j],twobody))
             elif number_of_zeros_beta==2:
                 i=zero_indices_beta[0][0]
                 j=zero_indices_beta[0][1]
-                J_contr=np.einsum("sm,ms->",P_s_b[i],np.einsum("tv,msvt->ms",P_s_b[j],twobody,optimize=True),optimize=True)
-                K_contr=np.einsum("sm,ms->",P_s_b[i],np.einsum("tv,mtvs->ms",P_s_b[j],twobody,optimize=True),optimize=True)
-                H2=J_contr-K_contr
+                H2=contract("sm,ms->",P_s_b[i],contract("tv,msvt->ms",P_s_b[j],twobody)-contract("tv,mtvs->ms",P_s_b[j],twobody))
             else:
                 i=zero_indices_alpha[0][0]
                 j=zero_indices_beta[0][0]
-                J_contr=np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,msvt->ms",P_s_b[j],twobody,optimize=True),optimize=True)
+                J_contr=contract("sm,ms->",P_s_a[i],contract("tv,msvt->ms",P_s_b[j],twobody))
                 H2=J_contr
         elif number_of_zeros_alpha==1:
             i=zero_indices_alpha[0][0]
-            H1=np.einsum("mv,mv->",P_s_a[i],onebody)
-            J_contr=np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,msvt->ms",W_a+W_b,twobody,optimize=True),optimize=True)#+np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,msvt->ms",W_b,twobody))
-            K_contr=np.einsum("sm,ms->",P_s_a[i],np.einsum("tv,mtvs->ms",W_a,twobody,optimize=True),optimize=True)
-            H2=J_contr-K_contr
+            H1=contract("mv,mv->",P_s_a[i],onebody)
+            J_contr=contract("sm,ms->",P_s_a[i],contract("tv,msvt->ms",W_a+W_b,twobody)-contract("tv,mtvs->ms",W_a,twobody))#+contract("sm,ms->",P_s_a[i],contract("tv,msvt->ms",W_b,twobody))
+            H2=J_contr
         elif number_of_zeros_beta==1:
-
             i=zero_indices_beta[0][0]
-            H1=np.einsum("mv,mv->",P_s_b[i],onebody)
-            J_contr=np.einsum("sm,ms->",P_s_b[i],np.einsum("tv,msvt->ms",W_a+W_b,twobody,optimize=True))#+np.einsum("sm,ms->",P_s_b[i],np.einsum("tv,msvt->ms",W_b,twobody))
-            K_contr=np.einsum("sm,ms->",P_s_b[i],np.einsum("tv,mtvs->ms",W_b,twobody,optimize=True),optimize=True)
-            H2=J_contr-K_contr
-
+            H1=contract("mv,mv->",P_s_b[i],onebody)
+            J_contr=contract("sm,ms->",P_s_b[i],contract("tv,msvt->ms",W_a+W_b,twobody)-contract("tv,mtvs->ms",W_b,twobody))#+contract("sm,ms->",P_s_b[i],contract("tv,msvt->ms",W_b,twobody))
+            H2=J_contr
         elif number_of_zeros==0:
             W=W_a+W_b
-            J_a_a=np.einsum("sm,ms->",W,np.einsum("tv,msvt->ms",W,twobody,optimize=True),optimize=True)
+            J_a_a=contract("sm,ms->",W,contract("tv,msvt->ms",W,twobody))
             J_contr=J_a_a
-            K_contr=np.einsum("sm,ms->",W_a,np.einsum("tv,mtvs->ms",W_a,twobody,optimize=True),optimize=True)+np.einsum("sm,ms->",W_b,np.einsum("tv,mtvs->ms",W_b,twobody,optimize=True),optimize=True)
+            K_contr=contract("sm,ms->",W_a,contract("tv,mtvs->ms",W_a,twobody))+contract("sm,ms->",W_b,contract("tv,mtvs->ms",W_b,twobody))
             H2=0.5*(J_contr-K_contr)
-            H1=np.einsum("mv,mv->",W,onebody,optimize=True)
+            H1=contract("mv,mv->",W,onebody)
         return H2+H1
 class eigvecsolver_RHF_singles(eigvecsolver_RHF_singlesdoubles):
     def data_creator(self):
@@ -522,7 +500,7 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF_singlesdoubles):
                 occ_state.append([alphas_occ,betas_occ])
             all_indices.append(occ_state)
         return all_indices
-    def calculate_ST_matrices(self,mol_xc,new_HF_coefficients,threshold=1e-8):
+    def calculate_ST_matrices(self,mol_xc,new_HF_coefficients,threshold=1e-12):
         number_electronshalf=self.number_electronshalf
         overlap_basis=mol_xc.intor("int1e_ovlp")
         energy_basis_1e=mol_xc.intor("int1e_kin")+mol_xc.intor("int1e_nuc")
@@ -550,7 +528,7 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF_singlesdoubles):
 
                         D_tilde_a=D_a[np.abs(D_a)>threshold]
                         D_tilde_b=D_b[np.abs(D_b)>threshold]
-                        S_tilde=np.prod(D_tilde_a)*np.prod(D_tilde_b) 
+                        S_tilde=np.prod(D_tilde_a)*np.prod(D_tilde_b)
                         S=S_tilde*(len(D_tilde_b)==len(D_b))*(len(D_tilde_a)==len(D_a))
 
                         Smat[c1,c2]+=S
@@ -596,7 +574,7 @@ class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
             mol_xc=self.build_molecule(xc)
             new_HF_coefficients=[]
             for i in range(len(self.HF_coefficients)):
-                new_HF_coefficients.append(self.basischange(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:self.number_electronshalf])
+                new_HF_coefficients.append(self.change_coefficients(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:self.number_electronshalf])
             S,T=self.calculate_ST_matrices(mol_xc,new_HF_coefficients)
             try:
                 eigval,eigvec=generalized_eigenvector(T,S)

@@ -21,6 +21,7 @@ def construct_pyscf_system_rhf_ref(
     mix_states=False,
     return_C=False,
     weights=None,
+    givenC=None,
     truncation=1000000,
     **kwargs,
 ):
@@ -83,6 +84,8 @@ def construct_pyscf_system_rhf_ref(
     mol.unit = "bohr"
     mol.charge = charge
     mol.cart = cart
+    print(molecule)
+    print(basis)
     mol.build(atom=molecule, basis=basis, **kwargs)
     nuclear_repulsion_energy = mol.energy_nuc()
 
@@ -106,10 +109,13 @@ def construct_pyscf_system_rhf_ref(
     coords = mol.atom_coords()
     nuc_charge_center = np.einsum("z,zx->x", charges, coords) / charges.sum()
     mol.set_common_orig_(nuc_charge_center)
-    if reference_state is None:
+    if reference_state is None and givenC is None:
         C = np.asarray(hf.mo_coeff)
-    else:
+    elif givenC is None:
         C=localize_procrustes(mol,hf.mo_coeff,hf.mo_occ,ref_mo_coeff=reference_state,mix_states=mix_states,weights=weights)
+    elif reference_state is None:
+        C=givenC
+        print("Use given C")
     h = pyscf.scf.hf.get_hcore(mol)
     s = mol.intor_symmetric("int1e_ovlp")
     u = mol.intor("int2e").reshape(l, l, l, l).transpose(0, 2, 1, 3)
@@ -138,6 +144,7 @@ def construct_pyscf_system_rhf_ref(
         if add_spin
         else system
     )
+
 def construct_pyscf_system_rhf_natorb(
     molecule,
     basis="cc-pvdz",

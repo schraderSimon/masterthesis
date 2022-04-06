@@ -1,7 +1,7 @@
 import sys
 sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
 from func_lib import *
-file="energy_data/BeH2_2d_plot.bin"
+file="energy_data/BeH2_2d_plot_NOGUPTRI.bin"
 import pickle
 with open(file,"rb") as f:
     energy_dict=pickle.load(f)
@@ -28,23 +28,23 @@ im0=grid[0,0].pcolormesh(x, y, CCSDerr, cmap=cmap,shading='auto',vmin=z_min,vmax
 grid[0,0].set_title("CCSD error")
 #grid[0,0].set_xlabel(r"distance $H^2$-Be (Bohr)")
 grid[0,0].set_ylabel(r"distance $H^1$-Be (Bohr)")
-grid[0,0].scatter(sample_geom[:,0],sample_geom[:,1])
+grid[0,0].scatter(sample_geom[:,0],sample_geom[:,1],s=60)
 
 grid[0,1].pcolormesh(x, y, WFerr, cmap=cmap,shading='auto',vmin=z_min,vmax=z_max,alpha=alpha)
 im1=grid[0,1].set_title("WF error")
-grid[0,1].scatter(sample_geom[:,0],sample_geom[:,1])
+grid[0,1].scatter(sample_geom[:,0],sample_geom[:,1],s=60)
 #grid[0,1].set_xlabel(r"distance $H^2$-Be (Bohr)")
 #grid[0,1].set_ylabel(r"distance $H^1$-Be (Bohr)")
 
 im2=grid[1,0].pcolormesh(x, y, AMPerr, cmap=cmap,shading='auto',vmin=z_min,vmax=z_max,alpha=alpha)
 grid[1,0].set_title("AMP error")
-grid[1,0].scatter(sample_geom[:,0],sample_geom[:,1])
+grid[1,0].scatter(sample_geom[:,0],sample_geom[:,1],s=60)
 grid[1,0].set_xlabel(r"distance $H^2$-Be (Bohr)")
 grid[1,0].set_ylabel(r"distance $H^1$-Be (Bohr)")
 
 im2=grid[1,1].pcolormesh(x, y, AMPranderr, cmap=cmap,shading='auto',vmin=z_min,vmax=z_max,alpha=alpha)
 grid[1,1].set_title(" AMP $(p_v=50\%)$ error")
-grid[1,1].scatter(sample_geom[:,0],sample_geom[:,1])
+grid[1,1].scatter(sample_geom[:,0],sample_geom[:,1],s=60)
 grid[1,1].set_xlabel(r"distance $H^2$-Be (Bohr)")
 #grid[1,1].set_ylabel(r"distance $H^1$-Be (Bohr)")
 

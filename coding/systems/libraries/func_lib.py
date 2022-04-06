@@ -4,10 +4,12 @@ import matplotlib.pyplot as plt
 from scipy import linalg
 from pyscf import gto, scf, mcscf, fci, cc, mp,ao2mo
 from guptri_py import *
-from scipy.linalg import norm, eig, qz, block_diag, eig, orth, fractional_matrix_power, expm, svd
+from scipy.linalg import norm, eig, qz, block_diag, eigh, orth, fractional_matrix_power, expm, svd
 from scipy.interpolate import interp1d
-from scipy.optimize import linear_sum_assignment
+from scipy.optimize import linear_sum_assignment, minimize, root,newton
 from opt_einsum import contract
+from scipy.io import loadmat, savemat
+
 import warnings
 import sys
 import matplotlib
@@ -158,24 +160,25 @@ def schur_lowestEigenValue(H,S):
 	"""Uses schur decomposition to find lowest eigenvalue of generalized eigenvalue problem"""
 	HH, SS, Q, Z = qz(H, S)
 	for i in range(len(SS)):
-	    if np.abs(SS[i,i])<1e-9:
+	    if np.abs(SS[i,i])<1e-12:
 	        SS[i,i]=1e10
 	e=np.diag(HH)/np.diag(SS)
 	idx = np.real(e).argsort()
 	e = e[idx]
 	print(e)
 	return np.real(e[0])
-def guptri_Eigenvalue(H,S):
+def guptri_Eigenvalue(H,S,epsu=1e-8,gap=1000,zero=True):
 	"""Use guptri to find lowest eigenvalue of generalized eigenvalue problem"""
-	SS, HH, P, Q, kstr = guptri(H,S,zero=True)
+	SS, HH, P, Q, kstr = guptri(H,S,zero=zero,epsu=epsu,gap=gap)
 	nonzero=np.where(abs(HH[0,:])>1e-5)[0][0]
 	SS_reduced=SS[0:len(SS)-nonzero,nonzero:]
 	HH_reduced=HH[0:len(SS)-nonzero,nonzero:]
 	e=np.diag(SS_reduced)/np.diag(HH_reduced)
 	idx = np.real(e).argsort()
 	e = e[idx]
+	print(np.real(e[0]))
 	return np.real(e[0])
-	return kstr[0]
+	#return kstr[0]
 def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sref):
 	"""
 	Swaps MO's in coefficient matrix in such a way that the coefficients become analytic w.r.t. the reference
@@ -223,7 +226,7 @@ def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sre
 	        fit=np.linalg.norm(natorbs[:,pairs[i]]@new_orbs-natorbs_ref[:,pairs_ref[j]])
 	        fits[j]=fit
 	    best_fit=np.argmin(fits)
-	    new_orbs,t=orthogonal_procrustes(natorbs[:,pairs[i]],natorbs_ref[:,pairs_ref[best_fit]],printf=True)
+	    new_orbs,t=orthogonal_procrustes(natorbs[:,pairs[i]],natorbs_ref[:,pairs_ref[best_fit]])
 	    natorbs[:,pairs[i]]=natorbs[:,pairs[i]]@new_orbs
 	#similarities=C_1^TS_1^(-1/2)^T S_2^(-1/2)C_2
 	similarities=natorbs_ref.T@np.real(scipy.linalg.fractional_matrix_power(Sref,0.5))@np.real(scipy.linalg.fractional_matrix_power(S,0.5))@natorbs

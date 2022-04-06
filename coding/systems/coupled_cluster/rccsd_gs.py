@@ -223,7 +223,7 @@ def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="
             basis=basis,
             add_spin=False,
             anti_symmetrize=False,
-            reference_state=rhf_mo_ref,
+            reference_state=ref_state,
             mix_states=mix_states,
             weights=None
         )
@@ -232,6 +232,7 @@ def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="
         rccsd.compute_ground_state(
             t_kwargs=dict(tol=ground_state_tolerance),
             l_kwargs=dict(tol=ground_state_tolerance),
+
         )
         t, l = rccsd.get_amplitudes()
         t1s.append(t[0])
@@ -240,13 +241,86 @@ def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="
         l2s.append(l[1])
         sample_energies.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
     return t1s,t2s,l1s,l2s,sample_energies
+def setUpsamples_givenC(sample_x,molecule_func,basis,givenCs,mix_states=False,type="procrustes",weights=None,guesses=None):
+    """
+    Sets up lambda and t-amplitudes for a set of geometries.
+
+    Input:
+    sample_x (list): The geometries at which the molecule is constructed.
+    molecule_func (function->String): A function which returns a string
+        corresponding to a molecular geometry as function of parameters from sample_x.
+    basis (string): The basis set.
+    rhf_mo_ref (matrix or list of matrices):
+        if matrix: Use Procrustes algorithm to use "best" HF reference, then calculate amplitudes based on that
+        if list: Use coefficient matrices in the list directly to calculate amplitudes from.
+    mix_states (bool): if general procrustes orbitals should be used.
+    weights: Outdated parameter
+
+    Returns:
+    t1s,t2s,l1s,l2s: CCSD ampltidue and lambda equations
+    sample_energies: CCSD Energies for the desired samples
+    """
+    t1s=[]
+    t2s=[]
+    l1s=[]
+    l2s=[]
+    sample_energies=[]
+    print(sample_x)
+    for k,x in enumerate(sample_x):
+        ref_state=givenCs[k]
+        system = construct_pyscf_system_rhf_ref(
+        molecule=molecule_func(*x),
+        basis=basis,
+        add_spin=False,
+        anti_symmetrize=False,
+        givenC=ref_state,
+        verbose=True)
+        if guesses is not None and k==0:
+            t1_guess=guesses[0][k]
+            t2_guess=guesses[1][k]
+            l1_guess=guesses[2][k]
+            l2_guess=guesses[3][k]
+            rccsd = RCCSD(system, verbose=False,start_guess=[t1_guess,t2_guess,l1_guess,l2_guess])
+            print(t1_guess)
+        else:
+            print("else")
+            t1_guess=t1s[-1]
+            t2_guess=t2s[-1]
+            l1_guess=l1s[-1]
+            l2_guess=l2s[-1]
+            rccsd = RCCSD(system, verbose=False,start_guess=[t1_guess,t2_guess,l1_guess,l2_guess])
+        ground_state_tolerance = 1e-6
+        try:
+            rccsd.compute_ground_state(
+                t_kwargs=dict(tol=ground_state_tolerance,max_iterations=100),
+                l_kwargs=dict(tol=ground_state_tolerance,max_iterations=100),
+            )
+        except AssertionError:
+            t1_guess=t1s[-1]
+            t2_guess=t2s[-1]
+            l1_guess=l1s[-1]
+            l2_guess=l2s[-1]
+            rccsd = RCCSD(system, verbose=False,start_guess=[t1_guess,t2_guess,l1_guess,l2_guess])
+            rccsd.compute_ground_state(
+                t_kwargs=dict(tol=ground_state_tolerance*1000,max_iterations=1000),
+                l_kwargs=dict(tol=ground_state_tolerance*1000,max_iterations=1000),
+            )
+        t, l = rccsd.get_amplitudes()
+        t1s.append(t[0])
+        t2s.append(t[1])
+        l1s.append(l[0])
+        l2s.append(l[1])
+        print("Energy: %f" %(system.compute_reference_energy().real+rccsd.compute_energy().real))
+        sample_energies.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+
+    return t1s,t2s,l1s,l2s,sample_energies
 
 class EVCSolver():
     """
     Class to solve EVC equations. Contains both WF-CCEVC and AMP-CCEVC functions.
     Ini
     """
-    def __init__(self,all_x,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,sample_x=None,mix_states=False,natorb_truncation=None):
+    def __init__(self,all_x,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,givenC=False,sample_x=None,mix_states=False,natorb_truncation=None):
         self.all_x=all_x
         self.molecule_func=molecule_func
         self.sample_x=sample_x
@@ -260,6 +334,7 @@ class EVCSolver():
         self.natorb_truncation=natorb_truncation
         self.num_params=np.prod(t1s[0].shape)+np.prod(t2s[0].shape)
         self.coefs=None
+        self.givenC=givenC
     def solve_CCSD(self):
         """
         Solves the CCSD equations.
@@ -300,22 +375,48 @@ class EVCSolver():
         E_WFCCEVC (list): WF-CCEVC Energies at all_x.
         """
         E_WFCCEVC=[]
+        Hs=[]
+        Ss= []
         for k,x_alpha in enumerate(self.all_x):
             if isinstance(self.reference_natorbs,list):
                 ref_state=self.reference_natorbs[k]
             else:
                 ref_state=self.reference_natorbs
-            system = construct_pyscf_system_rhf_ref(
-                molecule=self.molecule_func(*x_alpha),
-                basis=self.basis,
-                add_spin=False,
-                anti_symmetrize=False,
-                reference_state=ref_state,
-                mix_states=self.mix_states,
-                truncation=self.natorb_truncation
-            )
+            if self.givenC==False:
+                system = construct_pyscf_system_rhf_ref(
+                    molecule=self.molecule_func(*x_alpha),
+                    basis=self.basis,
+                    add_spin=False,
+                    anti_symmetrize=False,
+                    reference_state=ref_state,
+                    mix_states=self.mix_states,
+                    truncation=self.natorb_truncation
+                )
+            else:
+                system = construct_pyscf_system_rhf_ref(
+                    molecule=self.molecule_func(*x_alpha),
+                    basis=self.basis,
+                    add_spin=False,
+                    anti_symmetrize=False,
+                    givenC=ref_state,
+                    mix_states=self.mix_states,
+                    truncation=self.natorb_truncation
+                )
             H,S=self._construct_H_S(system) #Get H and S as described in Ekstrøm & Hagen
-            E_WFCCEVC.append(guptri_Eigenvalue(H,S)) #Solve generalized eigenvector problem
+            #eigvals=np.real(np.linalg.eig(scipy.linalg.pinv(S,atol=10**(-8))@H)[0])
+            eigvals=np.real(scipy.linalg.eig(a=H,b=S+np.eye(len(S))*10**(-5))[0])
+            sorted=np.sort(eigvals)
+            E_WFCCEVC.append(sorted[0])
+            Hs.append(H)
+            Ss.append(S)
+        dicty={}
+        dicty["S"]=Ss
+        dicty["H"]=Hs
+        file="Right_state_HS.bin"
+        import pickle
+        with open(file,"wb") as f:
+            pickle.dump(dicty,f)
+
         return E_WFCCEVC
 
     def solve_AMP_CCSD(self,occs=1,virts=0.5,xtol=1e-5,maxfev=40):
@@ -426,15 +527,14 @@ class EVCSolver():
             t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)
             t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)
             exp_energy=rhs_e.compute_rccsd_ground_state_energy(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)+RHF_energy
+            print(exp_energy)
             for j in range(len(self.t1s)):
                 X1=self.t1s[i]-self.t1s[j]
                 X2=self.t2s[i]-self.t2s[j]
                 overlap=1+contract("ia,ai->",self.l1s[j],X1)+0.5*contract("ijab,ai,bj->",self.l2s[j],X1,X1)+0.25*contract("ijab,abij->",self.l2s[j],X2)
                 S[i,j]=overlap
-
-                H[i,j]=overlap*exp_energy
                 extra=contract("ia,ai->",self.l1s[j],t1_error)+contract("ijab,ai,bj->",self.l2s[j],X1,t1_error)+0.25*contract("ijab,abij->",self.l2s[j],t2_error)
-                H[i,j]=H[i,j]+extra
+                H[i,j]=overlap*exp_energy+extra
         return H,S
     def _system_jacobian(self,system):
         """
@@ -621,7 +721,7 @@ def get_natural_orbitals(molecule_func,xvals,basis,natorbs_ref=None,noons_ref=No
     return natorbs_list,noons_list,overlaps_list
 
 if __name__=="__main__":
-    basis = '6-31G'
+    basis = 'cc-pVTZ'
     basis_set = bse.get_basis(basis, fmt='nwchem')
     charge = 0
     #molecule =lambda arr: "Be 0.0 0.0 0.0; H 0.0 0.0 %f; H 0.0 0.0 -%f"%(arr,arr)
@@ -630,24 +730,25 @@ if __name__=="__main__":
     refx=[2]
     print(molecule(*refx))
     reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-    sample_geom1=np.linspace(2,4,4)
+    sample_geom1=np.linspace(1.5,4,30)
     #sample_geom1=[2.5,3.0,6.0]
     sample_geom=[[x] for x in sample_geom1]
     sample_geom1=np.array(sample_geom).flatten()
-    geom_alphas1=np.linspace(1.2,5,10)
+    geom_alphas1=np.linspace(1.2,5,39)
     geom_alphas=[[x] for x in geom_alphas1]
 
     t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
     evcsolver=EVCSolver(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False,natorb_truncation=None)
-    #E_WF=evcsolver.solve_WFCCEVC()
-    E_AMP_full=evcsolver.solve_AMP_CCSD(occs=1,virts=1)
-    E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=0.5)
+    E_WF=evcsolver.solve_WFCCEVC()
+    #E_AMP_full=evcsolver.solve_AMP_CCSD(occs=1,virts=1)
+    #E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=0.5)
+    sys.exit(1)
     E_CCSDx=evcsolver.solve_CCSD()
-    print(E_approx,E_CCSDx)
-    axes[i][j].plot(geom_alphas1,E_CCSDx,label="CCSD")
-    #axes[i][j].plot(geom_alphas1,E_approx,label="WF-CCEVC")
-    #axes[i][j].plot(geom_alphas1,E_AMP_full,label=r"AMP-CCEVC (50$\%$)")
-    #axes[i][j].plot(geom_alphas1,E_AMP_red,label=r"AMP-CCEVC")
+    plt.plot(geom_alphas1,E_CCSDx,label="CCSD")
+    plt.plot(geom_alphas1,E_WF,label="WF-CCEVC")
+    #plt.plot(geom_alphas1,E_AMP_full,label=r"AMP-CCEVC (50$\%$)")
+    #plt.plot(geom_alphas1,E_AMP_red,label=r"AMP-CCEVC")
     #plt.plot(geom_alphas1,energy_simen_random,label="CCSD AMP 2")
+    plt.tight_layout()
     plt.legend()
     plt.show()

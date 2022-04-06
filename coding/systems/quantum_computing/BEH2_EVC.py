@@ -139,7 +139,7 @@ for i in range(len(sample_x)):
     for j in range(i,len(sample_x)):
         zero1states["%d%d"%(i,j)]=get_01_state(UCC_2_circuits[i],UCC_2_circuits[j],num_qubits,backend)
 print("Done getting new states")
-outfile=open("aaBeH2_UCC2_sampleXPauliStrings.txt","w")
+outfile=open("BeH2_UCC2_sampleXPauliStrings.txt","w")
 outfile.write("Sample_x:\n")
 for k,x in enumerate(sample_x):
     outfile.write("%d %f\n"%(k,x))
@@ -176,7 +176,7 @@ for k,x in enumerate(x_of_interest):
             S[i,j]=S[j,i]=np.real(s)
             H[i,j]=H[j,i]=np.real(h+s*nuc_rep)
             print(h,s)
-    e,cl,c=eig(scipy.linalg.pinv(S,atol=1e-8)@H,left=True)
+    e,cl,c=eig(scipy.linalg.pinv(S,rtol=1e-9)@H,left=True)
     idx = np.real(e).argsort()
     e = e[idx]
     c = c[:,idx]

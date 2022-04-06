@@ -75,8 +75,8 @@ def powerminushalf(M):
     "Returns M^{-1/2}."
     U,s,Vh=svd(M,check_finite=False)
     s=1/(np.sqrt(s))
-    return U@np.diag(s)@Vh 
-def generalized_eigenvector(T,S,symmetric=True):
+    return U@np.diag(s)@Vh
+def generalized_eigenvector(T,S,symmetric=True,threshold=1e-8):
     """Solves the generalized eigenvector problem.
     Input:
     T: The symmetric matrix
@@ -88,7 +88,7 @@ def generalized_eigenvector(T,S,symmetric=True):
     s, U=np.linalg.eigh(S) #Diagonalize S (overlap matrix, Hermitian by definition)
     U=np.fliplr(U)
     s=s[::-1] #Order from largest to lowest; S is an overlap matrix, hence we won't
-    s=s[s>1e-8] #Keep only largest eigenvalues
+    s=s[s>threshold] #Keep only largest eigenvalues
     spowerminushalf=s**(-0.5) #Take s
     snew=np.zeros((len(U),len(spowerminushalf)))
     sold=np.diag(spowerminushalf)

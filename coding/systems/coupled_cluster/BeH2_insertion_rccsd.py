@@ -2,33 +2,72 @@ from rccsd_gs import *
 import sys
 sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
 from func_lib import *
-from numba import jit
 from matrix_operations import *
 from helper_functions import *
 
-basis = '6-31G'
-basis_set = bse.get_basis(basis, fmt='nwchem')
-charge = 0
+
+
 molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
-refx=[1]
-reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-sample_geom1=np.linspace(1,2.6,50)
-#sample_geom1=[2.5,3.0,6.0]
-sample_geom=[[x] for x in sample_geom1]
-sample_geom1=np.array(sample_geom).flatten()
-geom_alphas1=np.linspace(2.2,3.2,41)
-geom_alphas=[[x] for x in geom_alphas1]
-E_FCI=FCI_energy_curve(np.array(geom_alphas).ravel(),basis,molecule,unit="Bohr")
+basis = 'cc-pVDZ'
+basis_set = bse.get_basis(basis, fmt='nwchem')
 
+file="energy_data/BeH2_CCSD_rawdata.bin"
+import pickle
+with open(file,"rb") as f:
+    data=pickle.load(f)
+print("FCI")
+print(list(data["FCI"]))
+t1s_1,t2s_1,l1s_1,l2s_1,sample_energies_1=data["CC_1"]
+print("Left")
+print(list(sample_energies_1))
+t1s_2,t2s_2,l1s_2,l2s_2,sample_energies_2=data["CC_2"]
+t1s_2=t1s_2[::-1]; t2s_2=t2s_2[::-1]; l2s_2=l2s_2[::-1];l1s_2=l1s_2[::-1];sample_energies_2=sample_energies_2[::-1]
+print("Right")
 
-mix_states=True
-t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=mix_states,type="procrustes")
-#energy_simen=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=mix_states,type="procrustes")
-E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=mix_states,run_cc=True,cc_approx=False,type="procrustes")
-plt.plot(geom_alphas1,E_CCSDx,label="CCSD left")
-plt.plot(geom_alphas1,E_approx,label="CCSD WF left")
-#plt.plot(geom_alphas1,energy_simen,label="CCSD AMP left")
+print(list(sample_energies_2))
+for i in range(len(t1s_1)):
+    t1s_1[i]=t1s_1[i].swapaxes(1,0)
+    t2s_1[i]=t2s_1[i].swapaxes(2,1).swapaxes(3,0)
+    t1s_2[i]=t1s_2[i].swapaxes(1,0)
+    t2s_2[i]=t2s_2[i].swapaxes(2,0).swapaxes(3,1)
+    l1s_1[i]*=2
+    l1s_2[i]*=2#l2s_2[i]*2
+    l2s_1[i]*=2#l2s_1[i]*2
+    l2s_2[i]*=2#l2s_2[i]*2
+    energies_FCI=data["FCI"]
+guesses=[t1s_2,t2s_2,l1s_2,l2s_2]
+charge = 0
 
+sample_coeffmatrices_1=[]
+sample_coeffmatrices_2=[]
+ground_coeffmatrices=[]
+exc_coeffmatrices=[]
+ground_energies=[]
+sample_coeffmatrices_min=[]
+xc_array=np.linspace(2,4,10)
+occdict2={"A1":6,"B1":0,"B2":0}
+occdict3={"A1":4,"B1":2,"B2":0}
+occdict1={"A1":4,"B1":0,"B2":2}
+occdicts=[occdict1,occdict2,occdict3]
+energies=np.zeros((len(xc_array),3))
+E_FCI=np.zeros(len(xc_array))
+
+sample_coeffmatrices_1=data["sample_coeffmatrices_1"]
+sample_coeffmatrices_2=data["sample_coeffmatrices_2"]
+
+sample_geom=data["x"]
+
+t1s,t2s,l1s,l2s,sample_energies=setUpsamples_givenC(sample_geom,molecule,basis,givenCs=sample_coeffmatrices_2,guesses=guesses)
+print("Sample energies")
+print(list(sample_energies))
+evcsolver=EVCSolver(sample_geom,molecule,basis,sample_coeffmatrices_2,t1s,t2s,l1s,l2s,givenC=True,sample_x=sample_geom)
+E_WF=evcsolver.solve_WFCCEVC()
+
+plt.plot(sample_geom,E_WF,label="CCSD WF left")
+plt.plot(sample_geom,sample_energies,label="sample energies")
+
+plt.show()
+"""
 refx=[4]
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
 sample_geom1=np.linspace(3,4,30)
@@ -36,17 +75,67 @@ sample_geom1=np.linspace(3,4,30)
 sample_geom=[[x] for x in sample_geom1]
 sample_geom1=np.array(sample_geom).flatten()
 
-mix_states=True
-t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=mix_states,type="procrustes")
-#energy_simen=solve_evc2(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=mix_states,type="procrustes")
+t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
+evcsolver=EVCSolver(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False,natorb_truncation=None)
+E_WF=evcsolver.solve_WFCCEVC()
 
-E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,mix_states=mix_states,run_cc=True,cc_approx=False,type="procrustes")
-plt.plot(geom_alphas1,E_CCSDx,label="CCSD right")
-plt.plot(geom_alphas1,E_approx,label="CCSD WF right")
-#plt.plot(geom_alphas1,energy_simen,label="CCSD AMP right")
-plt.plot(geom_alphas1,E_FCI,label="Full CI")
-plt.ylim(-16.0,-15.0)
+
+file="energy_data/BeH2_CCSD_rawdata.bin"
+import pickle
+with open(file,"rb") as f:
+    data=pickle.load(f)
+t1s_1,t2s_1,l1s_1,l2s_1,sample_energies_1=data["CC_1"]
+for i in range(len(t1s_1)):
+    t1s_1[i]=t1s_1[i].swapaxes(1,0)
+    t2s_1[i]=t2s_1[i].swapaxes(2,1).swapaxes(3,0)
+    l1s_1[i]*=2
+    l1s_2[i]*=2#l2s_2[i]*2
+    t1s_2[i]=t1s_2[i].swapaxes(1,0)
+    t2s_2[i]=t2s_2[i].swapaxes(2,0).swapaxes(3,1)
+    l2s_1[i]*=2#l2s_1[i]*2
+    l2s_2[i]*=2#l2s_2[i]*2
+    energies_FCI=data["FCI"]
+
+
+sample_geom=data["x"]
+sample_coeffmatrices_1=data["sample_coeffmatrices_1"]
+#sample_coeffmatrices_2=data["sample_coeffmatrices_2"]
+
+system = construct_pyscf_system_rhf_ref(
+    molecule=molecule(0.8),
+    basis=basis,
+    add_spin=False,
+    anti_symmetrize=False,
+    givenC=sample_coeffmatrices_1[4],
+)
+rccsd = RCCSD(system, verbose=False)
+ground_state_tolerance = 1e-9
+rccsd.compute_ground_state(
+    t_kwargs=dict(tol=ground_state_tolerance),
+    l_kwargs=dict(tol=ground_state_tolerance),
+
+)
+t, l = rccsd.get_amplitudes()
+t1_new=t[0]
+t2_new=t[1]
+l1_new=l[0]
+l2_new=l[1]
+print(np.linalg.norm(t1_new-t1s_1[4]))
+print(np.linalg.norm(t2_new-t2s_1[4]))
+print("break")
+print(l1_new)
+print(np.linalg.norm(l1_new-l1s_1[4]))
+print(l2_new)
+print(np.linalg.norm(l2_new))
+sample_geom=sample_geom[::-1]
+evcsolver=EVCSolver(sample_geom[:1],molecule,basis_set,sample_coeffmatrices_1[:1],t1s_1[:1],t2s_1[:1],l1s_1[:1],l2s_1[:1],givenC=True,sample_x=sample_geom[:1],mix_states=False,natorb_truncation=None)
+E_WF=evcsolver.solve_WFCCEVC()
+print(E_WF)
+sys.exit(1)
+plt.plot(sample_geom,E_WF,label="EVC")
+plt.plot(sample_geom,sample_energies_1,label="1")
+plt.plot(sample_geom,sample_energies_2,label="2")
+plt.plot(sample_geom,energies_FCI,label="FCI")
 plt.legend()
-plt.tight_layout()
-plt.savefig("BEH2_insertion_ccPVDZ.pdf")
 plt.show()
+"""

@@ -38,5 +38,5 @@ fig.legend(handles, labels, bbox_to_anchor=(1.0,0.35),loc="lower right",handlete
 plt.suptitle(r"N$_2$ EVC")
 fig.tight_layout()
 fig.subplots_adjust(right=0.90)
-plt.savefig("N2_ccPVDZ.pdf")
+plt.savefig("resultsandplots/N2_ccPVDZ.pdf")
 plt.show()

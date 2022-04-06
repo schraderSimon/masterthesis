@@ -30,7 +30,4 @@ x, y = np.meshgrid(span,span)
 
 E_FCI=FCI_energy_curve(geom_alphas,basis,molecule,unit="Bohr")
 E_FCI=E_FCI.reshape((len(span),len(span)))
-np.save("BeH2_2to6_FULLCI.npy",E_FCI)
-nig=np.load("BeH2_2to6_FULLCI.npy")
-print(nig)
-print(E_FCI)
+np.save("energy_data/BeH2_2to6_FULLCI.npy",E_FCI)

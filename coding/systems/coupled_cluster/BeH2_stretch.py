@@ -32,7 +32,7 @@ for x in span:
 x, y = np.meshgrid(span,span)
 
 #E_FCI=FCI_energy_curve(geom_alphas,basis,molecule,unit="Bohr")
-E_FCI=np.load("BeH2_2to6_FULLCI.npy")
+E_FCI=np.load("energy_data/BeH2_2to6_FULLCI.npy")
 energy_dict={}
 t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
 

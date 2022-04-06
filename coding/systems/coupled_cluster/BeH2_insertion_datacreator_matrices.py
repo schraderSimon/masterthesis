@@ -5,7 +5,9 @@ from func_lib import *
 from matrix_operations import *
 from helper_functions import *
 
-
+"""
+MATRICES ARE NOT SAVED AUTOMATICALLY. THIS REQUIRES A CHANGE TO RCCSD_GS!!!
+"""
 
 molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
 basis = 'cc-pVDZ'

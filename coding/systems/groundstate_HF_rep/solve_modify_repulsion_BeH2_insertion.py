@@ -14,7 +14,7 @@ def molecule(x):
     return atom
 basis="6-31G*"
 sample_strengths=np.linspace(1.1,0.5,13)
-xc_array=np.linspace(0,4,41)
+xc_array=np.linspace(0,4,81)
 file="BeH2_data_MO_coefs_%s.bin"%basis
 
 try:
@@ -67,13 +67,20 @@ for i in range(13,1,-3):
         MOS_to_use=mo_coeffs_allgeometries[k][:2*i]
         MOS_to_use_new=[]
         for j in range(len(MOS_to_use)):
-            MOS_to_use_new=MOS_to_use[j][:,:3] #Only occupied orbitals...
-            print(MOS_to_use_new)
+            MOS_to_use_new.append(MOS_to_use[j][:,:3]) #Only occupied orbitals...
         eigvecsolver=eigensolver_RHF_knowncoefficients(MOS_to_use_new,basis,molecule=molecule)
         S,T=eigvecsolver.calculate_ST_matrices(mol,MOS_to_use_new)
-        e,eigvec=generalized_eigenvector(T,S,threshold=1e-12)
+        e,eigvec=generalized_eigenvector(T,S,threshold=1e-13)
         energies.append(e)
+        print(e)
     all_energies.append(energies)
 for energies in all_energies:
     plt.plot(xc_array,energies)
+energies={}
+energies["x"]=xc_array
+for k, i in enumerate(range(13,1,-3)):
+    energies["%d"%i]=all_energies[k]
+file="BeH2_data_energy_%s.bin"%basis
+with open(file,"wb") as f:
+    pickle.dump(energies,f)
 plt.show()

@@ -22,7 +22,7 @@ occdict2={"A1":6,"B1":0,"B2":0}
 occdict3={"A1":4,"B1":2,"B2":0}
 occdict1={"A1":4,"B1":0,"B2":2}
 occdicts=[occdict1,occdict2,occdict3]
-xc_array=np.linspace(0,4,41)
+xc_array=np.linspace(0,4,81)
 energies=np.zeros((len(xc_array),3))
 E_FCI=np.zeros(len(xc_array))
 if basis=="cc-pVDZ":
@@ -79,6 +79,13 @@ data["Phi1_E"]=energies[:,0]
 data["Phi2_E"]=energies[:,1]
 data["xc_array"]=xc_array
 data["FCI"]=E_FCI
+"""
+file="energy_data/BeH2_data_631G*.bin"
+import pickle
+with open(file,"wb") as f:
+    pickle.dump(data,f)
+sys.exit(1)
+"""
 energies_3=[[],[]]
 energies_6=[[],[]]
 geometry_energy_pair=[[],[]]

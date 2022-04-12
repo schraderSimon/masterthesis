@@ -10,18 +10,14 @@ import pickle
 if __name__=="__main__":
     fig, ax = plt.subplots(figsize=(9,6))
 
-    basis="cc-pVTZ"
+    basis="6-31G*"
     def molecule(x):
         return "F 0 0 0; H 0 0 %f"%x
     molecule_name=r"Hydrogen Fluoride"
-    xc_array=np.linspace(1.5,6.5,51)
+    xc_array=np.linspace(1.2,5,39)
     #xc_array=np.linspace(3.2,3.7,6)
 
-    basis="6-31G*"
-    molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
-    def molecule(x):
-        return "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x)
-    molecule_name="BeH2"
+
     #xc_array=np.linspace(0,4,41)
     energies_HF=energy_curve_RHF(xc_array,basis,molecule=molecule)
     sample_strengths=np.linspace(1.1,0.5,13)
@@ -61,7 +57,7 @@ if __name__=="__main__":
 
     if basis=="6-31G*":
         basis="6-31Gstjerne"
-    file="BeH2_data_%s.bin"%basis
+    file="HF_data_%s.bin"%basis
     import pickle
     with open(file,"wb") as f:
         pickle.dump(data,f)

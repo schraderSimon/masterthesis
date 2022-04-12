@@ -549,7 +549,7 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF_singlesdoubles):
         print(np.max(np.abs(Tmat)))
         return Smat,Tmat
 class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
-    def __init__(self,sample_coefficients,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0,symmetry=False):
+    def __init__(self,sample_coefficients,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='Bohr',charge=0,symmetry=False):
         """Initiate the solver.
         It Creates the HF coefficient matrices for the sample points for a given molecule.
 
@@ -566,15 +566,16 @@ class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
         self.symmetry=symmetry
         self.HF_coefficients=sample_coefficients #An interesting observation here is that the basis does not matter
         self.build_molecule(1) #Initiate number of electrons, that's literally the only purpose here.
-    def calculate_energies(self,xc_array):
+    def calculate_energies(self,xc_array,adapt_geometry=False):
         """Calculates the molecule's energy"""
         energy_array=np.zeros(len(xc_array))
         eigval_array=[]
         for index,xc in enumerate(xc_array):
             mol_xc=self.build_molecule(xc)
             new_HF_coefficients=[]
-            for i in range(len(self.HF_coefficients)):
-                new_HF_coefficients.append(self.change_coefficients(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:self.number_electronshalf])
+            if adapt_geometry:
+                for i in range(len(self.HF_coefficients)):
+                    new_HF_coefficients.append(self.change_coefficients(self.HF_coefficients[i],mol_xc.intor("int1e_ovlp"))[:,:self.number_electronshalf])
             S,T=self.calculate_ST_matrices(mol_xc,new_HF_coefficients)
             try:
                 eigval,eigvec=generalized_eigenvector(T,S)
@@ -615,10 +616,9 @@ class eigvecsolver_RHF_coupling(eigvecsolver_RHF):
             for index,xc in enumerate(xc_array):
                 self.solve_HF(xc) #Update HF coefficients
                 mol_xc=self.build_molecule(xc)
-                new_HF_coefficients=self.HF_coefficients #No need to basis change (same basis)
-                S,T=self.calculate_ST_matrices(mol_xc,new_HF_coefficients)
+                S,T=self.calculate_ST_matrices(mol_xc,self.HF_coefficients)
                 try:
-                    eigval,eigvec=generalized_eigenvector(T,S)
+                    eigval,eigvec=generalized_eigenvector(T,S,threshold=1e-12)
                 except:
                     eigval=float('NaN')
                     eigvec=float('NaN')

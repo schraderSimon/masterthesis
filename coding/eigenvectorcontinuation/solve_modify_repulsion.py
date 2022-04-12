@@ -47,10 +47,10 @@ class eigvecsolver_RHF_coupling(eigvecsolver_RHF):
         """Solve equations for different RHF's"""
         HF_coefficients=[]
         for x in self.sample_points:
-            mol=self.build_molecule(sample_point)
+            mol=self.build_molecule(sample_point) #Build molecule
             mf = scf.RHF(mol)
-            eri=mol.intor('int2e',aosym="s1")*x
-            mf._eri = ao2mo.restore(1,eri,mol.nao_nr())
+            eri=mol.intor('int2e',aosym="s1")*x #weaken ERI
+            mf._eri = ao2mo.restore(1,eri,mol.nao_nr()) #Update ERI
             mol.incore_anyway=True
             mf.kernel()
             expansion_coefficients_mol= mf.mo_coeff[:, mf.mo_occ > 0.]

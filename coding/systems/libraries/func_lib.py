@@ -155,6 +155,37 @@ def localize_procrustes(mol,mo_coeff,mo_occ,ref_mo_coeff,mix_states=False,active
 	    return mo_coeff_new,R
 	else:
 	    return mo_coeff_new
+def canonical_orthonormalization(T,S,threshold=1e-8):
+    """Solves the generalized eigenvector problem.
+    Input:
+    T: The symmetric matrix
+    S: The overlap matrix
+    threshold: eigenvalue cutoff
+    Returns: The lowest eigenvalue & eigenvector
+    """
+    ###The purpose of this procedure here is to remove all very small eigenvalues of the overlap matrix for stability
+    s, U=np.linalg.eigh(S) #Diagonalize S (overlap matrix, Hermitian by definition)
+    U=np.fliplr(U)
+    s=s[::-1] #Order from largest to lowest; S is an overlap matrix, hence we (ideally) will only have positive values
+    s=s[s>threshold] #Keep only largest eigenvalues
+    spowerminushalf=s**(-0.5) #Take s
+    snew=np.zeros((len(U),len(spowerminushalf)))
+    sold=np.diag(spowerminushalf)
+    snew[:len(s),:]=sold
+    s=snew
+
+
+    ###Canonical orthogonalization
+    X=U@s
+    Tstrek=X.T@T@X
+    epsilon, Cstrek = np.linalg.eigh(Tstrek)
+    idx = epsilon.argsort()[::1] #Order by size (non-absolute)
+    epsilon = epsilon[idx]
+    Cstrek = Cstrek[:,idx]
+    C=X@Cstrek
+    lowest_eigenvalue=epsilon[0]
+    lowest_eigenvector=C[:,0]
+    return lowest_eigenvalue,lowest_eigenvector
 
 def schur_lowestEigenValue(H,S):
 	"""Uses schur decomposition to find lowest eigenvalue of generalized eigenvalue problem"""

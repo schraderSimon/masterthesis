@@ -367,10 +367,12 @@ class EVCSolver():
         return E_CCSD
 
 
-    def solve_WFCCEVC(self):
+    def solve_WFCCEVC(self,filename=None,exponent=14):
         """
         Solves the AMP_CCSD equations.
-
+        Input:
+        filename (string): If filename is given, H & S matrices are stored to that file.
+        exponent: The epsilon value exponent (epsilon=10^exponent) for solving the generalized Eigenvector problem
         Returns:
         E_WFCCEVC (list): WF-CCEVC Energies at all_x.
         """
@@ -403,19 +405,22 @@ class EVCSolver():
                     truncation=self.natorb_truncation
                 )
             H,S=self._construct_H_S(system) #Get H and S as described in Ekstrøm & Hagen
-            #eigvals=np.real(np.linalg.eig(scipy.linalg.pinv(S,atol=10**(-8))@H)[0])
-            eigvals=np.real(scipy.linalg.eig(a=H,b=S+np.eye(len(S))*10**(-5))[0])
+            try:
+                pass
+                eigvals=np.real(scipy.linalg.eig(a=H,b=S+10**(-exponent)*scipy.linalg.expm(-S/10**(-exponent)))[0])
+            except:
+                eigvals=np.real(scipy.linalg.eig(a=H,b=S+np.eye(len(S))*10**(-exponent+1.5))[0])
             sorted=np.sort(eigvals)
             E_WFCCEVC.append(sorted[0])
             Hs.append(H)
             Ss.append(S)
-        dicty={}
-        dicty["S"]=Ss
-        dicty["H"]=Hs
-        file="Right_state_HS.bin"
-        import pickle
-        with open(file,"wb") as f:
-            pickle.dump(dicty,f)
+        if filename is not None:
+            dicty={}
+            dicty["S"]=Ss
+            dicty["H"]=Hs
+            import pickle
+            with open(filename,"wb") as f:
+                pickle.dump(dicty,f)
 
         return E_WFCCEVC
 

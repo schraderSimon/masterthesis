@@ -11,16 +11,18 @@ matplotlib.rc('font', **font)
 
 models=setupmodels.modelgenerator(500)
 model3=models.model3()
-c=np.linspace(0,1.5,500)
+c=np.linspace(0,1.5,100)
 #plot_eigenvectors(model3,c,symmetric=True,num=6)
 colors=["red","blue","green","brown","orange","orange"]
 maxnum=2
 num_eig=5
 true_eigenvalues,true_eigenvectors=find_lowest_eigenvectors(model3,c,num_eig,True)
+
+
 print(true_eigenvalues)
 eigvals=np.zeros(len(c))
 counter=0
-sample_vals=np.linspace(0,0.5,5)
+sample_vals=np.linspace(0,1.5,100)
 fig,ax=plt.subplots(1,maxnum,sharex=True,sharey=True,figsize=(10,4))
 true_sample_eigvals,trash=find_lowest_eigenvectors(model3,sample_vals,1,True)
 ax[0].plot(c,true_eigenvalues[::num_eig],label=r"True $\lambda_0(c)$",color=colors[0])

@@ -1,7 +1,7 @@
 import sys
 sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
 from func_lib import *
-file="energy_data/N2_stretch.bin"
+file="energy_data/N2_stretch1.bin"
 import pickle
 with open(file,"rb") as f:
     data=pickle.load(f)

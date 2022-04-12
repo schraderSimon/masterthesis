@@ -33,7 +33,7 @@ from qiskit.providers.aer import AerSimulator, QasmSimulator
 from qiskit.algorithms.optimizers import *
 from qiskit.algorithms import NumPyEigensolver,VQE
 from qiskit.utils import QuantumInstance
-from qiskit.circuit.library import EfficientSU2, QAOAAnsatz, StatePreparation
+from qiskit.circuit.library import EfficientSU2, QAOAAnsatz, StatePreparation, ExcitationPreserving, RealAmplitudes
 from qiskit.converters import circuit_to_gate
 from qiskit.tools.visualization import circuit_drawer
 
@@ -196,9 +196,10 @@ def get_unitary(hamiltonian,ansatz,optimizer,qi,nuc_rep,include_custom=True,init
     vqe = VQE(ansatz=ansatz,include_custom=include_custom, optimizer=optimizer,quantum_instance=qi,initial_point=initial_point)
 
     vqe_result =vqe.compute_minimum_eigenvalue(hamiltonian)
-    circuit=vqe.get_optimal_circuit()
-    unitary=circuit_to_gate(circuit)
-    optimal_params=vqe.optimal_params
+    #circuit=vqe_result.ansatz.bind_parameters(vqe_result.optimal_point)
+    circuit=None
+    unitary=None#circuit_to_gate(circuit)
+    optimal_params=vqe_result.optimal_point
     return unitary, vqe_result.eigenvalue.real+nuc_rep, optimal_params
 def k_fold_unitary(num_particles,num_spin_orbitals,num_qubits,qubit_converter,hamiltonian,ansatz_func,ansatz_0,optimizer,qi,include_custom=True,k=3,initial_point=None):
     """
@@ -230,24 +231,23 @@ def k_fold_unitary(num_particles,num_spin_orbitals,num_qubits,qubit_converter,ha
         unitary=circuit_to_gate(circuit)
         print("i=%d, E=%f"%(i,vqe_result.eigenvalue.real+nuc_rep))
     return unitary, vqe_result.eigenvalue.real+nuc_rep
-def SU2_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None):
+def HEA_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None):
     if initial_state is None:
         initial_state = HartreeFock(
                 num_spin_orbitals=num_spin_orbitals,
                 num_particles=num_particles,
                 qubit_converter=qubit_converter,
             )
-    var_form=EfficientSU2(
+    var_form=RealAmplitudes(
             num_qubits=num_qubits,
-            su2_gates=None,
-            entanglement='circular',
+            entanglement='full',
             reps=reps,
             skip_unentangled_qubits=False,
             skip_final_rotation_layer=False,
             parameter_prefix='θ',
             insert_barriers=False,
             initial_state=initial_state,
-            name='EfficientSU2',
+            name='ExcitationPreserving',
     )
     init_pt=0.02*(np.random.rand(len(var_form.parameters))-0.5)
 
@@ -268,7 +268,10 @@ def UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitC
         reps=reps,
         generalized=generalized,
     )
+    var_form.excitation_ops()
     init_pt=(np.random.rand(len(var_form.parameters))-0.5)
+
+    print(len(init_pt))
     return var_form, init_pt
 def SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None,generalized=False,include_singles=True):
     if initial_state is None:
@@ -286,6 +289,7 @@ def SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=Qubit
         generalized=generalized,
         include_singles=(include_singles,include_singles)
     )
+    var_form.excitation_ops()
     init_pt=0.1*(np.random.rand(len(var_form.parameters))-0.5)
     return var_form, init_pt
 
@@ -315,6 +319,7 @@ def kUpUCCSD_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=Q
         reps=reps,
         excitations=UPCCSD_excitation_generator,
     )
+    var_form.excitation_ops()
     init_pt=10*0.1*(np.random.rand(len(var_form.parameters))-0.5)
     return var_form, init_pt
 def get_01_state(unitary1,unitary2,num_qubits,backend=None):

@@ -12,7 +12,7 @@ molecule=lambda x:  "N 0 0 0; N 0 0 %f"%x
 refx=[2.1]
 print(molecule(*refx))
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-sample_geometry=[[np.linspace(1.7,2.5,6),np.linspace(1.7,3.3,6)],[np.linspace(1.7,3.3,16),np.linspace(1.7,4,16)]]
+sample_geometry=[[np.linspace(1.7,2.5,6),np.linspace(1.7,3.3,6)],[np.linspace(1.7,3.3,16),np.linspace(1.7,4.2,16)]]
 import pickle
 geom_alphas1=np.linspace(1.5,6,91)
 geom_alphas=[[x] for x in geom_alphas1]
@@ -22,6 +22,8 @@ energies_WF=[[],[]]
 energies_AMP=[[],[]]
 energies_AMPred=[[],[]]
 energies_sample=[[],[]]
+energy_dict["CCSD"]=CCSD_energy_curve(molecule,geom_alphas,basis)
+
 for i in range(len(sample_geometry)):
     for j in range(len(sample_geometry)):
         sample_geom1=sample_geometry[i][j]
@@ -37,13 +39,12 @@ for i in range(len(sample_geometry)):
         energies_AMP[i].append(E_AMP_full)
         energies_AMPred[i].append(E_AMP_red)
         energies_sample[i].append(sample_energies)
-energy_dict["CCSD"]=CCSD_energy_curve(molecule,geom_alphas,basis)
 energy_dict["AMP"]=energies_AMP
 energy_dict["WF"]=energies_WF
 energy_dict["AMPred"]=energies_AMPred
 energy_dict["samples"]=sample_geometry
 energy_dict["energy_samples"]=energies_sample
-file="energy_data/N2_stretch.bin"
+file="energy_data/N2_stretch1.bin"
 import pickle
 with open(file,"wb") as f:
     pickle.dump(energy_dict,f)

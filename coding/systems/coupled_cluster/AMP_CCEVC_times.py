@@ -8,16 +8,16 @@ from helper_functions import *
 basis = 'cc-pVTZ'
 basis_set = bse.get_basis(basis, fmt='nwchem')
 charge = 0
-molecule=lambda x:  "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x)
-#molecule=lambda x:  "H 0 0 0; F 0 0 %f"%x#
-#molecule=lambda x:  "N 0 0 0; N 0 0 %f"%x#
+molecule=lambda x:  "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x); molecule_name="BeH2"
+#molecule=lambda x:  "H 0 0 0; F 0 0 %f"%x#; molecule_name="HF"
+#molecule=lambda x:  "N 0 0 0; N 0 0 %f"%x#; molecule_name="N2"
 
 refx=[1.75]
 print(molecule(*refx))
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-sample_geometry=[[np.linspace(1.5,5.1,6)]]
+sample_geometry=[[np.linspace(1.5,5.5,11)]]
 import pickle
-geom_alphas1=np.linspace(1.6,5.0,34)
+geom_alphas1=np.linspace(1.9,5.1,31)
 geom_alphas=[[x] for x in geom_alphas1]
 energy_dict={}
 energy_dict["xval"]=geom_alphas1
@@ -50,7 +50,7 @@ energy_dict["times"]=times
 energy_dict["niter"]=niter
 energy_dict["virtvals"]=virtvals
 energy_dict["projection_errors"]=projection_errors
-file="energy_data/BeH2_time.bin"
+file="energy_data/%s_time.bin"%molecule_name
 import pickle
 with open(file,"wb") as f:
     pickle.dump(energy_dict,f)

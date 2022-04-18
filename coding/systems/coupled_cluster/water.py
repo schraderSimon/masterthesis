@@ -1,11 +1,11 @@
 from rccsd_gs import *
 import sys
 sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+sys.path.append("../../eigenvectorcontinuation/")
+
 from func_lib import *
-from numba import jit
 from matrix_operations import *
 from helper_functions import *
-sys.path.append("../../eigenvectorcontinuation/")
 np.set_printoptions(linewidth=300,precision=10,suppress=True)
 from scipy.optimize import minimize, root,newton
 
@@ -16,9 +16,8 @@ def molecule(alpha,r1,r2):
     return water
 
 mix_states=False
-basis="cc-pVDZ"
+basis="aug-cc-pVDZ"
 molecule_name="Water"
-number_repeats=5
 ref_x=[104.5,1.81,1.81]
 mol=make_mol(molecule,ref_x,basis)
 ENUC=mol.energy_nuc()
@@ -26,12 +25,17 @@ mf=scf.RHF(mol)
 mf.kernel()
 rhf_mo_ref=mf.mo_coeff
 n_samples=15
-errors_WF=[[] for i in range(0,n_samples)]
-errors_AMP=[[] for i in range(0,n_samples)]
+number_repeats=3
+WF_vals=[[] for i in range(0,number_repeats)]
+AMP_vals=[[] for i in range(0,number_repeats)]
+AMP_50=[[] for i in range(0,number_repeats)]
+AMP_20=[[] for i in range(0,number_repeats)]
+CCSD_vals=[]
 for n in range(number_repeats):
     geom_alphas=[]
     sample_geom=[]
     i=0
+    #Create n_samples sample geometries points
     while i<n_samples:
         angle=10 * np.random.random_sample() + 99.5
         r1=2.7*np.random.random_sample() + 1.3
@@ -48,7 +52,8 @@ for n in range(number_repeats):
             pass
             print([angle,r1,r2])
     i=0
-    while i<n_samples:
+    #Create n_samples+10 test geometries
+    while i<n_samples+1:
         angle=10 * np.random.random_sample() + 99.5
         r1=2.7*np.random.random_sample() + 1.3
         r2=2.7*np.random.random_sample() + 1.3
@@ -64,26 +69,34 @@ for n in range(number_repeats):
             pass
             print([angle,r1,r2])
     t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis,rhf_mo_ref,mix_states)
-    i=1
-    E_CCSD,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis,rhf_mo_ref,t1s[:i],t2s[:i],l1s[:i],l2s[:i],mix_states=mix_states,run_cc=True,cc_approx=False)
-    energy_simen=solve_evc2(geom_alphas,molecule,basis,rhf_mo_ref,t1s[:i],t2s[:i],l1s[:i],l2s[:i],mix_states=mix_states)
-    E_CCSD=np.array(E_CCSD)
-    E_WF=np.array(E_approx)
-    E_AMP=np.array(energy_simen)
-    error_AMP=list(np.abs(E_AMP-E_CCSD))
-    error_WF=list(np.abs(E_WF-E_CCSD))
-    errors_WF[i-1]=errors_WF[i-1]+error_WF
-    errors_AMP[i-1]=errors_AMP[i-1]+error_AMP
-    for i in range(2,n_samples+1,1):
-        trash,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis,rhf_mo_ref,t1s[:i],t2s[:i],l1s[:i],l2s[:i],mix_states=mix_states,run_cc=False,cc_approx=False)
-        energy_simen=solve_evc2(geom_alphas,molecule,basis,rhf_mo_ref,t1s[:i],t2s[:i],l1s[:i],l2s[:i],mix_states=mix_states)
-        E_CCSD=np.array(E_CCSD)
-        E_WF=np.array(E_approx)
-        E_AMP=np.array(energy_simen)
-        error_AMP=list(np.abs(E_AMP-E_CCSD))
-        error_WF=list(np.abs(E_WF-E_CCSD))
-        errors_WF[i-1]=errors_WF[i-1]+error_WF
-        errors_AMP[i-1]=errors_AMP[i-1]+error_AMP
+
+
+    evcsolver=EVCSolver(geom_alphas,molecule,basis,rhf_mo_ref,t1s[:i],t2s[:i],l1s[:i],l2s[:i],sample_x=sample_geom[:i],mix_states=False)
+    CCSD_energy=np.array(evcsolver.solve_CCSD())
+    CCSD_vals.append(CCSD_energy)
+    for i in range(1,n_samples+1,1):
+        evcsolver=EVCSolver(geom_alphas,molecule,basis,rhf_mo_ref,t1s[:i],t2s[:i],l1s[:i],l2s[:i],sample_x=sample_geom[:i],mix_states=False)
+        E_WF=np.array(evcsolver.solve_WFCCEVC())
+        E_AMP_full=np.array(evcsolver.solve_AMP_CCSD(occs=1,virts=1))
+        E_AMP_50=np.array(evcsolver.solve_AMP_CCSD(occs=1,virts=0.5))
+        E_AMP_20=np.array(evcsolver.solve_AMP_CCSD(occs=1,virts=0.2))
+        WF_vals[n].append(E_WF)
+        AMP_vals[n].append(E_AMP_full)
+        AMP_20[n].append(E_AMP_20)
+        AMP_50[n].append(E_AMP_50)
+data={}
+data["CCSD"]=CCSD_vals
+data["WF"]=WF_vals
+data["AMP"]=AMP_vals
+data["AMP20"]=AMP_20
+data["AMP50"]=AMP_50
+
+file="energy_data/water_631G*.bin"
+import pickle
+with open(file,"wb") as f:
+    pickle.dump(data,f)
+
+
 means_WF=[]
 std_WF=[]
 means_AMP=[]
@@ -118,7 +131,7 @@ plt.yscale("log")
 plt.ylabel("Enery deviation from CCSD ")
 plt.xlabel("Number of sample points")
 plt.tight_layout()
-plt.savefig("resultsandplots/water_convergence.pdf")
+plt.savefig("resultsandplots/water_convergence_631G*.pdf")
 plt.show()
 print(means_WF)
 print(std_WF)

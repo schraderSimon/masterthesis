@@ -190,15 +190,15 @@ def canonical_orthonormalization(T,S,threshold=1e-8):
 def schur_lowestEigenValue(H,S):
 	"""Uses schur decomposition to find lowest eigenvalue of generalized eigenvalue problem"""
 	HH, SS, Q, Z = qz(H, S)
-	for i in range(len(SS)):
-	    if np.abs(SS[i,i])<1e-12:
-	        SS[i,i]=1e10
+	#for i in range(len(SS)):
+	#    if np.abs(SS[i,i])<1e-12:
+	#        SS[i,i]=1e10
 	e=np.diag(HH)/np.diag(SS)
 	idx = np.real(e).argsort()
 	e = e[idx]
 	print(e)
 	return np.real(e[0])
-def guptri_Eigenvalue(H,S,epsu=1e-8,gap=1000,zero=True):
+def guptri_Eigenvalue(H,S,epsu=1e-8,gap=1000,zero=False):
 	"""Use guptri to find lowest eigenvalue of generalized eigenvalue problem"""
 	SS, HH, P, Q, kstr = guptri(H,S,zero=zero,epsu=epsu,gap=gap)
 	nonzero=np.where(abs(HH[0,:])>1e-5)[0][0]

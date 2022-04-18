@@ -65,10 +65,10 @@ def get_basis_Hamiltonian(molecule,x,qi,mo_coeff,basis="STO-6G",active_space=Non
     nuc_rep+energyshift: Constant contribution to the energy
     newGroup: Electronc structure driver result for the molecule
     """
-    mol = mol = gto.M(atom=molecule(x), basis=basis,unit="Bohr",symmetry=symmetry)
+    mol = mol = gto.M(atom=molecule(x), basis=basis,unit="Bohr")#,symmetry=symmetry)
     mol.build()
     mf = scf.RHF(mol)
-    mf.irrep_nelec=irreps
+    #mf.irrep_nelec=irreps
     eref=mf.kernel()
     hcore_ao = mol.intor('int1e_kin') + mol.intor('int1e_nuc')
     nuc_rep=mf.energy_nuc()

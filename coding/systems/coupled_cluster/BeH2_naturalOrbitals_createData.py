@@ -7,14 +7,15 @@ from matrix_operations import *
 from helper_functions import *
 
 basis = 'cc-pVTZ'
+basis = bse.get_basis(basis, fmt='nwchem')
 charge = 0
-molecule=lambda x:  "H 0 0 %f; F 0 0 0"%(x)
-refx=[1.75]
+molecule=lambda x:  "H 0 0 %f; Be 0 0 0; H 0 0 -%f"%(x,x)
+refx=[2]
 print(molecule(*refx))
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-sample_geometry=[[np.linspace(1.5,5,6),np.linspace(1.5,5,6)],[np.linspace(1.5,2,6),np.linspace(1.5,2,6)]]
-sample_indices=[[[3,10,17,24,31,38],[3,10,17,24,31,38]],[[3,4,5,6,7,8],[3,4,5,6,7,8]]]
-geom_alphas1=np.linspace(1.2,5,39)
+sample_geometry=[[np.linspace(1.5,6.5,6),np.linspace(1.5,6.5,6)],[np.linspace(2.3,2.8,6),np.linspace(2.3,2.8,6)]]
+sample_indices=[[[0,10,20,30,40,50],[0,10,20,30,40,50]],[[8,9,10,11,12,13],[8,9,10,11,12,13]]]
+geom_alphas1=np.linspace(1.5,6.5,51)
 geom_alphas=[[x] for x in geom_alphas1]
 freeze_threshold=np.array([[0,10**(-4)],[0,0]])
 energy_dict={}
@@ -26,7 +27,7 @@ energies_AMPred=[[],[]]
 energies_CCSD=[[],[]]
 energies_sample=[[],[]]
 titles=[["Natural","Frozen Natural"],["Natural","Procrustes"]]
-virtsval=0.5
+virtsval=0.2
 
 for i in range(len(sample_geometry)):
     for j in range(len(sample_geometry)):
@@ -83,7 +84,7 @@ energy_dict["samples"]=sample_geometry
 energy_dict["energy_samples"]=energies_sample
 energy_dict["titles"]=titles
 
-file="energy_data/HF_Natorb_%.2f.bin"%virtsval
+file="energy_data/BeH2_Natorb_%.2f.bin"%virtsval
 import pickle
 with open(file,"wb") as f:
     pickle.dump(energy_dict,f)

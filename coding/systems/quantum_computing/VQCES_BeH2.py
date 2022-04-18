@@ -66,7 +66,6 @@ def VQCES_algorithm(qubit_hamiltonian,prev_params,previous_unitaries,overlap_par
             ovlp=stateVec.inner(previous_states[i])
             price+=abs(ovlp)**2*overlap_params[i]
         energy+=price
-        print(price)
         return energy
     print("Running VQCES_algorithm")
     res=minimize(cost_function, initial_point,method="BFGS")
@@ -94,7 +93,7 @@ if __name__=="__main__":
     hcore_ao = mol.intor('int1e_kin') + mol.intor('int1e_nuc')
     nuc_rep=mf.energy_nuc()
     ref_det=mf.mo_coeff
-    sample_x=[1.5,2.5,3.5,4.5,5.5,6.5]
+    sample_x=[1.5,3.5,4.5,5.5,6.5]
     E_EVC=np.zeros(len(sample_x))
     E_exact=np.zeros(len(sample_x))
     E_UCC=np.zeros(len(sample_x))
@@ -138,4 +137,4 @@ if __name__=="__main__":
     dicterino={}
     dicterino["xvals"]=sample_x
     dicterino["UCC_2"]=params
-    savemat("BeH2_params_EXCITED_UCC2.mat",dicterino)
+    savemat("energy_data/BeH2_params_EXCITED_UCC2_new.mat",dicterino)

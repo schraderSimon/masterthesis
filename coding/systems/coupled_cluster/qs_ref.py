@@ -85,7 +85,6 @@ def construct_pyscf_system_rhf_ref(
     mol.charge = charge
     mol.cart = cart
     print(molecule)
-    print(basis)
     mol.build(atom=molecule, basis=basis, **kwargs)
     nuclear_repulsion_energy = mol.energy_nuc()
 

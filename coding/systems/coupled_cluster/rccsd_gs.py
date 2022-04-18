@@ -326,6 +326,11 @@ class EVCSolver():
         self.sample_x=sample_x
         self.basis=basis
         self.reference_natorbs=reference_natorbs
+        for i in range(len(t1s)):
+            t1s[i]=np.array(t1s[i],dtype=np.longdouble)
+            t2s[i]=np.array(t2s[i],dtype=np.longdouble)
+            l1s[i]=np.array(l1s[i],dtype=np.longdouble)
+            l2s[i]=np.array(l2s[i],dtype=np.longdouble)
         self.t1s=t1s
         self.t2s=t2s
         self.l1s=l1s
@@ -463,8 +468,8 @@ class EVCSolver():
             virts_local=int(self.t2s[0].shape[0]*virts)
         else:
             virts_local=virts
-        self.used_o=important_o[:occs_local]
-        self.used_v=important_v[:virts_local]
+        self.used_o=np.sort(important_o[:occs_local])
+        self.used_v=np.sort(important_v[:virts_local])
         pickerino[np.ix_(self.used_v,self.used_v,self.used_o,self.used_o)]=1
         self.picks=pickerino.reshape(self.t2s[0].shape)
         self.picks=(self.picks*(-1)+1).astype(bool)
@@ -525,12 +530,12 @@ class EVCSolver():
         Returns: H and S matrices as expressed in terms of the sample basis.
         """
         RHF_energy=system.compute_reference_energy().real
-        H=np.zeros((len(self.t1s),len(self.t1s)))
-        S=np.zeros((len(self.t1s),len(self.t1s)))
+        H=np.zeros((len(self.t1s),len(self.t1s)),dtype=np.longdouble)
+        S=np.zeros((len(self.t1s),len(self.t1s)),dtype=np.longdouble)
         for i in range(len(self.t1s)):
             f = system.construct_fock_matrix(system.h, system.u)
-            t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)
-            t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)
+            t1_error = np.array(rhs_t.compute_t_1_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np),dtype=np.longdouble)
+            t2_error = np.array(rhs_t.compute_t_2_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np),dtype=np.longdouble)
             exp_energy=rhs_e.compute_rccsd_ground_state_energy(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)+RHF_energy
             print(exp_energy)
             for j in range(len(self.t1s)):
@@ -669,7 +674,7 @@ class EVCSolver():
                 for i,w in enumerate(weights[:-1]):
                     input+=w*amplitudes[i] #Calculate new approximate ampltiude guess vector
                     #errsum+=w*updates[i]
-            except numpy.linalg.LinAlgError: #If DIIS matrix is singular, use most recent quasi-newton step
+            except np.linalg.LinAlgError: #If DIIS matrix is singular, use most recent quasi-newton step
                 input=guess
             #errsum=np.zeros(len(updates[0]))
 
@@ -727,7 +732,6 @@ def get_natural_orbitals(molecule_func,xvals,basis,natorbs_ref=None,noons_ref=No
 
 if __name__=="__main__":
     basis = 'cc-pVTZ'
-    basis_set = bse.get_basis(basis, fmt='nwchem')
     charge = 0
     #molecule =lambda arr: "Be 0.0 0.0 0.0; H 0.0 0.0 %f; H 0.0 0.0 -%f"%(arr,arr)
     #molecule=lambda x:  "H 0 0 %f; H 0 0 -%f; Be 0 0 0"%(x,x)
@@ -742,8 +746,8 @@ if __name__=="__main__":
     geom_alphas1=np.linspace(1.2,5,39)
     geom_alphas=[[x] for x in geom_alphas1]
 
-    t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
-    evcsolver=EVCSolver(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False,natorb_truncation=None)
+    t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis,reference_determinant,mix_states=False,type="procrustes")
+    evcsolver=EVCSolver(geom_alphas,molecule,basis,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False,natorb_truncation=None)
     E_WF=evcsolver.solve_WFCCEVC()
     #E_AMP_full=evcsolver.solve_AMP_CCSD(occs=1,virts=1)
     #E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=0.5)

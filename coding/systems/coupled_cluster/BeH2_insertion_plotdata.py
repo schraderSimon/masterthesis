@@ -1,6 +1,9 @@
 import sys
 sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
 from func_lib import *
+from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
+from mpl_toolkits.axes_grid1.inset_locator import mark_inset
+
 file="energy_data/Left_BeH2.bin"
 import pickle
 with open(file,"rb") as f:
@@ -52,13 +55,17 @@ for i in range(3):
             Ss=S_Right
         E=[]
         for k in range(len(x)):
-            print(k)
             H=Hs[k][np.ix_(vals,vals)].copy()
             S=Ss[k][np.ix_(vals,vals)].copy()
             exponent=14
+            if j==0 and k==0:
+                print("i is %d"%i)
+                U,s,Vt=scipy.linalg.svd(S)
+                for eigval in s:
+                    print(eigval)
+
             #eigvals=np.real(scipy.linalg.eig(scipy.linalg.pinv(S,atol=10**(-exponent))@H)[0])
             #eigvals=np.real(scipy.linalg.eig(a=H,b=S+np.eye(len(S))*10**(-exponent))[0])
-            print(np.max(np.abs(np.imag(np.linalg.eig(S)[0]))))
             try:
                 eigvals=np.real(scipy.linalg.eig(a=H,b=S+10**(-exponent)*scipy.linalg.expm(-S/10**(-exponent)))[0])
             except:
@@ -70,7 +77,6 @@ for i in range(3):
                 exc_upperight.append(sorted[1])
             E.append(sorted[0])
         CCEVC_energies[i].append(E)
-        print(E)
 for i in range(3):
     for j in range(2):
         axes[i][j].plot(x,E_FCI,label="FCI",color="tab:purple")
@@ -89,6 +95,18 @@ for i in range(3):
         if i==0 and j==1:
             axes[i][j].plot(x,exc_upperight,"--",color="magenta",alpha=0.75)
         axes[i][j].plot(x[sample_points[i][j]],sample_energies[i][j],"*",label="Smp. pts.",color="black",markersize=9)
+        if i==2 and j==0:
+            axins=zoomed_inset_axes(axes[i][j], 3, loc="upper left")
+            plt.xticks(visible=False)
+            plt.yticks(visible=False)
+            axins.set_xlim(2.6, 3.15)
+            axins.set_ylim(-15.68, -15.64)
+            axins.plot(x,E_FCI,label="FCI",color="tab:purple")
+            axins.plot(x,Right,label=r"$e^{T} |\Phi_2 \rangle$",color="Tab:blue",alpha=0.8)
+            axins.plot(x,Left,label=r"$e^{T} |\Phi_1 \rangle$",color="Tab:green",alpha=0.8)
+            axins.plot(x,CCEVC_energies[i][j],"--",label="CC-EVC",color="tab:orange")
+
+            mark_inset(axes[i][j], axins, loc1=2, loc2=4, fc="none", ec="0.5")
 handles, labels = axes[0][0].get_legend_handles_labels()
 handles2, labels2 = axes[-1][-1].get_legend_handles_labels()
 

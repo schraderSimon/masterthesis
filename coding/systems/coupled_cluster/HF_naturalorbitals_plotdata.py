@@ -8,6 +8,7 @@ with open(file,"rb") as f:
 x=data["xval"]
 E_CCSD=data["CCSD"]
 sample_geometry=data["samples"]
+print(sample_geometry)
 sample_energies=data["energy_samples"]
 E_WF=data["WF"]
 E_AMP_full=data["AMP"]
@@ -20,7 +21,7 @@ axes[0][0].set_ylabel("Energy (Hartree)")
 axes[1][0].set_ylabel("Energy (Hartree)")
 axes[1][0].set_xlabel("distance (Bohr)")
 axes[1][1].set_xlabel("distance (Bohr)")
-axes[0][0].set_ylim([-100.35,-100.1])
+#axes[0][0].set_ylim([-100.35,-100.1])
 
 for i in range(len(sample_geometry)):
     for j in range(len(sample_geometry)):
@@ -28,6 +29,7 @@ for i in range(len(sample_geometry)):
         axes[i][j].plot(x,E_AMP_full[i][j],"--",label="AMP-CCEVC",color="tab:red")
         axes[i][j].plot(x,E_AMP_red[i][j],"--",label=r"AMP, $(p_v=50\%)$",color="tab:green")
         axes[i][j].plot(x,E_WF[i][j],"--",label="WF-CCEVC",color="tab:orange")
+        print(i,j)
         axes[i][j].plot(sample_geometry[i][j],sample_energies[i][j],"*",color="black",label="Sample points",markersize=7)
         axes[i][j].set_title(titles[i][j])
         axes[i][j].grid()
@@ -35,5 +37,5 @@ handles, labels = axes[-1][-1].get_legend_handles_labels()
 fig.legend(handles, labels, bbox_to_anchor=(1.0,0.51),loc="lower right",handletextpad=0.3,labelspacing = 0.1)
 fig.tight_layout()
 fig.subplots_adjust(right=0.90)
-plt.savefig("resultsandplots/HF_natorb.pdf")
+plt.savefig("resultsandplots/BeH2_natorb.pdf")
 plt.show()

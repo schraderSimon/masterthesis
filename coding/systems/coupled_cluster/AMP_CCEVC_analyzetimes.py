@@ -1,7 +1,7 @@
 import sys
 sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
 from func_lib import *
-file="energy_data/BeH2_time.bin"
+file="energy_data/HF_time.bin"
 import pickle
 with open(file,"rb") as f:
     data=pickle.load(f)

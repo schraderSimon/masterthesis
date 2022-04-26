@@ -9,9 +9,9 @@ def orthogonal_procrustes(mo_new,reference_mo):
     M=B@A
     U,s,Vt=scipy.linalg.svd(M)
     return U@Vt, 0
-xs=np.linspace(1.5,5,36)
+xs=np.linspace(1.5,5,72)
 x=1
-basis="aug-cc-pVDZ"
+basis="cc-pVTZ"
 mol=gto.M(atom=molecule(x),basis=basis,spin=0,unit="bohr")
 S=mol.intor("int1e_ovlp")
 Sref=mol.intor("int1e_ovlp")
@@ -60,15 +60,22 @@ for i,x in enumerate(xs):
     natorbss.append(new_natorbs)
     Sref=S
 choices=np.random.choice(np.arange(len(noonss[0])),size=len(noonss[0])//1, replace=False)
-axes[1].set_title("Non-analtyical eigenvectors")
-axes[0].set_title("Analtyical eigenvectors")
-axes[0].plot(xs,np.array(noonss)[:,choices])
-axes[1].plot(xs,np.array(old_noonss)[:,choices])
-axes[0].set_xlabel("Interatomic distance (Bohr)")
-axes[1].set_xlabel("Interatomic distance (Bohr)")
+circle2 = plt.Circle((5, 5), 0.5, color='b', fill=False)
+
+axes[1].set_title("Not analytic")
+axes[0].set_title("Analytic")
+axes[0].plot(xs,np.array(noonss)[:,5:])
+axes[1].plot(xs,np.array(old_noonss)[:,5:])
+axes[0].set_xlabel("x (Bohr)")
+axes[1].set_xlabel("x (Bohr)")
 axes[0].set_ylabel("Natural occupation number")
 #axes[1].set_ylabel("Natural occupation number")
 axes[0].set_yscale("log")
+axes[0].plot(3.35,0.0044,marker='o',markerfacecolor ='none',markeredgewidth=2,markeredgecolor="black",alpha=1.0,ms=x*5)
+axes[0].plot(3.95,6*1e-4,marker='o',markerfacecolor ='none',markeredgewidth=2,markeredgecolor="black",alpha=1.0,ms=x*5)#,mec='None')
+
+axes[0].set_ylim([3*1e-4,0.013])
 axes[1].set_yscale("log")
+plt.tight_layout()
 plt.savefig("natorbs_dissosciation_HF.pdf")
 plt.show()

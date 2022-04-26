@@ -15,7 +15,7 @@ import sys
 import matplotlib
 matplotlib.rcParams.update({'font.size': 20})
 matplotlib.rcParams.update({'lines.linewidth': 3})
-np.set_printoptions(linewidth=300,precision=3,suppress=True)
+np.set_printoptions(linewidth=300,precision=6,suppress=True)
 def make_mol(molecule,x,basis="6-31G",charge=0):
 	"""Helper function to create Mole object at given geometry in given basis"""
 	mol=gto.Mole()
@@ -215,8 +215,8 @@ def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sre
 	Swaps MO's in coefficient matrix in such a way that the coefficients become analytic w.r.t. the reference
 	taking special care of symmetry.
 	Input:
-	noons_ref (array): Natural occupation numbers of reference
-	natorbs_ref (matrix): Natural orbitals of reference
+	noons_ref (array): Natural occupation numbers of reference OR Fock matrix diagonals
+	natorbs_ref (matrix): Natural orbitals of reference OR Canonical orbitals
 	Sref (matrix): Overlap matrix of reference
 	noons (array): Natural occupation numbers of state of state to be adapted
 	natorbs (matrix): Natural orbitals of state to be adapted
@@ -268,4 +268,67 @@ def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sre
 	natorbs=natorbs[:,assignment]*np.array(signs)
 	noons=noons[assignment]
 	pairs=[]
+	return noons, natorbs
+def similiarize_canonical_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sref):
+	"""
+	Swaps MO's in coefficient matrix in such a way that the coefficients become analytic w.r.t. the reference
+	taking special care of symmetry.
+	Input:
+	noons_ref (array): Natural occupation numbers of reference OR Fock matrix diagonals
+	natorbs_ref (matrix): Natural orbitals of reference OR Canonical orbitals
+	Sref (matrix): Overlap matrix of reference
+	noons (array): Natural occupation numbers of state of state to be adapted
+	natorbs (matrix): Natural orbitals of state to be adapted
+	S (matrix): Overlap matrices of state to be adapted
+
+	Returns:
+	New natural occupation numbers (new ordering) and natural orbitals
+	"""
+
+
+	pairs_ref=[]
+	pairs=[]
+	i=0
+	#reference
+	while i<len(noons_ref): #For each natural orbital
+	    if i+1==len(noons_ref):
+	        break
+	    if abs((noons_ref[i])-(noons_ref[i+1]))<1e-9: #When two natural orbitals have the same natural occupation number
+	        pairs_ref.append((i,i+1)) #Add to pair list
+	        i+=1
+	    else:
+	        i+=1
+	i=0
+	#State to be adapted
+	while i<len(noons):
+	    if i+1==len(noons):
+	        break
+	    if abs((noons[i])-(noons[i+1]))<1e-9:
+	        pairs.append((i,i+1))
+	        i+=1
+	    else:
+	        i+=1
+	#Having found the pairs, I have to "match" them. This is done via...procrustifying :)
+	#print("Pairs:")
+	print(pairs)
+	print(noons)
+	fits=np.zeros(len(pairs))
+	for i in range(len(pairs)):
+	    for j in range(len(pairs_ref)):
+	        new_orbs,t=orthogonal_procrustes(natorbs[:,pairs[i]],natorbs_ref[:,pairs_ref[j]]) #Similarize pair coefficients
+	        fit=np.linalg.norm(natorbs[:,pairs[i]]@new_orbs-natorbs_ref[:,pairs_ref[j]])
+	        fits[j]=fit
+	    best_fit=np.argmin(fits)
+	    new_orbs,t=orthogonal_procrustes(natorbs[:,pairs[i]],natorbs_ref[:,pairs_ref[best_fit]])
+	    natorbs[:,pairs[i]]=natorbs[:,pairs[i]]@new_orbs
+	#similarities=C_1^TS_1^(-1/2)^T S_2^(-1/2)C_2
+	similarities=natorbs_ref.T@np.real(scipy.linalg.fractional_matrix_power(Sref,0.5))@np.real(scipy.linalg.fractional_matrix_power(S,0.5))@natorbs
+	#print(similarities)
+	assignment = linear_sum_assignment(-np.abs(similarities))[1] #Find best match (simple as this should be "basically" the identity matrix)
+	print(similarities)
+	signs=[]
+	for i in range(len(similarities)):
+	    signs.append(np.sign(similarities[i,assignment[i]])) # Watch out that MO's keep correct sign
+	natorbs=natorbs[:,assignment]*np.array(signs)
+	noons=noons[assignment]
 	return noons, natorbs

@@ -54,8 +54,30 @@ def orthonormalize_ts(t1s: list,t2s: list):
         t1_new.append(new_t1)
         t2_new.append(new_t2)
     return t1_new,t2_new,coefs
+def setUpsamples_canonicalOrbitals(all_x,molecule_func,basis,desired_samples=None):
+    """
+    Sets up canonical orbitals and the corresponding lambda and t-amplitudes for a set of geometries.
+    Canonical orbitals need to be calculated for each sample_x, even though we only want canonical orbitals and cluster
+    amplitudes for "desired_samples", because we need a sufficiently small distance between natural orbitals in order
+    to categorize them correctly.
 
-def setUpsamples_naturalOrbitals_givenNatorbs(sample_x,molecule_func,basis,freeze_threshold,natorbs,noons,Ss,mindex):
+    Input:
+    all_x (list): The geometries at which the molecule is constructed. Possibly the whole PES of interest
+    molecule_func (function->String): A function which returns a string
+        corresponding to a molecular geometry as function of parameters from all_x.
+    basis (string): The basis set.
+    desired_samples (list): List of integers corresponding to indices in all_x. CCSD equations are only solved for those.
+
+    Returns:
+    t1s,t2s,l1s,l2s: CCSD ampltidue and lambda equations
+    sample_energies: CCSD Energies for the desired samples
+    reference_natorb_list: Coefficient matrices for canonical orbitals at desired_samples
+    reference_overlap_list: The overlap matrices S at desired_samples
+    reference_noons_list: Orbital energies at desired_samples
+    """
+
+    if desired_samples is None:
+        desired_samples=np.array(np.arange(0,len(all_x)),dtype=int)
     t1s=[]
     t2s=[]
     l1s=[]
@@ -66,28 +88,38 @@ def setUpsamples_naturalOrbitals_givenNatorbs(sample_x,molecule_func,basis,freez
     reference_noons_list=[]
     systems=[]
     natorbs_ref=noons_ref=S_ref=None
-    for k,x in enumerate(sample_x):
-        mol=gto.Mole()
-        mol.atom=molecule_func(*x)
-        mol.basis = basis
-        mol.unit= "Bohr"
-        mol.build()
-        system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_natorb(
+    for k,x in enumerate(all_x[:]):
+        system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_canonicalorb(
             molecule=molecule_func(*x),
             basis=basis,
             add_spin=False,
             anti_symmetrize=False,
-            reference_natorbs=natorbs[k],
-            reference_noons=noons[k],
-            reference_overlap=Ss[k],
+            reference_natorbs=natorbs_ref,
+            reference_noons=noons_ref,
+            reference_overlap=S_ref,
             return_natorbs=True,
-            truncation=mindex
         )
         reference_noons_list.append(noons_ref)
-        reference_overlap_list.append(S_ref)
-        reference_natorb_list.append(natorbs_ref)
-        systems.append(system)
-    for system in systems:
+    natorbs_ref=noons_ref=S_ref=None
+    print("Finished first iteration")
+    for k,x in enumerate(all_x[:]):
+        system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_canonicalorb(
+            molecule=molecule_func(*x),
+            basis=basis,
+            add_spin=False,
+            anti_symmetrize=False,
+            reference_natorbs=natorbs_ref,
+            reference_noons=noons_ref,
+            reference_overlap=S_ref,
+            return_natorbs=True,
+        )
+        if k in desired_samples:
+            reference_noons_list.append(noons_ref)
+            reference_overlap_list.append(S_ref)
+            reference_natorb_list.append(natorbs_ref)
+            systems.append(system)
+    print("Finished second iteration")
+    for k,system in enumerate(systems):
         rccsd = RCCSD(system, verbose=False)
         ground_state_tolerance = 1e-7
         rccsd.compute_ground_state(
@@ -100,8 +132,8 @@ def setUpsamples_naturalOrbitals_givenNatorbs(sample_x,molecule_func,basis,freez
         l1s.append(l[0])
         l2s.append(l[1])
         sample_energies.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
-    return t1s,t2s,l1s,l2s,sample_energies
-
+        print("Calculated %d"%k)
+    return t1s,t2s,l1s,l2s,sample_energies,reference_natorb_list,reference_overlap_list,reference_noons_list
 def setUpsamples_naturalOrbitals(all_x,molecule_func,basis,freeze_threshold=0,desired_samples=None):
     """
     Sets up natural orbitals and the corresponding lambda and t-amplitudes for a set of geometries.
@@ -729,6 +761,30 @@ def get_natural_orbitals(molecule_func,xvals,basis,natorbs_ref=None,noons_ref=No
         overlaps_list.append(S)
         noons_list.append(noons)
     return natorbs_list,noons_list,overlaps_list
+def get_canonical_orbitals(molecule_func,xvals,basis,natorbs_ref=None,noons_ref=None,Sref=None):
+    natorbs_list=[]
+    overlaps_list=[]
+    noons_list=[]
+    for x in xvals:
+        mol = gto.Mole()
+        mol.unit = "bohr"
+        mol.charge = 0
+        mol.cart = False
+        mol.build(atom=molecule_func(*x), basis=basis)
+        hf = scf.RHF(mol)
+        hf.kernel()
+        noons=hf.mo_energy
+        natorbs=hf.mo_coeff
+        S=mol.intor("int1e_ovlp")
+        if natorbs_ref is not None:
+            noons_ref,natorbs_ref=similiarize_canonical_orbitals(noons_ref,natorbs_ref,noons,natorbs,mol.nelec,S,Sref)
+        else:
+            noons_ref=noons; natorbs_ref=natorbs; S_ref=S
+        natorbs_list.append(natorbs_ref)
+        Sref=S
+        overlaps_list.append(S)
+        noons_list.append(noons)
+    return natorbs_list,noons_list,overlaps_list
 
 if __name__=="__main__":
     basis = 'cc-pVTZ'
@@ -761,3 +817,51 @@ if __name__=="__main__":
     plt.tight_layout()
     plt.legend()
     plt.show()
+"""
+def setUpsamples_naturalOrbitals_givenNatorbs(sample_x,molecule_func,basis,freeze_threshold,natorbs,noons,Ss,mindex):
+    t1s=[]
+    t2s=[]
+    l1s=[]
+    l2s=[]
+    sample_energies=[]
+    reference_natorb_list=[]
+    reference_overlap_list=[]
+    reference_noons_list=[]
+    systems=[]
+    natorbs_ref=noons_ref=S_ref=None
+    for k,x in enumerate(sample_x):
+        mol=gto.Mole()
+        mol.atom=molecule_func(*x)
+        mol.basis = basis
+        mol.unit= "Bohr"
+        mol.build()
+        system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_natorb(
+            molecule=molecule_func(*x),
+            basis=basis,
+            add_spin=False,
+            anti_symmetrize=False,
+            reference_natorbs=natorbs[k],
+            reference_noons=noons[k],
+            reference_overlap=Ss[k],
+            return_natorbs=True,
+            truncation=mindex
+        )
+        reference_noons_list.append(noons_ref)
+        reference_overlap_list.append(S_ref)
+        reference_natorb_list.append(natorbs_ref)
+        systems.append(system)
+    for system in systems:
+        rccsd = RCCSD(system, verbose=False)
+        ground_state_tolerance = 1e-7
+        rccsd.compute_ground_state(
+            t_kwargs=dict(tol=ground_state_tolerance),
+            l_kwargs=dict(tol=ground_state_tolerance),
+        )
+        t, l = rccsd.get_amplitudes()
+        t1s.append(t[0])
+        t2s.append(t[1])
+        l1s.append(l[0])
+        l2s.append(l[1])
+        sample_energies.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+    return t1s,t2s,l1s,l2s,sample_energies
+"""

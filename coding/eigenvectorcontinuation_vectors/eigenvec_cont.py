@@ -38,7 +38,7 @@ def generalized_eigenvector(T,S,threshold=1e-8,symmetric=True):
     return lowest_eigenvalue,lowest_eigenvector
 
 
-def eigenvec_cont(x,M,solv):
+def eigenvec_cont(x,M,solv,threshold=1e-15):
     """
     Implements the eigenvector continuation algorithm for the lowest eigenvalue.
 
@@ -63,11 +63,14 @@ def eigenvec_cont(x,M,solv):
             S[i,j]=solv[i].T@solv[j]
             T[i,j]=solv[i]@mv_prod[j]
     if len(solv)==5:
-        print(S)
+
         s,U=np.linalg.eigh(S)
+        print(S)
+        for sval in s:
+            print("%.4e"%sval)
         from numpyarray_to_latex import to_ltx
 
-    return generalized_eigenvector(T,S,threshold=1e-6,symmetric=True)
+    return generalized_eigenvector(T,S,threshold=threshold,symmetric=True)
 def find_lowest_eigenvectors(matrix,xarr,num_levels=1,symmetric=False):
     """For each x in xarr, returns the lowest eigenvalue and eigenvector of a matrix function M(x)"""
     eigenvectors=np.zeros((len(xarr)*num_levels,matrix(0).shape[0])) #

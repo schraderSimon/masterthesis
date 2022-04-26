@@ -1,7 +1,7 @@
 import sys
 sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
 from func_lib import *
-file="energy_data/HF_Natorb_0.50.bin"
+file="energy_data/HF_Canonical_orb_0.50.bin"
 import pickle
 with open(file,"rb") as f:
     data=pickle.load(f)
@@ -25,7 +25,7 @@ axes[1][1].set_xlabel("distance (Bohr)")
 
 for i in range(len(sample_geometry)):
     for j in range(len(sample_geometry)):
-        axes[i][j].plot(x,E_CCSD[i][j],alpha=0.5,label="CCSD",color="tab:cyan")
+        axes[i][j].plot(x,E_CCSD,alpha=0.5,label="CCSD",color="tab:cyan")
         axes[i][j].plot(x,E_AMP_full[i][j],"--",label="AMP-CCEVC",color="tab:red")
         axes[i][j].plot(x,E_AMP_red[i][j],"--",label=r"AMP, $(p_v=50\%)$",color="tab:green")
         axes[i][j].plot(x,E_WF[i][j],"--",label="WF-CCEVC",color="tab:orange")

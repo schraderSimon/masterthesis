@@ -77,6 +77,7 @@ axes[0].set_xlabel("x (Bohr)")
 axes[1].set_xlabel("x (Bohr)")
 
 for i in range(2):
+    axes[i].axvline(x=2,linestyle="--",color="gray",label="Ref. geom.",linewidth=2)
     axes[i].plot(x,E_FCI,label="FCI",color="tab:purple",alpha=0.7)
     axes[i].plot(x,UCCSD_energies,label="1-UCCSD",color="tab:blue",alpha=1)
     if i==0:
@@ -85,7 +86,7 @@ for i in range(2):
     axes[i].plot(x,CCEVC_energies[1][i],"-.",label="EVC (GP)",dashes=(2, 1.1),color="tab:green",alpha=0.9)
 
 
-    axes[i].plot(sample_x[sample_points[i]],sample_E[sample_points[i]],"*",label="Smp. pts.",color="black",markersize=7)
+    axes[i].plot(sample_x[sample_points[i]],sample_E[sample_points[i]],"*",label="Smp. pts.",color="black",markersize=9)
     axes[i].grid()
 handles, labels = axes[0].get_legend_handles_labels()
 

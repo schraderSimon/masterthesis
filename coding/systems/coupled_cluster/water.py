@@ -25,7 +25,7 @@ mf=scf.RHF(mol)
 mf.kernel()
 rhf_mo_ref=mf.mo_coeff
 n_samples=15
-number_repeats=3
+number_repeats=5
 WF_vals=[[] for i in range(0,number_repeats)]
 AMP_vals=[[] for i in range(0,number_repeats)]
 AMP_50=[[] for i in range(0,number_repeats)]

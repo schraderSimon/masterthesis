@@ -1,7 +1,7 @@
 import sys
 sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
 from func_lib import *
-file="energy_data/HF_Canonical_orb_0.50.bin"
+file="energy_data/HF_Natorb_0.50.bin"
 import pickle
 with open(file,"rb") as f:
     data=pickle.load(f)
@@ -19,23 +19,25 @@ axes[0][0].set_ylabel("Energy (Hartree)")
 #axes[0][0].set_yticks(np.linspace(-99.95,-100.2,6))
 #axes[1][0].set_yticks(np.linspace(-99.95,-100.2,6))
 axes[1][0].set_ylabel("Energy (Hartree)")
-axes[1][0].set_xlabel("distance (Bohr)")
-axes[1][1].set_xlabel("distance (Bohr)")
-#axes[0][0].set_ylim([-100.35,-100.1])
+axes[1][0].set_xlabel("x (Bohr)")
+axes[1][1].set_xlabel("x (Bohr)")
+axes[0][0].set_ylim([-100.35,-100.0])
 
 for i in range(len(sample_geometry)):
     for j in range(len(sample_geometry)):
-        axes[i][j].plot(x,E_CCSD,alpha=0.5,label="CCSD",color="tab:cyan")
+        axes[i][j].axvline(x=1.75,linestyle="--",color="gray",label="Ref. geom.",linewidth=2)
+        axes[i][j].plot(x,E_CCSD[i][j],alpha=0.5,label="CCSD",color="tab:cyan")
         axes[i][j].plot(x,E_AMP_full[i][j],"--",label="AMP-CCEVC",color="tab:red")
         axes[i][j].plot(x,E_AMP_red[i][j],"--",label=r"AMP, $(p_v=50\%)$",color="tab:green")
         axes[i][j].plot(x,E_WF[i][j],"--",label="WF-CCEVC",color="tab:orange")
         print(i,j)
-        axes[i][j].plot(sample_geometry[i][j],sample_energies[i][j],"*",color="black",label="Sample points",markersize=7)
+        axes[i][j].plot(sample_geometry[i][j],sample_energies[i][j],"*",color="black",label="Sample points",markersize=9)
         axes[i][j].set_title(titles[i][j])
         axes[i][j].grid()
+
 handles, labels = axes[-1][-1].get_legend_handles_labels()
 fig.legend(handles, labels, bbox_to_anchor=(1.0,0.51),loc="lower right",handletextpad=0.3,labelspacing = 0.1)
 fig.tight_layout()
 fig.subplots_adjust(right=0.90)
-plt.savefig("resultsandplots/BeH2_natorb.pdf")
+plt.savefig("resultsandplots/HF_natorb.pdf")
 plt.show()

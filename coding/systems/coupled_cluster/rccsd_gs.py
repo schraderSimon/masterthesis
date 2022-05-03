@@ -7,6 +7,8 @@ from opt_einsum import contract
 
 from scipy.optimize import minimize, root,newton
 import time
+np.set_printoptions(linewidth=300,precision=8,suppress=True)
+
 class sucess():
     """Mini helper class that resembles scipy's OptimizeResult."""
     def __init__(self,x,success,nfev):
@@ -121,7 +123,7 @@ def setUpsamples_canonicalOrbitals(all_x,molecule_func,basis,desired_samples=Non
     print("Finished second iteration")
     for k,system in enumerate(systems):
         rccsd = RCCSD(system, verbose=False)
-        ground_state_tolerance = 1e-7
+        ground_state_tolerance = 1e-10
         rccsd.compute_ground_state(
             t_kwargs=dict(tol=ground_state_tolerance),
             l_kwargs=dict(tol=ground_state_tolerance),
@@ -208,7 +210,7 @@ def setUpsamples_naturalOrbitals(all_x,molecule_func,basis,freeze_threshold=0,de
     print("Finished second iteration")
     for k,system in enumerate(systems):
         rccsd = RCCSD(system, verbose=False)
-        ground_state_tolerance = 1e-7
+        ground_state_tolerance = 1e-10
         rccsd.compute_ground_state(
             t_kwargs=dict(tol=ground_state_tolerance),
             l_kwargs=dict(tol=ground_state_tolerance),
@@ -260,7 +262,7 @@ def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="
             weights=None
         )
         rccsd = RCCSD(system, verbose=False)
-        ground_state_tolerance = 1e-7
+        ground_state_tolerance = 1e-10
         rccsd.compute_ground_state(
             t_kwargs=dict(tol=ground_state_tolerance),
             l_kwargs=dict(tol=ground_state_tolerance),
@@ -396,7 +398,7 @@ class EVCSolver():
             )
             try:
                 rccsd = RCCSD(system, verbose=False)
-                ground_state_tolerance = 1e-7
+                ground_state_tolerance = 1e-10
                 rccsd.compute_ground_state(t_kwargs=dict(tol=ground_state_tolerance))
                 E_CCSD.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
             except:
@@ -442,6 +444,10 @@ class EVCSolver():
                     truncation=self.natorb_truncation
                 )
             H,S=self._construct_H_S(system) #Get H and S as described in Ekstrøm & Hagen
+            U,s,Vt=scipy.linalg.svd(S)
+            for singval in s:
+                print(singval)
+            sys.exit(1)
             try:
                 pass
                 eigvals=np.real(scipy.linalg.eig(a=H,b=S+10**(-exponent)*scipy.linalg.expm(-S/10**(-exponent)))[0])
@@ -569,14 +575,44 @@ class EVCSolver():
             t1_error = np.array(rhs_t.compute_t_1_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np),dtype=np.longdouble)
             t2_error = np.array(rhs_t.compute_t_2_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np),dtype=np.longdouble)
             exp_energy=rhs_e.compute_rccsd_ground_state_energy(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)+RHF_energy
-            print(exp_energy)
+            #Small test: multiply lambda equations
+
+            for j in range(len(self.l2s)):
+                pass
+                #temp=self.l2s[j].copy()
+                #self.l2s[j]=1/3*temp+1/6*temp.swapaxes(2,3)
+                #self.l2s[j]=4*temp-2*temp.swapaxes(2,3)
+            #RCCSD:
+            """
             for j in range(len(self.t1s)):
                 X1=self.t1s[i]-self.t1s[j]
                 X2=self.t2s[i]-self.t2s[j]
-                overlap=1+contract("ia,ai->",self.l1s[j],X1)+0.5*contract("ijab,ai,bj->",self.l2s[j],X1,X1)+0.25*contract("ijab,abij->",self.l2s[j],X2)
+                overlap=0
+                overlap+=1+contract("ia,ai->",self.l1s[j],X1) #Nothing changes here as the l1 is multiplied by two from before
+                ########overlap+=0.5*contract("ijab,ai,bj->",self.l2s[j],X1,X1)+0.25*contract("ijab,abij->",self.l2s[j],X2) # THE SUGGESTED SOLUTION
+                overlap+=1*contract("ijab,ai,bj->",self.l2s[j],X1,X1)-0.5*contract("ijab,bi,aj->",self.l2s[j],X1,X1)
+                ########overlap+=0.5*contract("ijab,abij->",self.l2s[j],X2)#Why do I need the extra 0.5...? Something with the T2 amplitudes...
+                overlap+=0.5*contract("ijab,abij->",self.l2s[j],X2)
+                #overlap-=0.25*contract("ijab,abji->",self.l2s[j],X2)
                 S[i,j]=overlap
-                extra=contract("ia,ai->",self.l1s[j],t1_error)+contract("ijab,ai,bj->",self.l2s[j],X1,t1_error)+0.25*contract("ijab,abij->",self.l2s[j],t2_error)
-                H[i,j]=overlap*exp_energy+extra
+                #extra=contract("ia,ai->",self.l1s[j],t1_error)+contract("ijab,ai,bj->",self.l2s[j],X1,t1_error)+0.25*contract("ijab,abij->",self.l2s[j],t2_error) # THE SUGGESTED SOLUTION
+                extra=contract("ia,ai->",self.l1s[j],t1_error)+contract("ijab,ai,bj->",self.l2s[j],X1,t1_error)+0.5*contract("ijab,abij->",self.l2s[j],t2_error) #Extra 0.5...?
+                H[i,j]=overlap*exp_energy
+                H[i,j]+=extra
+            """
+            #GCCSD (exactly as in refs.):
+            for j in range(len(self.t1s)):
+                X1=self.t1s[i]-self.t1s[j]
+                X2=self.t2s[i]-self.t2s[j]
+                overlap=0
+                overlap+=1+contract("ia,ai->",self.l1s[j],X1)
+                overlap+=0.5*contract("ijab,ai,bj->",self.l2s[j],X1,X1)
+                overlap+=0.5*contract("ijab,abij->",self.l2s[j],X2) #Extra *2 for RCCSD
+                S[i,j]=overlap
+                extra=contract("ia,ai->",self.l1s[j],t1_error)+contract("ijab,ai,bj->",self.l2s[j],X1,t1_error)
+                extra+=0.5*contract("ijab,abij->",self.l2s[j],t2_error) #Extra *2 for RCCSD
+                H[i,j]=overlap*exp_energy
+                H[i,j]+=extra
         return H,S
     def _system_jacobian(self,system):
         """
@@ -787,27 +823,29 @@ def get_canonical_orbitals(molecule_func,xvals,basis,natorbs_ref=None,noons_ref=
     return natorbs_list,noons_list,overlaps_list
 
 if __name__=="__main__":
-    basis = 'cc-pVTZ'
+    basis = 'cc-pVDZ'
     charge = 0
-    #molecule =lambda arr: "Be 0.0 0.0 0.0; H 0.0 0.0 %f; H 0.0 0.0 -%f"%(arr,arr)
-    #molecule=lambda x:  "H 0 0 %f; H 0 0 -%f; Be 0 0 0"%(x,x)
-    molecule=lambda x:  "H 0 0 %f; F 0 0 0"%(x)
+    molecule=lambda x:  "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x)
     refx=[2]
     print(molecule(*refx))
     reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-    sample_geom1=np.linspace(1.5,4,30)
+    sample_geom1=np.linspace(2,4,3)
     #sample_geom1=[2.5,3.0,6.0]
     sample_geom=[[x] for x in sample_geom1]
     sample_geom1=np.array(sample_geom).flatten()
-    geom_alphas1=np.linspace(1.2,5,39)
+    geom_alphas1=np.linspace(1,4,31)
     geom_alphas=[[x] for x in geom_alphas1]
 
     t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis,reference_determinant,mix_states=False,type="procrustes")
+    t2_test=t2s[1]
+    #print(np.linalg.norm(t2_test+t2_test.swapaxes(0,1))) # This symmetry is gone, as expected
+    #print(np.linalg.norm(t2_test+t2_test.swapaxes(2,3))) # This symmetry is gone, as expected
+    #print(np.linalg.norm(t2_test-t2_test))
+    #print(np.linalg.norm(t2_test-t2_test.swapaxes(2,3).swapaxes(0,1))) # this symmetry still remains
     evcsolver=EVCSolver(geom_alphas,molecule,basis,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False,natorb_truncation=None)
     E_WF=evcsolver.solve_WFCCEVC()
     #E_AMP_full=evcsolver.solve_AMP_CCSD(occs=1,virts=1)
     #E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=0.5)
-    sys.exit(1)
     E_CCSDx=evcsolver.solve_CCSD()
     plt.plot(geom_alphas1,E_CCSDx,label="CCSD")
     plt.plot(geom_alphas1,E_WF,label="WF-CCEVC")
@@ -817,51 +855,3 @@ if __name__=="__main__":
     plt.tight_layout()
     plt.legend()
     plt.show()
-"""
-def setUpsamples_naturalOrbitals_givenNatorbs(sample_x,molecule_func,basis,freeze_threshold,natorbs,noons,Ss,mindex):
-    t1s=[]
-    t2s=[]
-    l1s=[]
-    l2s=[]
-    sample_energies=[]
-    reference_natorb_list=[]
-    reference_overlap_list=[]
-    reference_noons_list=[]
-    systems=[]
-    natorbs_ref=noons_ref=S_ref=None
-    for k,x in enumerate(sample_x):
-        mol=gto.Mole()
-        mol.atom=molecule_func(*x)
-        mol.basis = basis
-        mol.unit= "Bohr"
-        mol.build()
-        system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_natorb(
-            molecule=molecule_func(*x),
-            basis=basis,
-            add_spin=False,
-            anti_symmetrize=False,
-            reference_natorbs=natorbs[k],
-            reference_noons=noons[k],
-            reference_overlap=Ss[k],
-            return_natorbs=True,
-            truncation=mindex
-        )
-        reference_noons_list.append(noons_ref)
-        reference_overlap_list.append(S_ref)
-        reference_natorb_list.append(natorbs_ref)
-        systems.append(system)
-    for system in systems:
-        rccsd = RCCSD(system, verbose=False)
-        ground_state_tolerance = 1e-7
-        rccsd.compute_ground_state(
-            t_kwargs=dict(tol=ground_state_tolerance),
-            l_kwargs=dict(tol=ground_state_tolerance),
-        )
-        t, l = rccsd.get_amplitudes()
-        t1s.append(t[0])
-        t2s.append(t[1])
-        l1s.append(l[0])
-        l2s.append(l[1])
-        sample_energies.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
-    return t1s,t2s,l1s,l2s,sample_energies
-"""

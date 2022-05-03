@@ -9,6 +9,8 @@ from matrix_operations import *
 from helper_functions import *
 from scipy.optimize import minimize, root,newton
 from sklearn.decomposition import PCA
+import sys
+sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/coupled_cluster")
 from rccsd_gs import orthonormalize_ts
 @jit(parallel=True,nopython=True)
 def make_spinints_aokjemi(dim,energy_basis_2e_mol_chem,alternating):
@@ -601,13 +603,19 @@ def solve_evc(x_alphas,molecule,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states=Fals
             for j, xj in enumerate(t1s):
                 X1=t1s[i]-t1s[j]
                 X2=t2s[i]-t2s[j]
-                overlap=1+np.einsum("ia,ai->",l1s[j].T,X1,optimize=True)+0.5*np.einsum("ijab,ai,bj->",l2s[j].T,X1,X1,optimize=True)+0.25*np.einsum("ijab,abij->",l2s[j].T,X2,optimize=True)
+                overlap=0
+                overlap+=1+np.einsum("ia,ai->",l1s[j].T,X1,optimize=True)
+                overlap+=0.5*np.einsum("ijab,ai,bj->",l2s[j].T,X1,X1,optimize=True)+0.25*np.einsum("ijab,abij->",l2s[j].T,X2,optimize=True)
+                #overlap=1+np.einsum("ia,ai->",l1s[j],X1)+0.5*contract("ijab,ai,bj->",self.l2s[j],X1,X1)+0.25*contract("ijab,abij->",self.l2s[j],X2)
                 S[i,j]=overlap
                 exp_energy=gccsolver.ccsdenergy(t1s[i],t2s[i])+ESCF
                 H[i,j]=overlap*exp_energy
                 extra=np.einsum("ia,ai->",l1s[j].T,t1_error,optimize=True)+np.einsum("ijab,ai,bj->",l2s[j].T,X1,t1_error,optimize=True)+0.25*np.einsum("ijab,abij->",l2s[j].T,t2_error,optimize=True)
                 H[i,j]=H[i,j]+extra
-        e,cl,c=eig(scipy.linalg.pinv(S,atol=1e-8)@H,left=True)
+        print(S)
+        print(H)
+        sys.exit(1)
+        e,cl,c=eig(scipy.linalg.inv(S+np.eye(len(S))*1e-8)@H,left=True)
 
         idx = np.real(e).argsort()
         e = e[idx]
@@ -673,58 +681,57 @@ def solve_evc2(x_alphas,molecule,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states=Fal
         energy.append(newEn)
     return energy
 if __name__=="__main__":
-    molecule=lambda x: "Be 0 0 0; H 0 0 %f; H 0 0 %f"%(x,-x)
+    #molecule=lambda x: "Be 0 0 0; H 0 0 %f; H 0 0 %f"%(x,-x)
+    molecule=lambda x: "F 0 0 %f; H 0 0 0"%(x)
     #molecule=lambda x: "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x)
     mix_states=False
     basis="6-31G"
-    molecule_name="BeH2"
-    sample_geom1=np.linspace(2.5,6.0,2)
+    molecule_name="HF"
+    sample_geom1=np.linspace(2,3,2)
 
     sample_geom=[[x] for x in sample_geom1]
     sample_geom1=np.array(sample_geom).flatten()
-    geom_alphas1=np.linspace(2.5,6.0,3)
+    geom_alphas1=np.linspace(1,4,31)
     geom_alphas=[[x] for x in geom_alphas1]
     #molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
 
-    ref_x=1.5
+    ref_x=2
     type="procrustes"
     mol=make_mol(molecule,[ref_x],basis,charge=0)
     ENUC=mol.energy_nuc()
     mf=scf.RHF(mol)
     mf.kernel()
     rhf_mo_ref=mf.mo_coeff
-    E_CCSD=CC_energy_curve(np.array(geom_alphas).ravel(),basis,molecule,unit="Bohr")
-    E_FCI=FCI_energy_curve(np.array(geom_alphas).ravel(),basis,molecule,unit="Bohr")
+    fig, ax1 = plt.subplots(1,sharex=True)
+    #E_CCSD=CC_energy_curve(np.array(geom_alphas).ravel(),basis,molecule,unit="Bohr")
+    #E_FCI=FCI_energy_curve(np.array(geom_alphas).ravel(),basis,molecule,unit="Bohr")
     t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis,rhf_mo_ref,mix_states=mix_states,type=type)
-    print(t1s[0].shape)
-    print(t2s[0].shape)
-    print(l1s[0].shape)
-    print(l2s[0].shape)
-    sys.exit(1)
-    #x_alphas=np.linspace(0,4,41)
-    E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,run_cc=True,cc_approx=True,mix_states=mix_states,type=type)
+    t2_test=t2s[0]
 
-    energy_simen=solve_evc2(geom_alphas,molecule,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states=mix_states,type=type)
-    fig, (ax1, ax2) = plt.subplots(2,sharex=True)
+
+    #x_alphas=np.linspace(0,4,41)
+    E_CCSDx,E_approx,E_diffguess,E_RHF,E_ownmethod=solve_evc(geom_alphas,molecule,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,run_cc=False,cc_approx=True,mix_states=mix_states,type=type)
+
+    #energy_simen=solve_evc2(geom_alphas,molecule,basis,rhf_mo_ref,t1s,t2s,l1s,l2s,mix_states=mix_states,type=type)
     #ax1.plot(geom_alphas1,E_RHF,label="RHF")
-    ax1.plot(geom_alphas1,E_CCSD,label="CCSD")
+    #ax1.plot(geom_alphas1,E_CCSD,label="CCSD")
     #ax1.plot(geom_alphas1,E_CCSDx,label="CCSD")
     ax1.plot(geom_alphas1,E_approx,label="EVC (approach 1)")
     #ax1.plot(geom_alphas1,E_ownmethod,label="Fit to approach 1")
-    ax1.plot(geom_alphas1,energy_simen,label="EVC (approach 2)")
+    #ax1.plot(geom_alphas1,energy_simen,label="EVC (approach 2)")
     ax1.plot(sample_geom1,sample_energies,"*",label="Sampling points")
-    ax1.plot(geom_alphas1,E_FCI,label="Full CI")
+    #ax1.plot(geom_alphas1,E_FCI,label="Full CI")
     ax1.set_ylabel("Energy (Hartree)")
     ax1.legend()
     #ax2.plot(geom_alphas1,abs(E_RHF-E_FCI),label="RHF")
-    ax2.plot(geom_alphas1,abs(E_CCSD-E_FCI),label="CCSD")
-    ax2.plot(geom_alphas1,abs(E_approx-E_FCI),label="EVC (approach 1)")
+    #ax2.plot(geom_alphas1,abs(E_CCSD-E_FCI),label="CCSD")
+    #ax2.plot(geom_alphas1,abs(E_approx-E_FCI),label="EVC (approach 1)")
     #ax2.plot(geom_alphas1,abs(E_ownmethod-E_FCI),label="Fit to approach 1")
-    ax2.plot(geom_alphas1,abs(energy_simen-E_FCI),label="EVC (approach 2)")
-    ax2.set_xlabel("Distance (Bohr)")
-    ax2.set_ylabel("Energy (Hartree)")
-    ax2.set_yscale("log")
-    ax2.legend()
+    #ax2.plot(geom_alphas1,abs(energy_simen-E_FCI),label="EVC (approach 2)")
+    #ax2.set_xlabel("Distance (Bohr)")
+    #ax2.set_ylabel("Energy (Hartree)")
+    #ax2.set_yscale("log")
+    #ax2.legend()
     plt.tight_layout()
     #plt.savefig("%s_%s_%d.pdf"%(molecule_name,basis,len(sample_x)))
     plt.show()

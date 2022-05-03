@@ -29,15 +29,15 @@ for i in range(len(sample_geometry)):
         for ki,k in enumerate(kvals):
             axes[i,j].plot(xc_array,EVC_energies[i][j][ki],types[ki],color=colors[ki],label="EVC (%d pt.)"%(k))
 
-        axes[i][j].plot(sample_geometry[i][j],energies_sample[i][j],"*",color="black",label="Sample pts.",markersize=7)
+        axes[i][j].plot(sample_geometry[i][j],energies_sample[i][j],"*",color="black",label="Sample pts.",markersize=9)
 
         axes[i][j].set_title(titles[i][j])
         axes[i][j].grid()
 handles, labels = axes[0][0].get_legend_handles_labels()
 axes[0][0].set_ylabel("Energy (Hartree)")
 axes[1][0].set_ylabel("Energy (Hartree)")
-axes[1][0].set_xlabel("distance (Bohr)")
-axes[1][1].set_xlabel("distance (Bohr)")
+axes[1][0].set_xlabel("x (Bohr)")
+axes[1][1].set_xlabel("x (Bohr)")
 axes[1][1].set_ylim([-100.4,-99.6])
 fig.legend(handles, labels, bbox_to_anchor=(1.0,0.42),loc="lower right",handletextpad=0.3,labelspacing = 0.1)
 fig.tight_layout()

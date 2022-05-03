@@ -63,12 +63,12 @@ t1s,t2s,l1s,l2s,sample_energies=setUpsamples_givenC(sample_geom,molecule,basis,g
 print("Sample energies")
 print(list(sample_energies))
 evcsolver=EVCSolver(sample_geom,molecule,basis,sample_coeffmatrices_2,t1s,t2s,l1s,l2s,givenC=True,sample_x=sample_geom)
-E_WF=evcsolver.solve_WFCCEVC()
+E_WF=evcsolver.solve_WFCCEVC(filename="energy_data/newBeH2data_2.bin")
 
 plt.plot(sample_geom,E_WF,label="CCSD WF left")
 plt.plot(sample_geom,sample_energies,label="sample energies")
 
-plt.show()
+#plt.show()
 """
 refx=[4]
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)

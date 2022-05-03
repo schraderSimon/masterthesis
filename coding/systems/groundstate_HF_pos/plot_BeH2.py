@@ -28,7 +28,7 @@ for i in range(2):
         axes[i][j].plot(x,FCI,label="FCI",color="tab:purple")
         samplex=[geometry_energy_pair[i][j][k][0] for k in range(len(geometry_energy_pair[i][j]))]
         sampley=[geometry_energy_pair[i][j][k][1] for k in range(len(geometry_energy_pair[i][j]))]
-        axes[i][j].plot(samplex,sampley,"*",color="black",markersize=7)
+        axes[i][j].plot(samplex,sampley,"*",color="black",markersize=9)
         axes[i][j].grid()
 handles, labels = axes[-1][-1].get_legend_handles_labels()
 fig.legend(handles, labels, bbox_to_anchor=(1.0,0.35),loc="lower right",handletextpad=0.3,labelspacing = 0.1)

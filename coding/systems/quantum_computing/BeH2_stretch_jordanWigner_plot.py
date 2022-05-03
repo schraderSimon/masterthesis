@@ -58,6 +58,8 @@ axes[0].set_xlabel("x (Bohr)")
 axes[1].set_xlabel("x (Bohr)")
 
 for i in range(2):
+    axes[i].axvline(x=2,linestyle="--",color="gray",label="Ref. geom.",linewidth=2)
+
     axes[i].plot(x,E_FCI,label="FCI",color="tab:purple",alpha=0.7)
     axes[i].plot(x,UCCSD_energies,label="1-UCCSD",color="tab:blue",alpha=1)
     if i==0:

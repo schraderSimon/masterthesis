@@ -13,9 +13,9 @@ basis_set = bse.get_basis(basis, fmt='nwchem')
 charge = 0
 def molecule(x,y):
     return """Be 0 0 0; H -%f 0 0; H %f 0 0"""%(x,y)
-refx=(1,1)
+refx=(2,2)
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-n=30
+n=20
 x=4*np.random.rand(n,2)+2 #n random numbers between 2 and 6 for x and y directions
 sample_geom_new=[]
 for i in range(n):

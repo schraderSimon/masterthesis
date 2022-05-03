@@ -62,31 +62,36 @@ for i in range(3):
         CCEVC_energies[i].append(E)
 for i in range(2):
     for j in range(2):
-        axes[i][j].plot(x,E_FCI,label="FCI",color="tab:purple")
+        axes[i][j].axvline(x=2,linestyle="--",color="gray",label="Ref. geom.",linewidth=2)
+        axes[j][i].plot(x,E_FCI,label="FCI",color="tab:purple")
         if j==0:
-            axes[i][j].plot(x,UCC_1_energies,label="1-UCC",color="tab:green",alpha=0.7)
-            axes[i][j].plot(x,CCEVC_energies[i][j],"--",label=r"EVC, $\epsilon=10^{-3}$",color="tab:orange")
+            axes[j][i].plot(x,UCC_1_energies,label="1-UCC",color="tab:green",alpha=0.7)
+            axes[j][i].plot(x,CCEVC_energies[i][j],"--",label=r"EVC, $\epsilon=10^{-3}$",color="tab:orange")
             if i==1:
-                axes[i][j].plot(x,CCEVC_energies[2][j],"--",label=r"EVC, $\epsilon=10^{-3}$",color="tab:red")
-            axes[i][j].plot(sample_x[sample_points[i][j]],sample_E_UCC1[sample_points[i][j]],"*",label="Smp. pts.",color="black",markersize=9)
+                axes[j][i].plot(x,CCEVC_energies[2][j],"--",label=r"EVC, $\epsilon=0$",color="tab:red")
+            axes[j][i].plot(sample_x[sample_points[i][j]],sample_E_UCC1[sample_points[i][j]],"*",label="Smp. pts.",color="black",markersize=9)
 
         if j==1:
-            axes[i][j].plot(x,UCC_2_energies,label="2-UCC",color="tab:blue",alpha=0.7)
-            axes[i][j].plot(x,CCEVC_energies[i][j],"--",label=r"EVC, $\epsilon=10^{-3}$",color="tab:orange")
+            axes[j][i].plot(x,UCC_2_energies,label="2-UCC",color="tab:blue",alpha=0.7)
+            axes[j][i].plot(x,CCEVC_energies[i][j],"--",label=r"EVC, $\epsilon=10^{-3}$",color="tab:orange")
             if i==1:
-                axes[i][j].plot(x,CCEVC_energies[2][j],"--",label=r"EVC, $\epsilon=0$",color="tab:red")
-            axes[i][j].plot(sample_x[sample_points[i][j]],sample_E_UCC2[sample_points[i][j]],"*",label="Smp. pts.",color="black",markersize=9)
+                axes[j][i].plot(x,CCEVC_energies[2][j],"--",label=r"EVC, $\epsilon=0$",color="tab:red")
+            axes[j][i].plot(sample_x[sample_points[i][j]],sample_E_UCC2[sample_points[i][j]],"*",label="Smp. pts.",color="black",markersize=9)
 
-        axes[i][j].grid()
-        axes[i][j].set_ylim([-15.77,-15.32])
+        axes[j][i].grid()
+        axes[j][i].set_ylim([-15.77,-15.32])
 handles, labels = axes[-1][-1].get_legend_handles_labels()
 handles2, labels2 = axes[0][0].get_legend_handles_labels()
 handles.append(handles2[1])
 labels.append(labels2[1])
+axes[0][1].legend(bbox_to_anchor=(1.72,0.58),loc="center right",handletextpad=0.1,labelspacing = 0.0)
+axes[1][1].legend(bbox_to_anchor=(1.72,0.58),loc="center right",handletextpad=0.1,labelspacing = 0.0)
 
-fig.legend(handles, labels, bbox_to_anchor=(0.45,0.62),loc="center",handletextpad=0.3,labelspacing = 0.1)
+#fig.legend(handles, labels, bbox_to_anchor=(0.45,0.62),loc="center",handletextpad=0.3,labelspacing = 0.1)
 
 plt.tight_layout()
+fig.subplots_adjust(right=0.78)
+
 plt.savefig("resultsandplots/BeH2_stretch_QC.pdf")
 plt.show()
 print(CCEVC_energies[0][1])

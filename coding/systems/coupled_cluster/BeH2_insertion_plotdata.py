@@ -4,13 +4,13 @@ from func_lib import *
 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
-file="energy_data/Left_BeH2.bin"
+file="energy_data/newBeH2data_1.bin"
 import pickle
 with open(file,"rb") as f:
     data=pickle.load(f)
 H_Left=data["H"]
 S_Left=data["S"]
-file="energy_data/Right_BeH2.bin"
+file="energy_data/newBeH2data_2.bin"
 import pickle
 with open(file,"rb") as f:
     data=pickle.load(f)
@@ -32,8 +32,12 @@ axes[1][0].set_ylabel("Energy (Hartree)")
 axes[2][0].set_ylabel("Energy (Hartree)")
 axes[2][0].set_xlabel("x (Bohr)")
 axes[2][1].set_xlabel("x (Bohr)")
-recap=[20,22,25,75,77,80]
-sample_points=[[list(np.arange(0,81,10)),list(np.arange(0,81,10))],[[18,19,20,21,22,23,24,25],list(np.arange(65,75,1))],[[18,19,20,21,22,74,73,75,76,77,78,79,80],recap]]
+xy=10
+lowerleft=[25+xy,26+xy,27+xy,28+xy,29+xy,30+xy,31+xy,32+xy,74,77,76,75,79,78,80]
+lowerright=[0,20,21,22,23,24,25,76,77,78,79,80]
+
+
+sample_points=[[list(np.arange(0,81,10)),list(np.arange(0,81,10))],[[18,19,20,21,22,23,24,25],list(np.arange(65,75,1))],[lowerleft,lowerright]]
 CCEVC_energies=[[],[],[]]
 sample_energies=[[],[],[]]
 exc_lowerright=[]
@@ -57,18 +61,21 @@ for i in range(3):
         for k in range(len(x)):
             H=Hs[k][np.ix_(vals,vals)].copy()
             S=Ss[k][np.ix_(vals,vals)].copy()
-            exponent=14
+            exponent=14.3
             if j==0 and k==0:
                 print("i is %d"%i)
+                print(S)
                 U,s,Vt=scipy.linalg.svd(S)
-                for eigval in s:
-                    print(eigval)
-
+                #s,c=scipy.linalg.eig(S)
+                print(np.sum(s))
+                for singval in s:
+                    print(singval)
             #eigvals=np.real(scipy.linalg.eig(scipy.linalg.pinv(S,atol=10**(-exponent))@H)[0])
             #eigvals=np.real(scipy.linalg.eig(a=H,b=S+np.eye(len(S))*10**(-exponent))[0])
             try:
                 eigvals=np.real(scipy.linalg.eig(a=H,b=S+10**(-exponent)*scipy.linalg.expm(-S/10**(-exponent)))[0])
             except:
+                sys.exit(1)
                 eigvals=np.real(scipy.linalg.eig(a=H,b=S+np.eye(len(S))*10**(-exponent))[0])
             sorted=np.sort(eigvals)
             if i==2 and j==1:
@@ -79,23 +86,28 @@ for i in range(3):
         CCEVC_energies[i].append(E)
 for i in range(3):
     for j in range(2):
+        if j==0:
+            axes[i][j].axvline(x=0,linestyle="--",color="gray",label="Ref. geom.",linewidth=2)
+        if j==1:
+            axes[i][j].axvline(x=4,linestyle="--",color="gray",label="Ref. geom.",linewidth=2)
         axes[i][j].plot(x,E_FCI,label="FCI",color="tab:purple")
         axes[i][j].plot(x,Right,label=r"$e^{T} |\Phi_2 \rangle$",color="Tab:blue",alpha=0.8)
         axes[i][j].plot(x,Left,label=r"$e^{T} |\Phi_1 \rangle$",color="Tab:green",alpha=0.8)
 
         if j==1:
-            axes[i][j].plot(x,CCEVC_energies[i][j],"--",label="CC-EVC",color="tab:red")
+            axes[i][j].plot(x,CCEVC_energies[i][j],"--",label=r"EVC $|\Phi_2\rangle$",color="tab:red")
         if j==0:
-            axes[i][j].plot(x,CCEVC_energies[i][j],"--",label="CC-EVC",color="tab:orange")
+            axes[i][j].plot(x,CCEVC_energies[i][j],"--",label=r"EVC $|\Phi_1\rangle$",color="tab:orange")
         axes[i][j].set_ylim([-15.84,-15.635])
 
         axes[i][j].grid()
         if i==2 and j==1:
-            axes[i][j].plot(x,exc_lowerright,"--",label=r"Exc. $|\Phi_2 \rangle$",color="magenta",alpha=0.75)
+            pass
+            #axes[i][j].plot(x,exc_lowerright,"--",label=r"Exc. $|\Phi_2 \rangle$",color="magenta",alpha=0.75)
         if i==0 and j==1:
             axes[i][j].plot(x,exc_upperight,"--",color="magenta",alpha=0.75)
         axes[i][j].plot(x[sample_points[i][j]],sample_energies[i][j],"*",label="Smp. pts.",color="black",markersize=9)
-        if i==2 and j==0:
+        if i==2:
             axins=zoomed_inset_axes(axes[i][j], 3, loc="upper left")
             plt.xticks(visible=False)
             plt.yticks(visible=False)
@@ -104,20 +116,24 @@ for i in range(3):
             axins.plot(x,E_FCI,label="FCI",color="tab:purple")
             axins.plot(x,Right,label=r"$e^{T} |\Phi_2 \rangle$",color="Tab:blue",alpha=0.8)
             axins.plot(x,Left,label=r"$e^{T} |\Phi_1 \rangle$",color="Tab:green",alpha=0.8)
-            axins.plot(x,CCEVC_energies[i][j],"--",label="CC-EVC",color="tab:orange")
-
+            if j==0:
+                axins.plot(x,CCEVC_energies[i][j],"--",label=r"EVC $|\Phi_1\rangle$",color="tab:orange")
+            if j==1:
+                axins.plot(x,CCEVC_energies[i][j],"--",label=r"EVC $|\Phi_2\rangle$",color="tab:red")
             mark_inset(axes[i][j], axins, loc1=2, loc2=4, fc="none", ec="0.5")
+#axes[1,0].legend(loc="best",handletextpad=0.3,labelspacing = 0.1)
+#axes[1,1].legend(loc="best",handletextpad=0.3,labelspacing = 0.1)
 handles, labels = axes[0][0].get_legend_handles_labels()
 handles2, labels2 = axes[-1][-1].get_legend_handles_labels()
 
 print(handles)
 print(labels)
-handles.append(handles2[-3])
+#handles.append(handles2[-3])
 handles.append(handles2[-2])
 savedh=handles[-3]
 labels[-2]=r"EVC $|\Phi_1\rangle$"
 labels.append(r"EVC $|\Phi_2\rangle$")
-labels.append(r"Exc.")
+#labels.append(r"Exc.")
 savedl=labels[-3]
 del labels[-3]; del handles[-3]
 labels.append(savedl); handles.append(savedh)

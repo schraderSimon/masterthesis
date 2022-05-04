@@ -8,10 +8,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from timeit import default_timer as timer
 
-basis="cc-pVDZ"
+basis="STO-3G"
 sample_geometry=[[np.linspace(1.5,2.0,3),np.linspace(1.5,5.0,3)],[np.linspace(1.5,2.0,3),np.linspace(1.5,5,3)]]
 fig,axes=plt.subplots(2,2,sharey=True,sharex=True,figsize=(12,10))
-xc_array=np.linspace(1.2,5.0,39)
+xc_array=np.linspace(1.2,5.0,3)
 molecule=lambda x: """H 0 0 0; F 0 0 %f"""%x
 molecule_name=r"Hydrogen Fluoride"
 print("CCSD")

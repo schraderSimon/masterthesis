@@ -258,13 +258,15 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
             betas_occ=[i for i in range(len(state[1])) if int(state[1][i])==1]
             all_indices.append([alphas_occ,betas_occ])
         return all_indices
-    def calculate_energies(self,xc_array,doubles=True):
+    def calculate_energies(self,xc_array,doubles=True,write=False,filename="abc.xyz"):
         self.doubles=doubles
         self.data_creator()
         """Calculates the molecule's energy"""
         energy_array=np.zeros(len(xc_array))
         eigval_array=[]
         self.all_new_HF_coefficients=[]
+        H_list=[]
+        S_list=[]
         for index,xc in enumerate(xc_array):
             mol_xc=self.build_molecule(xc)
             new_HF_coefficients=[]
@@ -279,8 +281,18 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
                 eigval=float('NaN')
                 eigvec=float('NaN')
             energy_array[index]=eigval
-
             eigval_array.append(eigvec)
+            if write:
+                S_list.append(S)
+                H_list.append(T)
+        if write:
+            import pickle
+            energy_dict={}
+            energy_dict["xc_array"]=xc_array
+            energy_dict["Ss"]=S_list
+            energy_dict["Hs"]=H_list
+            with open(filename,"wb") as f:
+                pickle.dump(energy_dict,f)
         return energy_array,eigval_array
     def calculate_ST_matrices(self,mol_xc,new_HF_coefficients,threshold=1e-12):
         number_electronshalf=self.number_electronshalf

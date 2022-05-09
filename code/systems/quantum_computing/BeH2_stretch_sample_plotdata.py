@@ -66,12 +66,13 @@ epsilons=["10^{-2}","10^{-5}"]
 locs=["left","right"]
 
 for i in range(2):
+    ax[i].axhline(0,color="green")
     ax[i].set_title(r"$\epsilon=%s$"%epsilons[i],loc=locs[i])
     error=np.array(EVC_approx[i]-E_EVC)
     ax[i].plot(x_of_interest,error,label=r"$\bar {E}_0-E_{exact}$",color="r")
     #ax[i].fill_between(x_of_interest, error -EVC_std[i], error +EVC_std[i],color='r', alpha=0.2,label=r"$\pm\sigma_{E_0}$")
-    ax[i].set_xlabel("Distance (Bohr)")
-    ax[i].axhline(0,color="green")
+    ax[i].set_xlabel("x (Bohr)")
+
     ax[i].fill_between(x_of_interest,-chem_acc,chem_acc,color="green",alpha=0.2,label="Chemical\n accuracy")
 handles, labels = ax[0].get_legend_handles_labels()
 fig.legend(handles, labels, bbox_to_anchor=(0.55,0.735),loc="center",handletextpad=0.1,labelspacing = 0.0)

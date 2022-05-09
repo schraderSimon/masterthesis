@@ -309,8 +309,10 @@ qi = QuantumInstance(backend=backend, seed_simulator=seed, seed_transpiler=seed)
 
 numPyEigensolver=NumPyEigensolver()
 
-qubit_converter_nosymmetry = QubitConverter(mapper=JordanWignerMapper())
-qubit_converter_symmetry=qubit_converter_nosymmetry
+#qubit_converter_nosymmetry = QubitConverter(mapper=JordanWignerMapper())
+qubit_converter_symmetry=tapering_value=[1,1,1]
+qubit_converter_symmetry=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True,z2symmetry_reduction=tapering_value)
+
 
 E_exact=np.zeros(len(x_of_interest))
 qubit_hamiltonians=[]
@@ -360,7 +362,7 @@ for k,x in enumerate(sample_x):
 try:
     epsilon=int(sys.argv[1])
 except:
-    epsilon=-5
+    epsilon=-2
 threshold=10**(epsilon) #Seems about reasonable :)
 samplersystem=SamplerSystemGaussian("data/BeH2_UCC2_sampleXPauliStrings.txt",cutoff=None)
 samplersystem.remove_data([0,1,2,3,5])
@@ -368,10 +370,10 @@ num_measurements_S={}
 num_measurements_H={}
 if epsilon==-5:
     num_start_measurements=2*1e7#5*1e5#Use for epsilon=1e-2
-    measurement_increase=1*1e7 #1*1e5#Use for epsilon=1e-2
+    measurement_increase=0.5*1e6 #1*1e5#Use for epsilon=1e-2
 if epsilon==-2:
-    num_start_measurements=1e6#5*1e5#Use for epsilon=1e-2
-    measurement_increase=5*1e5 #1*1e5#Use for epsilon=1e-2
+    num_start_measurements=1*1e6#5*1e5#Use for epsilon=1e-2
+    measurement_increase=0.5*1e6 #1*1e5#Use for epsilon=1e-2
 for i in range(len(samplersystem.sample_x)):
     for j in range(i,len(samplersystem.sample_x)):
         if i==j:
@@ -385,6 +387,7 @@ Es=[]
 stds=[]
 num_measurements=[]
 chem_acc=1.6*1e-3
+multiplier=1
 noChange=0
 previous=100
 
@@ -404,26 +407,10 @@ while True:
     stds.append(std)
     print(E,std,samplersystem.H_std["%d%d"%(0,0)]/np.sqrt(samplersystem.num_measurements_H["%d%d"%(0,0)]))
     num_measurements.append(samplersystem.get_num_measurements())
-    if noChange>20 and standard_dev<chem_acc/1:
+    if noChange>20 and standard_dev<chem_acc/multiplier:
         break
-fig, (ax1, ax2) = plt.subplots(1, 2,figsize=(10,8))
 Es=np.array(Es)
 stds=np.array(stds)
-ax1.set_title("Convergence wrt. measurements")
-ax1.axhline(E_exact[-1],label=r"$E_{FCI}$",color="b")
-ax1.axhline(E_exact[-1]-chem_acc,label=r"Chemical accuracy",color="g")
-ax1.axhline(E_exact[-1]+chem_acc,color="g")
-ax1.set_ylim([-15.500,-15.490])
-ax1.set_yticks(np.arange(-15.500, -15.490, step=0.001))
-from matplotlib import ticker
-formatter = ticker.FormatStrFormatter('%.4f')
-ax1.yaxis.set_major_formatter(formatter)
-ax1.plot(num_measurements,Es,label=r"$\bar E_0$",color="r")
-ax1.fill_between(num_measurements, Es - 2*stds, Es + 2*stds,
-                 color='r', alpha=0.2,label=r"$\pm2\sigma_{E_0}$")
-ax1.set_xlabel(r"$N_{measurements}$")
-ax1.set_ylabel("Energy (Hartree)")
-ax1.legend()
 EVC_approx=[]
 EVC_std=[]
 print("bæmp")
@@ -431,22 +418,17 @@ for k,x in enumerate(x_of_interest):
     print(x)
     samplersystem.create_gaussian_dist(qubit_hamiltonians[k],nuc_reps[k])
     E,std=samplersystem.bootstrap(nuc_reps[k],threshold,100)
-    while std>chem_acc/1:
+    while std>chem_acc/multiplier:
+        break
         samplersystem.increase_max_gradient(nuc_reps[k],threshold,100,int(measurement_increase),int(measurement_increase))
+
         E,std=samplersystem.bootstrap(nuc_reps[k],threshold,100)
         E=samplersystem.get_E(nuc_reps[k],threshold)
         print(E,std,samplersystem.H_std["%d%d"%(0,0)]/np.sqrt(samplersystem.num_measurements_H["%d%d"%(0,0)]))
+        break
+    E=samplersystem.get_E(nuc_reps[k],threshold)
     EVC_approx.append(E)
     EVC_std.append(std)
-ax2.set_title(r"Deviation from $E_{FCI}$ along PES")
-
-ax2.plot(x_of_interest,np.array(EVC_approx)-np.array(E_exact),label=r"$\bar{E_0}-E_{FCI}$")
-ax2.fill_between(x_of_interest,np.array(EVC_approx)-np.array(E_exact)-2*np.array(EVC_std),np.array(EVC_approx)-np.array(E_exact)+2*np.array(EVC_std),color='r', alpha=0.2,label=r"$\pm2\sigma_{E_0}$")
-ax2.set_xlabel("Interatomic distance")
-ax2.set_ylabel("Energy (Hartree)")
-ax2.legend()
-plt.tight_layout()
-plt.savefig("Approx_EVC_BeH2%.1e.pdf"%(threshold))
 print("Final number of measurements: %d"%samplersystem.get_num_measurements())
 data={}
 data["xvals"]=x_of_interest
@@ -460,4 +442,3 @@ file="energy_data/BeH2_stretch_sample_%d.bin"%epsilon
 
 with open(file,"wb") as f:
     pickle.dump(data,f)
-plt.show()

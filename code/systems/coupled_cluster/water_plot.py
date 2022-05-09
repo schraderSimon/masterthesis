@@ -62,13 +62,13 @@ for error in errors_collected:
     stds.append(np.nanstd(error,axis=(0,2)))
 xticks=[1,3,5,7,9,11,13,15,17]
 fig,axes=plt.subplots(2,2,sharey=True,sharex=True,figsize=(12,10))
-axes[0][0].set_ylabel("Deviation from CCSD (Hartree)")
-axes[1][0].set_ylabel("Deviation from CCSD (Hartree)")
+axes[0][0].set_ylabel("Dev. from CCSD (Hartree)")
+axes[1][0].set_ylabel("Dev. from CCSD (Hartree)")
 axes[1][0].set_xlabel("Number of sample points")
 axes[1][1].set_xlabel("Number of sample points")
 axes[1][1].set_xticks(xticks)
 xaxis=np.arange(1,number_samples+1)
-titles=["WF-CCEVC","AMP-CCEVC",r"AMP ($p_v=50\%$)",r"AMP ($p_v=20\%$)"]
+titles=["WF-CCEVC","AMP-CCEVC",r"AMP-CCEVC ($p_v=50\%$)",r"AMP-CCEVC ($p_v=20\%$)"]
 for i in range(2):
     for j in range(2):
         axes[i][j].set_title(titles[2*i+j])

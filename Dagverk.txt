@@ -1,7 +1,0 @@
-30. August (6 h, outof which 2 hours talk)
-- Talk to Simen, get a general idea about eigenvector continuation within Hartree-Fock; raising and lowering operators in this notation 
-- Eigenvector continuation on the matrix
-- Eigenvector continuation using more than 1 eigenvalue. Need to fix: Non-convergence
-31. August ( 5-6h ) 
-- Learned that I am stupid (regarding the evaluation of overlap of matrices) and that 3D integrals should be treated in three dimensions.
-- I tried to implement the algorithm on the Hydrogen atom. The purpose of this is to show that the algorithm is bad for outliers, simplz because the space is not spanned properlz.

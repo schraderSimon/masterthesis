@@ -1,5 +1,0 @@
-Can Single-Reference Coupled Cluster Theory Describe Static Correlation? by Bulik et al.
-	-> Discusses, among others, why the N2 molecule fails
-Postponing the orghogonality catastrophe by Tubman et al.
-	-> Discusses how to implement multireference wave functions on a quantum computer :):)
-

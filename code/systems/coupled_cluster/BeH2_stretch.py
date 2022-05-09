@@ -1,6 +1,6 @@
 from rccsd_gs import *
 import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+sys.path.append("../libraries")
 from func_lib import *
 from numba import jit
 from matrix_operations import *
@@ -58,7 +58,7 @@ file="energy_data/BeH2_2d_plot_NOGUPTRI.bin"
 
 with open(file,"wb") as f:
     pickle.dump(energy_dict,f)
-
+"""
 print("Grid")
 print(np.meshgrid(span,span))
 print("Error in CCSD")
@@ -106,3 +106,4 @@ cbar_ax = fig.add_axes([0.85, 0.15, 0.05, 0.7])
 colorbar=fig.colorbar(im2, cax=cbar_ax,label='Error (mHartree)')
 plt.savefig("BeH2_stretch_Procrustes_1.pdf")
 plt.show()
+"""

@@ -1,5 +1,5 @@
 import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+sys.path.append("../libraries")
 from func_lib import *
 #from pyscf.mcscf import CASSCF
 #from quantum_library import *

@@ -1,6 +1,6 @@
 from rccsd_gs import *
 import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+sys.path.append("../libraries")
 from func_lib import *
 from matrix_operations import *
 from helper_functions import *

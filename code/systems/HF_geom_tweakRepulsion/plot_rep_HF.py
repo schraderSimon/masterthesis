@@ -1,6 +1,6 @@
 import pickle
 import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+sys.path.append("../libraries")
 from func_lib import *
 colors=["tab:green","tab:brown","tab:red","tab:orange"]
 alphaval=0.8

@@ -1,4 +1,4 @@
-This folder contains the code to create the figure 2.1 and A.1.
+This folder contains the code to create figure 2.1 and A.1.
 
 To recreate those, run
 

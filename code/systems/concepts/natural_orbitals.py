@@ -1,5 +1,5 @@
 import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+sys.path.append("../libraries")
 from func_lib import *
 def molecule(x):
     return "F 0 0 0; H 0 0 %f"%x
@@ -20,18 +20,11 @@ e=myhf.run()
 mymp=mp.RMP2(myhf).run()
 
 rdm1 =mymp.make_rdm1()  # Add the correlation part
-#noons,natorbs=scipy.linalg.eigh(rdm1)
-#noons_ref=noons[::-1]
-#natorbs_ref=linalg.fractional_matrix_power(Sref, -0.5)@(natorbs.T[::-1]).T
 noons_ref,natorbs_ref=mcscf.addons.make_natural_orbitals(mymp)
 noonss=[]
 old_noonss=[]
 natorbss=[]
-'''
-for i,col in enumerate((natorbs_ref[:,5:]).T):
-    if (col[np.argmax(np.abs(col))]<0):
-        natorbs_ref[:,5+i]=-col.copy()
-'''
+
 Rref=linalg.fractional_matrix_power(S, 0.5)@natorbs_ref
 
 diff=np.zeros(len(xs))
@@ -72,7 +65,6 @@ axes[0].set_xticks([2,3,4,5])
 axes[1].set_xticks([2,3,4,5])
 
 axes[0].set_ylabel("Natural occupation number")
-#axes[1].set_ylabel("Natural occupation number")
 axes[0].set_yscale("log")
 axes[0].plot(3.35,0.0044,marker='o',markerfacecolor ='none',markeredgewidth=2,markeredgecolor="black",alpha=1.0,ms=x*5)
 axes[0].plot(3.95,6*1e-4,marker='o',markerfacecolor ='none',markeredgewidth=2,markeredgecolor="black",alpha=1.0,ms=x*5)#,mec='None')

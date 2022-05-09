@@ -1,8 +1,6 @@
 import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+sys.path.append("../libraries")
 from func_lib import *
-from matrix_operations import *
-from helper_functions import *
 molecule=lambda x: """Be 0 0 0; H %f %f 0; H %f %f 0"""%(x,2.54-0.46*x,x,-(2.54-0.46*x))
 basis = 'cc-pVDZ'
 
@@ -18,7 +16,7 @@ t1s_1,t2s_1,l1s_1,l2s_1,sample_energies_1=data["CC_1"]
 CC_left=list(sample_energies_1)
 t1s_2,t2s_2,l1s_2,l2s_2,sample_energies_2=data["CC_2"]
 CC_right=list(sample_energies_2[::-1])
-file="../groundstate_HF_pos/energy_data/BeH2_data.bin"
+file="../HF_geom_groundstate/energy_data/BeH2_data.bin"
 with open(file,"rb") as f:
     data=pickle.load(f)
 

@@ -444,10 +444,6 @@ class EVCSolver():
                     truncation=self.natorb_truncation
                 )
             H,S=self._construct_H_S(system) #Get H and S as described in Ekstrøm & Hagen
-            U,s,Vt=scipy.linalg.svd(S)
-            for singval in s:
-                print(singval)
-            sys.exit(1)
             try:
                 pass
                 eigvals=np.real(scipy.linalg.eig(a=H,b=S+10**(-exponent)*scipy.linalg.expm(-S/10**(-exponent)))[0])

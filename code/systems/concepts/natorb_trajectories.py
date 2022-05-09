@@ -1,5 +1,5 @@
 import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+sys.path.append("../libraries")
 from func_lib import *
 def molecule(x):
     return "F 0 0 0; H 0 0 %f"%x
@@ -49,10 +49,10 @@ for i,x in enumerate(xs):
 choices=np.random.choice(np.arange(len(noonss[0])),size=len(noonss[0])//5, replace=False)
 axes[0].set_title("HF")
 axes[0].plot(xs,np.array(noonss)[:,choices])
-axes[0].set_xlabel("Interatomic distance (Bohr)")
-axes[0].set_ylabel("Natural occupation number")
+axes[0].set_xlabel("x (Bohr)")
+axes[0].set_ylabel("Natural occ. number")
 axes[0].set_yscale("log")
-
+axes[0].set_ylim([1e-7,1e-1])
 def molecule(x):
     return "H 0 0 -%f; Be 0 0 0; H 0 0 %f"%(x,x)
 mol=gto.M(atom=molecule(x),basis=basis,spin=0,unit="bohr")
@@ -94,8 +94,11 @@ for i,x in enumerate(xs):
 choices=np.random.choice(np.arange(len(noonss[0])),size=len(noonss[0])//5, replace=False)
 axes[1].set_yscale("log")
 axes[1].set_title(r"Be$H_2$")
-axes[1].set_xlabel("Interatomic distance (Bohr)")
+axes[1].set_xlabel("x (Bohr)")
 axes[1].plot(xs,np.array(noonss)[:,choices])
+axes[0].set_xticks([2,3,4,5])
+axes[1].set_xticks([2,3,4,5])
+axes[1].set_ylim([1e-7,1e-1])
 plt.tight_layout()
 plt.savefig("natorbs_dissosciation.pdf")
 plt.show()

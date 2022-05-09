@@ -1,7 +1,6 @@
 from rccsd_gs import *
 import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
-sys.path.append("../../eigenvectorcontinuation/")
+sys.path.append("../libraries")
 
 from func_lib import *
 from matrix_operations import *
@@ -24,8 +23,8 @@ ENUC=mol.energy_nuc()
 mf=scf.RHF(mol)
 mf.kernel()
 rhf_mo_ref=mf.mo_coeff
-n_samples=15
-number_repeats=5
+n_samples=15 # How many samples to consider
+number_repeats=5 #How often to repeat the experiment
 WF_vals=[[] for i in range(0,number_repeats)]
 AMP_vals=[[] for i in range(0,number_repeats)]
 AMP_50=[[] for i in range(0,number_repeats)]
@@ -120,19 +119,3 @@ means_WF=np.array(means_WF)
 std_WF=np.array(std_WF)
 means_AMP=np.array(means_AMP)
 sample_points=np.arange(1,n_samples+1,dtype=int)
-plt.plot(sample_points,means_AMP,label="AMP error (mean)",color="b")
-plt.plot(sample_points,means_WF,label="WF error (mean)",color="r")
-plt.fill_between(sample_points,AMP_quantiles[:,0],AMP_quantiles[:,2],color='b', alpha=0.2,label=r"IQR (AMP)")
-plt.fill_between(sample_points,WF_quantiles[:,0],WF_quantiles[:,2],color='r', alpha=0.2,label=r"IQR (WF)")
-plt.legend()
-plt.tight_layout()
-plt.ylim([1e-5,0.1])
-plt.yscale("log")
-plt.ylabel("Enery deviation from CCSD ")
-plt.xlabel("Number of sample points")
-plt.tight_layout()
-plt.savefig("resultsandplots/water_convergence_631G*.pdf")
-plt.show()
-print(means_WF)
-print(std_WF)
-print(errors_WF)

@@ -1,5 +1,5 @@
 import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+sys.path.append("../libraries")
 from quantum_library import *
 def molecule(x):
     return "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x)

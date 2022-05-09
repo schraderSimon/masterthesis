@@ -2,9 +2,9 @@ import sys
 sys.path.append("../../eigenvectorcontinuation/")
 from matrix_operations import *
 from helper_functions import *
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
+sys.path.append("../libraries")
 from func_lib import *
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/coupled_cluster")
+sys.path.append("../coupled_cluster")
 
 from rccsd_gs import *
 
@@ -91,12 +91,6 @@ for i,x in enumerate(x_sol):
     norms_T2[3,i]=norm(gen_procrucstes_t2-ref_t2)
     norms_T2[4,i]=norm(gen_transformed_t2-ref_t2)
     norms_T2[5,i]=norm(natorbs_t2-natorb_ref_t2)
-    #print("Procrustes: %.10f"%norms_coefficientmatrix[0,i])
-    #print("Transformed: %.10f"%norms_coefficientmatrix[1,i])
-    #print("Cholesky: %.10f"%norms_coefficientmatrix[2,i])
-    #print("Gen Procrustes: %.10f"%norms_coefficientmatrix[3,i])
-    #print(" GenTransformed: %.10f"%norms_coefficientmatrix[4,i])
-    print(overlap_to_HF[:,i])
 labels=["Procrustes", "Sym. Ort.", "Choleksy", "G. Proc.", "G. Sym. Ort.", "Nat. orb."]
 fig,axes=plt.subplots(2,2,sharey=False,sharex=True,figsize=(12,10))
 axes[0,0].set_title(r"$||C(x)-C(x_{{ref}})||$")

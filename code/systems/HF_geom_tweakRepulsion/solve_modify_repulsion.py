@@ -1,5 +1,5 @@
 import sys
-sys.path.append("../../eigenvectorcontinuation/")
+sys.path.append("../libraries")
 
 from REC import *
 from matrix_operations import *

@@ -1,10 +1,6 @@
-from rccsd_gs import *
 import sys
 sys.path.append("../libraries")
 
-from func_lib import *
-from matrix_operations import *
-from helper_functions import *
 np.set_printoptions(linewidth=300,precision=10,suppress=True)
 from scipy.optimize import minimize, root,newton
 file="energy_data/water_631G*.bin"

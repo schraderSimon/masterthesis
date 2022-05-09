@@ -1,6 +1,7 @@
-from rccsd_gs import *
 import sys
 sys.path.append("../libraries")
+from rccsd_gs import *
+
 from func_lib import *
 from numba import jit
 from matrix_operations import *

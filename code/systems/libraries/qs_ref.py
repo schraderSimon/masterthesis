@@ -1,5 +1,4 @@
 import sys
-sys.path.append("../libraries")
 from func_lib import *
 from quantum_systems import (
     BasisSet,

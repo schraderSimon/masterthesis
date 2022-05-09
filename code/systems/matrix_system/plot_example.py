@@ -1,31 +1,36 @@
 from eigenvec_cont import *
 import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/code/systems/libraries")
+sys.path.append("../libraries")
 from func_lib import *
 import setupmodels
-from plot_eigenvectors import plot_eigenvectors
 
 
-models=setupmodels.modelgenerator(500)
+models=setupmodels.modelgenerator(500) # Set up M3 model
 model3=models.model3()
+
 start=0.3
-c=np.linspace(start,1.5,111)
-#plot_eigenvectors(model3,c,symmetric=True,num=6)
+end=1.5
+c=np.linspace(start,end,111)
+
 colors=["tab:blue","tab:green","tab:purple","tab:orange","tab:red"]
-maxnum=2
-num_eig=2
+
+num_eig=2 #Number of exact eigenvalues to calculates
 true_eigenvalues,true_eigenvectors=find_lowest_eigenvectors(model3,c,num_eig,True)
 true_eigenvalues_=[]
 true_eigenvectors_=[]
+
+#make proper lists
 for i in range(num_eig):
     print(i)
     true_eigenvalues_.append(true_eigenvalues[i::num_eig])
     true_eigenvectors_.append(true_eigenvectors[i::num_eig])
 true_eigenvalues_=np.array(true_eigenvalues_)
 true_eigenvectors_=np.array(true_eigenvectors_)
-#plt.plot(c,true_eigenvalues_[1]-true_eigenvalues_[0])
-#plt.show()
+
+
 fig,ax=plt.subplots(2,2,sharex=True,sharey=False,figsize=(10,12))
+
+#Plot avoided crossings
 for i in range(2):
     for j in range(2):
         style="--"
@@ -55,17 +60,21 @@ ax[0][1].plot(c,true_eigenvalues_[1],label=r"True $\lambda_1(\alpha)$",color=col
 alpha=0.8
 eigvals_evc=np.zeros(len(c))
 overlaps=np.zeros(len(c))
-threshold=1e-15
+try:
+    exponent=int(sys.argv[1])
+except:
+    exponent=-100
+cutoff=10**(exponent)
 for i,num in enumerate(nums):
     for k,xval in enumerate(c):
-        eigvals_evc[k],eigvec_evc=eigenvec_cont(xval,model3,sample_eigvecs_tight[:num],threshold=threshold) #Find eigenvalues
+        eigvals_evc[k],eigvec_evc=eigenvec_cont(xval,model3,sample_eigvecs_tight[:num],threshold=cutoff) #Find eigenvalues
         evc_eigvec=np.einsum("i,ia->a",eigvec_evc,sample_eigvecs_tight[:num])
         overlaps[k]=np.abs((evc_eigvec.T@true_eigenvectors_[0,k,:]))**2
     ax[0][0].plot(c,eigvals_evc,"--",label="EVC, %d s. pt."%(num),color=colors[i+2],alpha=alpha)
     ax[1][0].plot(c,overlaps,"--",label=r"overlap to $\psi_0$, %d smp. pt."%(num),color=colors[i+2],alpha=1)
 for i,num in enumerate(nums):
     for k,xval in enumerate(c):
-        eigvals_evc[k],eigvec_evc=eigenvec_cont(xval,model3,sample_eigvecs_spread[:num],threshold=threshold) #Find eigenvalues
+        eigvals_evc[k],eigvec_evc=eigenvec_cont(xval,model3,sample_eigvecs_spread[:num],threshold=cutoff) #Find eigenvalues
         evc_eigvec=np.einsum("i,ia->a",eigvec_evc,sample_eigvecs_spread[:num])
         overlaps[k]=np.abs((evc_eigvec.T@true_eigenvectors_[0,k,:]))**2
     ax[0][1].plot(c,eigvals_evc,"--",label="EVC, %d s. pt."%(num),color=colors[i+2],alpha=alpha)
@@ -81,5 +90,5 @@ ax[1][1].set_yticks([])
 ax[0][1].set_yticks([])
 
 plt.tight_layout()
-plt.savefig("present1.pdf")
+plt.savefig("example_%d.pdf"%(-exponent))
 plt.show()

@@ -79,7 +79,7 @@ for i,num in enumerate(nums):
         overlaps[k]=np.abs((evc_eigvec.T@true_eigenvectors_[0,k,:]))**2
     ax[0][1].plot(c,eigvals_evc,"--",label="EVC, %d s. pt."%(num),color=colors[i+2],alpha=alpha)
     ax[1][1].plot(c,overlaps,"--",label=r"overlap to $\psi_0$, %d smp. pt."%(num),color=colors[i+2],alpha=1)
-m=7
+m=9 #marker size
 ax[0][0].plot(sample_vals,sample_eigvals_tight,"*",label=r"sample pts.",color="black",markersize=m)
 ax[1][0].plot(sample_vals,np.ones(len(sample_vals)),"*",label=r"sample pts.",color="black",markersize=m)
 handles, labels = ax[0][0].get_legend_handles_labels()

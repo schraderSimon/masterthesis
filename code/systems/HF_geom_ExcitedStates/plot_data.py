@@ -24,8 +24,9 @@ HF_ccpvdz=[-99.8288 ,-99.9157 ,-99.9694,-100.0002,-100.0153,-100.0197,-100.0168,
  ,-99.6712]
 CC_ccpvdz=[-100.0256,-100.1148,-100.1708,-100.2038,-100.2212,-100.2277,-100.227 ,-100.2213,-100.2123,-100.2013,-100.189 ,-100.176 ,-100.1629,-100.1499,-100.1373,-100.1252,-100.1136,-100.1028,-100.0927,-100.0833,-100.0746,-100.0667,-100.0595,-100.053 ,-100.0471,-100.0418,-100.0371,-100.033 ,-100.0293,-100.0261,-100.0233,-100.0208,-100.0187,-100.0168,-100.0152,-100.0138,-100.0125,-100.0114,-100.0105]
 threshold=1e-16
-sample_geometry=np.linspace(1.5,2.0,3)
-energies_sample=[-100.00017152974473, -100.01898111740954, -99.99772118536649]
+sample_geometry=[np.linspace(1.5,2.0,3),np.linspace(1.5,5.0,3)]
+energies_sample=[np.array([-100.00017152974473, -100.01898111740954, -99.99772118536649]),np.array([-100.0002,  -99.8176 , -99.6712]
+)]
 titles=["Gen. Procrustes","Symm. Orth."]
 axes[0][0].set_ylabel("Energy (Hartree)")
 axes[1][0].set_ylabel("Energy (Hartree)")
@@ -46,8 +47,7 @@ for i in range(2):
         energies_1=[]
         energies_2=[]
         energies_3=[]
-        lenny=len(Hs[0])
-        print(lenny)
+        lenny=len(Hs[0]) #a cute fun name for the l
         for k in range(len(xc_array)):
             print(k)
             H=Hs[k]
@@ -58,7 +58,6 @@ for i in range(2):
             energies_2.append(eigval)
             eigval,eigvec=generalized_eigenvector(H,S,threshold)
             energies_3.append(eigval)
-        print(energies_1)
         axes[i][j].set_title(titles[i])
         axes[i][j].plot(xc_array,HF_ccpvdz,label="RHF",color="tab:cyan")
         axes[i][j].plot(xc_array,CC_ccpvdz,label="CCSD",color="tab:purple")
@@ -67,7 +66,7 @@ for i in range(2):
         axes[i][j].plot(xc_array,energies_3,"--",label="EVC (3 pt.)",color="tab:green")
 
         axes[i][j].grid()
-        axes[i][j].plot(sample_geometry,energies_sample,"*",color="black",label="Sample pts.",markersize=9)
+        axes[i][j].plot(sample_geometry[j],energies_sample[j],"*",color="black",label="Sample pts.",markersize=9)
 handles, labels = axes[0][0].get_legend_handles_labels()
 fig.legend(handles, labels, bbox_to_anchor=(1.0,0.450),loc="lower right",handletextpad=0.3,labelspacing = 0.1)
 fig.tight_layout()

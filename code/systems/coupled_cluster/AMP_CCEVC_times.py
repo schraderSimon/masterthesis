@@ -8,16 +8,21 @@ from helper_functions import *
 basis = 'cc-pVTZ'
 basis_set = bse.get_basis(basis, fmt='nwchem')
 charge = 0
-#molecule=lambda x:  "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x); molecule_name="BeH2"
-molecule=lambda x:  "H 0 0 0; F 0 0 %f"%x; molecule_name="HF"
+molecule=lambda x:  "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x); molecule_name="BeH2"
+#molecule=lambda x:  "H 0 0 0; F 0 0 %f"%x; molecule_name="HF"
 #molecule=lambda x:  "N 0 0 0; N 0 0 %f"%x; molecule_name="N2"
 
 refx=[2]
 print(molecule(*refx))
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-sample_geometry=[[np.linspace(1,5.0,9)]]
+if molecule_name=="HF":
+    sample_geometry=[[np.linspace(1,5.0,9)]]
+    geom_alphas1=np.linspace(1.3,4.8,36)
+elif molecule_name=="BeH2":
+    sample_geometry=[[np.linspace(1.5,5.5,9)]]
+    geom_alphas1=np.linspace(1.8,5.3,36)
 import pickle
-geom_alphas1=np.linspace(1.3,4.8,36)
+
 geom_alphas=[[x] for x in geom_alphas1]
 energy_dict={}
 energy_dict["xval"]=geom_alphas1

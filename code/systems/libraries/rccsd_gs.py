@@ -1,7 +1,7 @@
 from qs_ref import *
 import basis_set_exchange as bse
 from coupled_cluster.rccsd import RCCSD, TDRCCSD
-from coupled_cluster.rccsd import rhs_t
+import rhs_t
 from coupled_cluster.rccsd import energies as rhs_e
 from opt_einsum import contract
 

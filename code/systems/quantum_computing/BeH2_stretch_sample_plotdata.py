@@ -33,24 +33,25 @@ ax[0].set_yticks(np.arange(-15.335, -15.325, step=0.002))
 formatter = ticker.FormatStrFormatter('%.4f')
 ax[0].yaxis.set_major_formatter(formatter)
 ax[0].set_ylabel("Energy (Hartree)")
-plt.suptitle("Convergence ")
 epsilons=["10^{-2}","10^{-5}"]
 locs=["left","right"]
 for i in range(2):
     ax[i].set_title(r"$\epsilon=%s$"%epsilons[i],loc=locs[i])
     ax[i].axhline(E_EVC[0],label=r"$E_{exact}$",color="green")
-    ax[i].fill_between([-1,1e16],E_EVC[0]-chem_acc,E_EVC[0]+chem_acc,color="green",alpha=0.2,label="Chemical\n accuracy")
+    ax[i].fill_between([0,1e10],E_EVC[0]-chem_acc,E_EVC[0]+chem_acc,color="green",alpha=0.2,label="Chemical\n accuracy")
     ax[i].set_ylim([-15.335,-15.325])
     ax[i].set_xlim([num_measurements[i][0],num_measurements[i][-1]])
     #ax[i].set_yticks(np.arange(-15.335, -15.325, step=0.001))
     formatter = ticker.FormatStrFormatter('%.4f')
     ax[i].yaxis.set_major_formatter(formatter)
-    ax[i].plot(num_measurements[i],Es[i],label=r"$\bar {E}_0$",color="r")
+    ax[i].plot(num_measurements[i],Es[i],label=r"${E}_{bootstrap}$",color="r")
     ax[i].fill_between(num_measurements[i], Es[i] - stds[i], Es[i] + stds[i],
-                     color='r', alpha=0.2,label=r"$\pm\sigma_{E_0}$")
+                     color='r', alpha=0.2,label=r"$\pm\sigma_{E}$")
     ax[i].set_xlabel(r"$N_{measurements}$")
 handles, labels = ax[0].get_legend_handles_labels()
-fig.legend(handles, labels, bbox_to_anchor=(0.55,0.735),loc="center",handletextpad=0.1,labelspacing = 0.0)
+fig.legend(handles, labels, bbox_to_anchor=(0.575,0.800),loc="center",handletextpad=0.1,labelspacing = 0.0)
+#ax[0].set_xticks([1.3*1e7,1.4*1e7,1.5*1e7,1.6*1e7])
+ax[1].set_xticks([2*1e8,3*1e8,4*1e8,5*1e8])
 
 plt.tight_layout()
 plt.savefig("resultsandplots/EVC_convergence_epsilon.pdf")
@@ -61,7 +62,6 @@ fig, ax= plt.subplots(1, 2,figsize=(10,5),sharey=True)
 #formatter = ticker.FormatStrFormatter('%.4f')
 #ax[0].yaxis.set_major_formatter(formatter)
 ax[0].set_ylabel("Energy (Hartree)")
-plt.suptitle("Error along PES")
 epsilons=["10^{-2}","10^{-5}"]
 locs=["left","right"]
 
@@ -69,11 +69,13 @@ for i in range(2):
     ax[i].axhline(0,color="green")
     ax[i].set_title(r"$\epsilon=%s$"%epsilons[i],loc=locs[i])
     error=np.array(EVC_approx[i]-E_EVC)
-    ax[i].plot(x_of_interest,error,label=r"$\bar {E}_0-E_{exact}$",color="r")
+    ax[i].plot(x_of_interest,error,label=r"$\tilde{E}_0-E_{exact}$",color="r")
     #ax[i].fill_between(x_of_interest, error -EVC_std[i], error +EVC_std[i],color='r', alpha=0.2,label=r"$\pm\sigma_{E_0}$")
     ax[i].set_xlabel("x (Bohr)")
-
     ax[i].fill_between(x_of_interest,-chem_acc,chem_acc,color="green",alpha=0.2,label="Chemical\n accuracy")
+ax[0].set_xticks([2,3,4,5,6])
+ax[1].set_xticks([2,3,4,5,6])
+
 handles, labels = ax[0].get_legend_handles_labels()
 fig.legend(handles, labels, bbox_to_anchor=(0.55,0.735),loc="center",handletextpad=0.1,labelspacing = 0.0)
 

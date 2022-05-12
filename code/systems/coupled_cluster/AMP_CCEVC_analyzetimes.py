@@ -1,7 +1,9 @@
 import sys
 sys.path.append("../libraries")
 from func_lib import *
-file="energy_data/HF_time.bin"
+file="energy_data/BeH2_time.bin"
+#file="energy_data/HF_time.bin"
+
 import pickle
 with open(file,"rb") as f:
     data=pickle.load(f)
@@ -22,4 +24,4 @@ for i in range(len(virtvals)):
     print("Time: %f \pm %f"%(time_mean,time_std))
     print("niter: %f \pm %f"%(niter_mean,niter_std))
     print("proj: %f"%(proj_max))#,proj_std))
-    print(projection_errors[i])
+    #print(projection_errors[i])

@@ -10,6 +10,9 @@ from func_lib import *
 np.set_printoptions(linewidth=200,precision=4,suppress=True)
 import matplotlib
 class eigvecsolver_RHF():
+    """
+    Multi-reference EVC solver for Hartree-Fock wave functions
+    """
     def __init__(self,sample_points,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0,symmetry=False,type="transform",coeff_matrices=None):
         """Initiate the solver.
         It Creates the HF coefficient matrices for the sample points for a given molecule.
@@ -63,7 +66,7 @@ class eigvecsolver_RHF():
         self.ne_h=self.number_electronshalf
         return mol
     def calculate_energies(self,xc_array):
-        """Calculates the molecule's energy"""
+        """Calculates the molecule's energy in the given space"""
         energy_array=np.zeros(len(xc_array))
         eigvec_array=[]
         for index,xc in enumerate(xc_array):
@@ -86,8 +89,6 @@ class eigvecsolver_RHF():
             returnmat=basischange(C_old,S_new,self.number_electronshalf)
         elif self.type=="procrustes":
             C_new=np.real(fractional_matrix_power(S_new,-0.5))
-            #weights=np.zeros(len(C_new))
-            #weights[:self.number_electronshalf]=1
             returnmat=localize_procrustes(None,C_new,None,C_old,mix_states=True,nelec=self.number_electronshalf,weights=None)
         return returnmat
     def getdeterminant_matrix(self,AO_overlap,HF_coefficients_left,HF_coefficients_right):
@@ -100,11 +101,12 @@ class eigvecsolver_RHF():
         Returns: The diagonal matrix (as array) D, the new basises for C_w and C_x.
         """
         S=self.getdeterminant_matrix(AO_overlap,C_w,C_x);
-        Linv,D,Uinv=LDU_decomp(S,overwrite_a=True)
+        Linv,D,Uinv=LDU_decomp(S,overwrite_a=True) #This is the "fancy" SVD
         C_w=C_w@Linv
         C_x=C_x@Uinv.T
         return D,C_w,C_x
     def getoverlap(self,determinant_matrix):
+        #The overlap sc
         overlap=np.linalg.det(determinant_matrix)**2
         return overlap
     def calculate_overlap_to_HF(self,xc_array):
@@ -128,6 +130,7 @@ class eigvecsolver_RHF():
             overlap_to_HF[index]=np.dot(overlaps,self.eigvecs[index])
         return overlap_to_HF
     def calculate_ST_matrices(self,mol_xc,new_HF_coefficients):
+        """Calculate overlap and energy EVC matrices S and H (called T here)"""
         number_electronshalf=self.number_electronshalf
         overlap_basis=mol_xc.intor("int1e_ovlp")
         energy_basis_1e=mol_xc.intor("int1e_kin")+mol_xc.intor("int1e_nuc")
@@ -144,12 +147,11 @@ class eigvecsolver_RHF():
                 if S<1e-10:
                     Smat[i,j]=Smat[j,i]=0
                 energy=self.energy_func(C_w,C_x,energy_basis_1e,energy_basis_2e,D)*S_tilde
-                #energy_naive=self.energy_func_naive(C_w,C_x,energy_basis_1e,energy_basis_2e,D)*S_tilde
-                #print(energy-energy_naive)
                 nuc_repulsion_energy=mol_xc.energy_nuc()*S
                 Tmat[i,j]=Tmat[j,i]=energy+nuc_repulsion_energy
         return Smat,Tmat
     def energy_func_naive(self,C_w,C_x,onebodyp,twobodyp,D):
+        """Expensive (not using einsum) calculations of matrix elements"""
         twobody=ao2mo.get_mo_eri(twobodyp,(C_w,C_x,C_w,C_x),aosym="s1") #Works well and seems to me to be the correct one.
         onebody=contract("ki,lj,kl->ij",C_w,C_x,onebodyp)
         alpha=np.arange(3)
@@ -178,6 +180,7 @@ class eigvecsolver_RHF():
         energy2*=0.5
         return onebody_alpha+onebody_beta+energy2
     def energy_func(self,C_w,C_x,onebody,twobody,D):
+        """Cheap (using einsum) calculations of matrix elements"""
         number_of_zeros=len(D[np.abs(D)<1e-12])*2
         zero_indices=np.where(np.abs(D)<1e-12)
         D_tilde=D[np.abs(D)>1e-12]
@@ -193,20 +196,19 @@ class eigvecsolver_RHF():
                 H1=0
                 i=zero_indices[0][0]
                 J_contr=contract("sm,ms->",P_s[i],contract("tv,msvt->ms",P_s[i],twobody))
-                #twobody=ao2mo.get_mo_eri(twobody,(C_w,C_x,C_w,C_x),aosym="s1")
                 H2=J_contr#-K_contr
-                #H2=S_tilde*(twobody[i,i,i,i])
             elif number_of_zeros==0:
                 P=P_s.copy()
                 for i in range(self.number_electronshalf):
                     P[i]=P[i]/D[i]
                 W=np.sum(P,axis=0)
                 H2=0.5*contract("sm,ms->",W,4*contract("tv,msvt->ms",W,twobody)-2*contract("tv,mtvs->ms",W,twobody))
-                #K_contr=2*contract("sm,ms->",W,)
-                #H2=0.5*(J_contr-K_contr)
                 H1=2*contract("mv,mv->",W,onebody)
             return H2+H1
 class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
+    """
+    Multi-reference EVC solver for Hartree-Fock wave functions, with singles and doubles
+    """
     def data_creator(self):
         neh=self.number_electronshalf
         num_bas=self.num_bas
@@ -471,6 +473,9 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
             H1=contract("mv,mv->",W,onebody)
         return H2+H1
 class eigvecsolver_RHF_singles(eigvecsolver_RHF_singlesdoubles):
+    """
+    Multi-reference EVC solver for Hartree-Fock wave functions, with singles
+    """
     def data_creator(self):
         neh=self.number_electronshalf
         num_bas=self.num_bas
@@ -563,7 +568,7 @@ class eigvecsolver_RHF_singles(eigvecsolver_RHF_singlesdoubles):
 class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
     def __init__(self,sample_coefficients,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='Bohr',charge=0,symmetry=False):
         """Initiate the solver.
-        It Creates the HF coefficient matrices for the sample points for a given molecule.
+        It uses given coefficient matrices and does not need to create RHF states.
 
         Input:
         sample_points (array) - the points at which to evaluate the WF
@@ -579,7 +584,7 @@ class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
         self.HF_coefficients=sample_coefficients #An interesting observation here is that the basis does not matter
         self.build_molecule(1) #Initiate number of electrons, that's literally the only purpose here.
     def calculate_energies(self,xc_array,adapt_geometry=False):
-        """Calculates the molecule's energy"""
+        """Calculates the molecule's energy using the (stored) HF matrices """
         energy_array=np.zeros(len(xc_array))
         eigval_array=[]
         for index,xc in enumerate(xc_array):
@@ -598,6 +603,7 @@ class eigensolver_RHF_knowncoefficients(eigvecsolver_RHF):
             eigval_array.append(eigval)
         return energy_array,eigval_array
 class eigvecsolver_RHF_coupling(eigvecsolver_RHF):
+    """EVC solver with tweaked 2-electron-interaction"""
     def __init__(self,sample_lambdas,sample_points,basis_type,molecule=lambda x: "H 0 0 0 ; F 0 0 %d"%x,spin=0,unit='AU',charge=0,symmetry=False):
         self.sample_positions=sample_points
         self.HF_coefficients=[] #The Hartree Fock coefficients solved at the sample points

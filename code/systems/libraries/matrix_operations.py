@@ -53,7 +53,7 @@ def cholesky_coefficientmatrix(matrix):
     Cnew=PL[:,:matrix.shape[1]]/np.sqrt(2)
     return Cnew
 def LDU_decomp(X,overwrite_a=True,check_finite=False):
-    """Singular-Value-based LDU decomposition.
+    """SVD that guarantees det(U)=det(V)=1.
     Input:
         -The matrix X to decompose
     Returns:
@@ -454,17 +454,6 @@ def LDU_decomp_new(X,threshold=1e-10):
     print(U)
     assert np.all(np.abs(L@np.diag(d_new)@U)<1e-10), "not the same matrix"
     return L, d_new, U
-def LDU_decomp_fucked(X,threshold=1e-10):
-    """Implement the LDU decomposition of a square matrix X"""
-    Linv,U,P=qr(X,pivoting=True)
-    d=np.diag(U) #Diagonal matrix
-    d=d.copy()
-    #d[abs(d)<threshold]=0 #ignore that very part of the matrix
-    R_inv=np.divide(U.T,d).T
-
-    R_inv[np.isnan(R_inv)]=0
-    R_inv[np.isinf(R_inv)]=0
-    return Linv, d, R_inv, P
 def second_order_compound_row_separated(XL,XR,j,i):
     n=len(XL)+len(XR)
     na=nb=nh=len(XL)

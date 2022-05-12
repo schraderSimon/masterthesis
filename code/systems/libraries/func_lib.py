@@ -19,12 +19,16 @@ np.set_printoptions(linewidth=300,precision=6,suppress=True)
 def make_mol(molecule,x,basis="6-31G",charge=0):
 	"""Helper function to create Mole object at given geometry in given basis"""
 	mol=gto.Mole()
-	mol.atom=molecule(*x)
+	if isinstance(x,list):
+		mol.atom=molecule(*x)
+	else:
+		mol.atom=molecule(x)
 	mol.basis = basis
 	mol.unit= "Bohr"
 	mol.charge=charge
 	mol.build()
 	return mol
+
 def get_Smat(AO_overlap,HF_coefficients_left,HF_coefficients_right):
 	"""Get overlap matrix between two determinants in the same basis at different geometries"""
 	print(AO_overlap.shape,HF_coefficients_left.shape,HF_coefficients_right.shape)
@@ -44,7 +48,7 @@ def basischange(C_old,overlap_AOs_new,neh):
 	Input:
 	C_old: MO's to convert
 	overlap_AOs_new: Overlap matrix at new geometry
-	neh: number of electrons divided by two. If this is equal to the number of MOs, this corresponds to general symmetric orthonormalizaton.
+	neh: number of electrons divided by two. If this is equal to the number of MOs instead, this corresponds to general symmetric orthonormalizaton.
 
 	Returns:
 	C_new: New set of MOs.
@@ -73,16 +77,6 @@ def basischange(C_old,overlap_AOs_new,neh):
 	C_new[:,:neh]=C_new_occ
 	C_new[:,neh:]=C_new_unocc
 	return C_new
-def make_mol(molecule,x,basis="6-31G"):
-	mol=gto.Mole()
-	if isinstance(x,list):
-		mol.atom=molecule(*x)
-	else:
-		mol.atom=molecule(x)
-	mol.basis = basis
-	mol.unit= "Bohr"
-	mol.build()
-	return mol
 def get_reference_determinant(molecule_func,refx,basis,charge):
     mol = gto.Mole()
     mol.unit = "bohr"
@@ -213,7 +207,7 @@ def guptri_Eigenvalue(H,S,epsu=1e-8,gap=1000,zero=False):
 def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sref):
 	"""
 	Swaps MO's in coefficient matrix in such a way that the coefficients become analytic w.r.t. the reference
-	taking special care of symmetry.
+	taking special care of symmetry. This algorithm works better for natural orbitals. 
 	Input:
 	noons_ref (array): Natural occupation numbers of reference OR Fock matrix diagonals
 	natorbs_ref (matrix): Natural orbitals of reference OR Canonical orbitals
@@ -272,13 +266,13 @@ def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sre
 def similiarize_canonical_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sref):
 	"""
 	Swaps MO's in coefficient matrix in such a way that the coefficients become analytic w.r.t. the reference
-	taking special care of symmetry.
+	taking special care of symmetry. This algorithm works better for canonical orbitals.
 	Input:
 	noons_ref (array): Natural occupation numbers of reference OR Fock matrix diagonals
 	natorbs_ref (matrix): Natural orbitals of reference OR Canonical orbitals
 	Sref (matrix): Overlap matrix of reference
-	noons (array): Natural occupation numbers of state of state to be adapted
-	natorbs (matrix): Natural orbitals of state to be adapted
+	noons (array): Natural occupation numbers OR Fock matrix diagonals of state of state to be adapted
+	natorbs (matrix): Natural orbitals OR Canonical orbitals of state to be adapted
 	S (matrix): Overlap matrices of state to be adapted
 
 	Returns:

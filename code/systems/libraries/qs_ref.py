@@ -24,55 +24,7 @@ def construct_pyscf_system_rhf_ref(
     truncation=1000000,
     **kwargs,
 ):
-    """Convenience function setting up a closed-shell atom or a molecule from
-    PySCF as a ``QuantumSystem`` in RHF-basis using PySCF's RHF-solver.
-    Parameters
-    ----------
-    molecule : str
-        String describing the atom or molecule. This gets passed to PySCF which
-        means that we support all the same string options as PySCF.
-    basis : str
-        String describing the basis set. PySCF determines which options are
-        available.
-    add_spin : bool
-        Whether or not to return a ``SpatialOrbitalSystem`` (``False``) or a
-        ``GeneralOrbitalSystem`` (``True``). Default is ``True``.
-    anti_symmetrize : bool
-        Whether or not to anti-symmetrize the two-body elements in a
-        ``GeneralOrbitalSystem``. This only applies if ``add_spin = True``.
-        Default is ``True``.
-    np : module
-        Array- and linear algebra module.
-    Returns
-    -------
-    SpatialOrbitalSystem, GeneralOrbitalSystem
-        Depending on the choice of ``add_spin`` we return a
-        ``SpatialOrbitalSystem`` (``add_spin = False``), or a
-        ``GeneralOrbitalSystem`` (``add_spin = True``).
-    See Also
-    -------
-    PySCF
-    Example
-    -------
-    >>> # Set up the Beryllium atom centered at (0, 0, 0)
-    >>> system = construct_pyscf_system_rhf(
-    ...     "be 0 0 0", basis="cc-pVDZ", add_spin=False
-    ... ) # doctest.ELLIPSIS
-    converged SCF energy = -14.5723...
-    >>> # Compare the number of occupied basis functions
-    >>> system.n == 4 // 2
-    True
-    >>> gos = system.construct_general_orbital_system()
-    >>> gos.n == 4
-    True
-    >>> system = construct_pyscf_system_rhf(
-    ...     "be 0 0 0", basis="cc-pVDZ"
-    ... ) # doctest.ELLIPSIS
-    converged SCF energy = -14.5723...
-    >>> system.n == gos.n
-    True
-    """
-
+"""Construct a spin orbital system with Procrustes orbitals"""
     import pyscf
 
     if np is None:
@@ -160,6 +112,7 @@ def construct_pyscf_system_rhf_natorb(
     truncation=1000000,
     **kwargs,
 ):
+"""Construct a spin orbital system with natural orbitals"""
     if np is None:
         import numpy as np
     mol = pyscf.gto.Mole()
@@ -240,6 +193,8 @@ def construct_pyscf_system_rhf_canonicalorb(
     truncation=100000,
     **kwargs,
 ):
+"""Construct a spin orbital system with canonical orbitals"""
+
     if np is None:
         import numpy as np
     mol = pyscf.gto.Mole()
@@ -326,6 +281,8 @@ def construct_pyscf_system_ghf_ref(
     truncation=1000000,
     **kwargs,
 ):
+"""Construct a generalized spin orbital system with Procrustes orbitals"""
+
     import pyscf
 
     if np is None:

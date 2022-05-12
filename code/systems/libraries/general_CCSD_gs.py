@@ -106,7 +106,7 @@ def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="
     return t1s,t2s,l1s,l2s,sample_energies
 class EVCSolver():
     """
-    Class to solve EVC equations. Contains both WF-CCEVC and AMP-CCEVC functions.
+    Class to solve for WF-CCEVC. Minimal version that assumes RHF references, but solves general CCSD equations. 
     Ini
     """
     def __init__(self,all_x,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,givenC=False,sample_x=None,mix_states=False,natorb_truncation=None):

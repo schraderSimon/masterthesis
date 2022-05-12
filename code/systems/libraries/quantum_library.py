@@ -46,7 +46,7 @@ warnings.filterwarnings('ignore', category=DeprecationWarning)
 
 def get_basis_Hamiltonian(molecule,x,qi,mo_coeff,basis="STO-6G",active_space=None,nelec=None,symmetry=None,irreps=None):
     """
-    Returns the second quantized representation of the Hamiltonian.
+    Returns the second quantized representation of the Hamiltonian. Does not use procrustes orbitals.
 
     Input:
     molecule (function): Function to obtain molecule
@@ -231,28 +231,9 @@ def k_fold_unitary(num_particles,num_spin_orbitals,num_qubits,qubit_converter,ha
         unitary=circuit_to_gate(circuit)
         print("i=%d, E=%f"%(i,vqe_result.eigenvalue.real+nuc_rep))
     return unitary, vqe_result.eigenvalue.real+nuc_rep
-def HEA_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None):
-    if initial_state is None:
-        initial_state = HartreeFock(
-                num_spin_orbitals=num_spin_orbitals,
-                num_particles=num_particles,
-                qubit_converter=qubit_converter,
-            )
-    var_form=RealAmplitudes(
-            num_qubits=num_qubits,
-            entanglement='full',
-            reps=reps,
-            skip_unentangled_qubits=False,
-            skip_final_rotation_layer=False,
-            parameter_prefix='θ',
-            insert_barriers=False,
-            initial_state=initial_state,
-            name='ExcitationPreserving',
-    )
-    init_pt=0.02*(np.random.rand(len(var_form.parameters))-0.5)
 
-    return var_form,init_pt
 def UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None,generalized=False):
+    "Returns UCCSD ansatz circuit + initial guess vector"
     if initial_state is None:
         initial_state = HartreeFock(
                 num_spin_orbitals=num_spin_orbitals,
@@ -273,55 +254,6 @@ def UCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitC
 
     print(len(init_pt))
     return var_form, init_pt
-def SUCC_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None,generalized=False,include_singles=True):
-    if initial_state is None:
-        initial_state = HartreeFock(
-                num_spin_orbitals=num_spin_orbitals,
-                num_particles=num_particles,
-                qubit_converter=qubit_converter,
-            )
-    var_form = SUCCD(
-        num_particles=num_particles,
-        num_spin_orbitals=num_spin_orbitals,
-        initial_state=initial_state,
-        qubit_converter=qubit_converter,
-        reps=reps,
-        generalized=generalized,
-        include_singles=(include_singles,include_singles)
-    )
-    var_form.excitation_ops()
-    init_pt=0.1*(np.random.rand(len(var_form.parameters))-0.5)
-    return var_form, init_pt
-
-def UPCCSD_excitation_generator(num_particles,num_spin_orbitals):
-    num_spin_orbitals=num_spin_orbitals//2
-    excitations=[]
-    for particle_1 in range(num_spin_orbitals):
-        for particle_2 in range(particle_1+1,num_spin_orbitals):
-            excitations.append(((particle_1,particle_1+num_spin_orbitals),(particle_2,particle_2+num_spin_orbitals)))
-    for particle_1 in range(num_spin_orbitals):
-        for particle_2 in range(particle_1+1,num_spin_orbitals):
-            excitations.append(((particle_1,),(particle_2,)))
-            excitations.append(((particle_1+num_spin_orbitals,),(particle_2+num_spin_orbitals,)))
-    return excitations
-def kUpUCCSD_ansatz(num_particles,num_spin_orbitals,num_qubits,qubit_converter=QubitConverter(mapper=ParityMapper(),two_qubit_reduction=True),reps=1,initial_state=None):
-    if initial_state is None:
-        initial_state = HartreeFock(
-                num_spin_orbitals=num_spin_orbitals,
-                num_particles=num_particles,
-                qubit_converter=qubit_converter,
-            )
-    var_form = UCC(
-        num_particles=num_particles,
-        num_spin_orbitals=num_spin_orbitals,
-        initial_state=initial_state,
-        qubit_converter=qubit_converter,
-        reps=reps,
-        excitations=UPCCSD_excitation_generator,
-    )
-    var_form.excitation_ops()
-    init_pt=10*0.1*(np.random.rand(len(var_form.parameters))-0.5)
-    return var_form, init_pt
 def get_01_state(unitary1,unitary2,num_qubits,backend=None):
     """
     Given two unitaries, implements the state $\Omega$.
@@ -341,7 +273,7 @@ def get_01_state(unitary1,unitary2,num_qubits,backend=None):
     if backend is None:
         newcirc=qc
     else:
-        newcirc=transpile(qc,backend=backend,optimization_level=1)
+        newcirc=transpile(qc,backend=backend,optimization_level=1) #Optimization
     return newcirc
 def get_energy_expectations(zero1_state,op_list,qi):
     """
@@ -374,7 +306,7 @@ def get_energy_expectations(zero1_state,op_list,qi):
 def get_overlap_expectations(zero1_state,num_qubits,qi):
     """
     Given the $\Omega$ state, calculates the overlap between $\Psi_1$ and $Psi_2$.
-
+    It assumes that the imaginary part is zero, e.g. that the wave functions are real!
     Returns:
     The overlap.
     """
@@ -390,7 +322,7 @@ def get_overlap_expectations(zero1_state,num_qubits,qi):
 def get_energy_expectations_01state(zero1_state,num_qubits,qubit_hamiltonian,qi):
     """
     Given the $\Omega$ state, calculates the Hamiltonian element between $\Psi_1$ and $Psi_2$.
-
+    It assumes that the imaginary part is zero, e.g. that the wave functions are real!
     Returns:
     The overlap.
     """
@@ -400,41 +332,9 @@ def get_energy_expectations_01state(zero1_state,num_qubits,qubit_hamiltonian,qi)
     expectation = AerPauliExpectation().convert(measurable_expression)
     sampler = CircuitSampler(qi).convert(expectation)
     return sampler.eval()
-'''
-def calculate_energy_overlap(unitary1,unitary2,num_qubits,hamiltonian,qi,nuc_rep,include_custom=True,complex=False):
-    qc=QuantumCircuit()
-    qr=QuantumRegister(num_qubits+1,"q")
-    controlled_unitary1=unitary1.control(1)
-    controlled_unitary2=unitary2.control(1)
-    qc.add_register( qr )
-    qc.h(0)
-    qc.x(0)
-    qc.append(controlled_unitary1,qr)
-    qc.x(0)
-    qc.append(controlled_unitary2,qr)
-    state=CircuitStateFn(qc)
-    overlap_measurement=I
-    for i in range(num_qubits-1):
-        overlap_measurement=overlap_measurement^I
-    if complex==False:
-        hamiltonian_to_measure=hamiltonian^(X)
-        overlap_measurement=overlap_measurement^X
-    else:
-        hamiltonian_to_measure=hamiltonian^(X+1j*Y)
-        overlap_measurement=overlap_measurement^(X+1j*Y)
-    measurable_expression = StateFn(hamiltonian_to_measure, is_measurement=True).compose(state)
-    measurable_overlap=StateFn(overlap_measurement, is_measurement=True).compose(state)
-    if include_custom:
-        expectation_energy = AerPauliExpectation().convert(measurable_expression)
-        expectation_overlap=AerPauliExpectation().convert(measurable_overlap)
-    else:
-        expectation_energy = PauliExpectation().convert(measurable_expression)
-        expectation_overlap=PauliExpectation().convert(measurable_overlap)
-    sampler_energy = CircuitSampler(qi).convert(expectation_energy)
-    sampler_overlap = CircuitSampler(qi).convert(expectation_overlap)
-    return sampler_energy.eval()+sampler_overlap.eval()*nuc_rep,sampler_overlap.eval()
-'''
-def get_tapering_value(index,max_index):
+
+def _get_tapering_value(index,max_index):
+    """Convenience function to obtain qiskit-readable list"""
     bitstring=bin(index)[2:]
     maxlen_bitstring=bin(max_index-1)[2:]
     z2_symmetries=[1]*(len(maxlen_bitstring)-len(bitstring))
@@ -445,6 +345,9 @@ def get_tapering_value(index,max_index):
             z2_symmetries.append(1)
     return z2_symmetries
 def find_symmetry(molecule,x,qi,qubit_converter_nosymmetry,active_space,nelec,basis):
+    """
+    find the tapering value, e.g. the eigenvalues of the to-be-tapered-off qubits (e.g. finds the correct symmetry sector)
+    """
     hamiltonian, num_particles,num_spin_orbitals,nuc_rep=get_hamiltonian(molecule,x,qi,active_space=active_space,nelec=nelec,basis=basis,ref_det=None)
     qubit_op = qubit_converter_nosymmetry.convert(hamiltonian,num_particles=num_particles)
     pauli_symm = Z2Symmetries.find_Z2_symmetries(qubit_op)
@@ -458,10 +361,9 @@ def find_symmetry(molecule,x,qi,qubit_converter_nosymmetry,active_space,nelec,ba
     minimal=int(np.argmin(vals))
     tapering_value=get_tapering_value(minimal,len(qubit_op_new))
     return tapering_value
-    return unitary,energy,optimal_params
 def get_transformation_circuit(R,active_space,nelec):
     """
-    Given a unitary rotation e^(-\kappa), returns a gate that implements it.
+    Given a unitary rotation R=e^(-\kappa), returns a gate that implements it.
     """
     n_qubits=len(active_space)
     qubits = cirq.LineQubit.range(n_qubits)

@@ -457,7 +457,7 @@ class EVCSolver():
 
         return E_WFCCEVC
 
-    def solve_AMP_CCSD(self,occs=1,virts=0.5,xtol=1e-5,maxfev=40):
+    def solve_AMP_CCSD(self,occs=1,virts=0.5,xtol=1e-5,maxfev=40, start_guess_list=None):
         """
         Solves the AMP_CCSD equations.
 
@@ -466,11 +466,11 @@ class EVCSolver():
         virts (float): The percentage (if below 1) or number (if above 1) of virtual orbitals to include in amplitude calculations
         xtol (float): Convergence criterion for maximum amplitude error
         maxfev (int): Maximal number of Newton's method iterations
+        start_guess (list): List of lists with starting parameters [[c_1,\dots,c_L]_1, [c_1,\dots,c_L]_2, \dots]
         Returns:
         energy (list): AMP-CCEVC Energies at all_x.
         """
         energy=[]
-        start_guess=np.full(len(self.t1s),1/len(self.t1s)) #
         t1_copy=self.t1s #Reset after a run of AMP_CCEVC such that WF-CCEVC can be run afterwards
         t2_copy=self.t2s
         t1s_orth,t2s_orth,coefs=orthonormalize_ts(self.t1s,self.t2s) # Use orthonormal t1 and t2 amplitudes
@@ -529,7 +529,15 @@ class EVCSolver():
             ESCF=system.compute_reference_energy().real
             self._system_jacobian(system)
             closest_sample_x=np.argmin(np.linalg.norm(np.array(self.sample_x)-x_alpha,axis=1))
-            start_guess=self.coefs[:,closest_sample_x]
+            try:
+                start_guess=start_guess_list[k]
+                print(start_guess)
+            except TypeError: #Not a list
+                start_guess=self.coefs[:,closest_sample_x]
+
+                sys.exit(1)
+            except IndexError: #List to short
+                start_guess=self.coefs[:,closest_sample_x]
             self.times_temp=[]
 
             sol=self._own_root_diis(start_guess,args=[system],options={"xtol":xtol,"maxfev":maxfev})

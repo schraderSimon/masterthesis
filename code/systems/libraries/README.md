@@ -6,3 +6,4 @@ This folder contains the "backbone" of the thesis, e.g. the methods and classes 
 - `quantum_library.py` contains algorithms for EVC on a quantum computer.
 - `qs_ref.py` contains methods to generate orbitalSystems in Schøyens code, adapted in such a way that Procrustes orbitals (or natural orbitals)
 - `REC.py` contains methods and classes to perform Multi-reference EVC with Slater determinants
+- `rhs_t.py` contains the code for restricted CCSD amplitude calculations. It also contains code for parameter-reduced AMP-CCEVC, where not all parameters are included. 

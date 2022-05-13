@@ -7,7 +7,7 @@ from numba import jit
 from matrix_operations import *
 from helper_functions import *
 basis = '6-31G*'
-basis_set = bse.get_basis(basis, fmt='nwchem')
+
 charge = 0
 molecule=lambda x:  "H 0 0 0; F 0 0 %f"%x
 refx=[1.75]
@@ -36,8 +36,8 @@ for i in range(len(sample_geometry)):
         sample_geom=[[x] for x in sample_geom1]
         sample_geom1=np.array(sample_geom).flatten()
 
-        t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
-        evcsolver=EVCSolver(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False)
+        t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis,reference_determinant,mix_states=False,type="procrustes")
+        evcsolver=EVCSolver(geom_alphas,molecule,basis,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False)
         E_WF=evcsolver.solve_WFCCEVC()
         E_AMP_full=evcsolver.solve_AMP_CCSD(occs=1,virts=1)
         E_AMP_red=evcsolver.solve_AMP_CCSD(occs=1,virts=0.5)

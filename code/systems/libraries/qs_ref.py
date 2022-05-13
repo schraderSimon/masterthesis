@@ -24,7 +24,7 @@ def construct_pyscf_system_rhf_ref(
     truncation=1000000,
     **kwargs,
 ):
-"""Construct a spin orbital system with Procrustes orbitals"""
+    """Construct a spin orbital system with Procrustes orbitals"""
     import pyscf
 
     if np is None:
@@ -112,7 +112,7 @@ def construct_pyscf_system_rhf_natorb(
     truncation=1000000,
     **kwargs,
 ):
-"""Construct a spin orbital system with natural orbitals"""
+    """Construct a spin orbital system with natural orbitals"""
     if np is None:
         import numpy as np
     mol = pyscf.gto.Mole()
@@ -193,7 +193,7 @@ def construct_pyscf_system_rhf_canonicalorb(
     truncation=100000,
     **kwargs,
 ):
-"""Construct a spin orbital system with canonical orbitals"""
+    """Construct a spin orbital system with canonical orbitals"""
 
     if np is None:
         import numpy as np
@@ -281,7 +281,7 @@ def construct_pyscf_system_ghf_ref(
     truncation=1000000,
     **kwargs,
 ):
-"""Construct a generalized spin orbital system with Procrustes orbitals"""
+    """Construct a generalized spin orbital system with Procrustes orbitals"""
 
     import pyscf
 

@@ -14,6 +14,8 @@ The folder structure is as follows:
     - `concepts` contains files to create the other plots in the theory and method chapters. Has it's own readme
     - `libraries` contains the "back bone" of the thesis, containing many of the necessary algorithms to perform EVC. Has it's own Readme
     - `test` contains a single test file, which runs some basic tests to test that our algorithms work as they should (EVC methods being approximately exact or better at sample geometries; the correct ordering of natural orbitals, the continuity of Procrustes orbitals).
+
+
 In order to run our code, `pyscf` 2.0.1 , `qiskit` 0.20.0, `qiskit_nature` 0.3.2,  `openFermion`1.4.0.dev0 and `opt_einsum`v3.3.0 need to be installed. In addition, [quantum systems](https://github.com/Schoyen/quantum-systems) by Ø. Schøyen is required, as well as
 Ø. Schøyen's coupled cluster code, which is private. If Schøyen's CC code is available, the file `coupled_cluster/rccsd/rhs_t.py` needs to be replaced with `code/cc_replace/rhs_t.py` in this repo.
 

@@ -24,7 +24,6 @@ for i in range(len(xvals)):
     procrustes_orbitals.append(localize_procrustes(mol,mfnew.mo_coeff.copy(),mfnew.mo_occ,ref_coefficientmatrix).copy())
 for i in range(len(xvals)-1):
     assert np.linalg.norm(procrustes_orbitals[i+1]-procrustes_orbitals[i]) < np.linalg.norm(procrustes_orbitals[i])/len(procrustes_orbitals[i]) #Rather arbitrary, but ascertains "small changes"
-    print(np.linalg.norm(procrustes_orbitals[i+1]-procrustes_orbitals[i]))
 """Test continuity of Natural orbitals"""
 
 ref_x=[2]
@@ -39,7 +38,6 @@ t1ss,t2s_natorbref,l1ss,l2ss,sample_energiess,reference_natorb_list,reference_ov
 natorbs,noons,S=get_natural_orbitals(molecule,geom_alphas,basis,reference_natorb_list[0],reference_noons_list[0],reference_overlap_list[0])
 for i in range(len(xvals)-1):
     assert np.linalg.norm(natorbs[i+1]-natorbs[i]) < np.linalg.norm(natorbs[i])/len(natorbs[i]) #Rather arbitrary, but ascertains "small changes"
-    print(np.linalg.norm(natorbs[i+1]-natorbs[i]))
 
 charge=0
 
@@ -59,7 +57,7 @@ energiesEC,eigenvectors=HF.calculate_energies(geom_alphas1)
 assert np.all((energiesEC-energiesHF)<0), "lambda-tweaked EVC energies higher than HF at sample geometries"
 assert np.all((energiesEC-E_CCSD)>0), "lambda-tweaked EVC energies lower than CCSD at sample geometries"
 """Test WF-CCEVC, AMP-CCEVC and param. reduced AMP-CCEVC"""
-reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
+reference_determinant=get_reference_determinant(molecule,ref_x,basis,charge)
 sample_geometry=np.linspace(1.5,4,2)
 geom_alphas1=np.linspace(1.500,1.500,1)
 geom_alphas=[[x] for x in geom_alphas1]

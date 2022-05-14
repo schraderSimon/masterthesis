@@ -1,10 +1,9 @@
 # Master thesis
 ## Simon Elias Schrader, UiO, 2021/2022
-
+https://github.com/schraderSimon/masterthesis
 This is the GitHub page for the code used in Simon Elias Schrader's master thesis in Computational Science: Chemistry at the University of Oslo, spring 2022.
 
 The folder structure is as follows:
-- The `tex` folder contains the data to create the .pdf of the thesis, as well as the .pdf itself.
 - The `code` folder contains all code created by us.
   - Inside of the `code` folder, the folder `systems` contains the following folders:
     - `coupled_cluster` contains files to create the plots and tables in chapter 7, e.g. WF-CCEVC and AMP-CCEVC.

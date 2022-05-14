@@ -1,6 +1,7 @@
 # Master thesis
 ## Simon Elias Schrader, UiO, 2021/2022
 https://github.com/schraderSimon/masterthesis
+
 This is the GitHub page for the code used in Simon Elias Schrader's master thesis in Computational Science: Chemistry at the University of Oslo, spring 2022.
 
 The folder structure is as follows:

@@ -88,7 +88,7 @@ with open(file,"rb") as f:
     data=pickle.load(f)
 FCI_BeH2_pVDZ=data["FCI"]
 x_FCI=x
-file="../groundstate_HF_pos/energy_data/BeH2_data.bin"
+file="../HF_geom_groundstate/energy_data/BeH2_data.bin"
 with open(file,"rb") as f:
     data=pickle.load(f)
 x=data["xc_array"]
@@ -100,7 +100,7 @@ axes[1][1].plot(x_FCI,FCI_BeH2_pVDZ,label="FCI",color="tab:purple")
 
 axes[1][1].set_ylim([-15.84,-15.53])
 axes[1][1].legend(loc="center right",handletextpad=0.3,labelspacing = 0.1,bbox_to_anchor=(1.68,0.450))
-file="../groundstate_HF_pos/energy_data/BeH2_data_631G*.bin"
+file="../HF_geom_groundstate/energy_data/BeH2_data_631G*.bin"
 with open(file,"rb") as f:
     data=pickle.load(f)
 x=data["xc_array"]

@@ -7,8 +7,6 @@ from helper_functions import *
 import numpy as np
 import matplotlib.pyplot as plt
 from timeit import default_timer as timer
-import sys
-sys.path.append("/home/simon/Documents/University/masteroppgave/coding/systems/libraries")
 from func_lib import *
 fig,axes=plt.subplots(2,2,sharey=True,sharex=True,figsize=(12,10))
 sample_geometry=[[np.linspace(1.5,2.0,3),np.linspace(1.5,5.0,3)],[np.linspace(1.5,2.0,3),np.linspace(1.5,5,3)]]

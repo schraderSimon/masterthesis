@@ -8,7 +8,6 @@ basis = 'cc-pVTZ'
 charge = 0
 molecule=lambda x:  "Be 0 0 0; H 0 0 %f; H 0 0 -%f"%(x,x); molecule_name="HF"
 #molecule=lambda x:  "H 0 0 0; F 0 0 %f"%x; molecule_name="HF"
-#molecule=lambda x:  "N 0 0 0; N 0 0 %f"%x; molecule_name="N2"
 
 refx=[2]
 print(molecule(*refx))

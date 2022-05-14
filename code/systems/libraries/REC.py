@@ -412,8 +412,8 @@ class eigvecsolver_RHF_singlesdoubles(eigvecsolver_RHF):
             H2=energy2
         return H2+H1
     def energy_func(self,C_w_a,C_w_b,C_x_a,C_x_b,onebody,twobody,D_a,D_b,c1=0,c2=0,threshold=1e-12):
-        number_of_zeros_alpha=len(D_a[np.abs(D_a)<threshold])
-        number_of_zeros_beta=len(D_a[np.abs(D_b)<threshold])
+        number_of_zeros_alpha=len(D_a[np.abs(D_a)<threshold]) #Number of zeros in alpha part of coefficient matrix
+        number_of_zeros_beta=len(D_a[np.abs(D_b)<threshold])  #Number of zeros in alpha part of coefficient matrix
         number_of_zeros=number_of_zeros_alpha+number_of_zeros_beta
         if number_of_zeros>2:
             return 0

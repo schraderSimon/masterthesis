@@ -38,7 +38,7 @@ locs=["left","right"]
 for i in range(2):
     ax[i].set_title(r"$\epsilon=%s$"%epsilons[i],loc=locs[i])
     ax[i].axhline(E_EVC[0],label=r"$E_{exact}$",color="green")
-    ax[i].fill_between([0,1e10],E_EVC[0]-chem_acc,E_EVC[0]+chem_acc,color="green",alpha=0.2,label="Chemical\n accuracy")
+    ax[i].fill_between([1e6,6*1e8],E_EVC[0]-chem_acc,E_EVC[0]+chem_acc,color="green",alpha=0.2,label="Chemical\n accuracy")
     ax[i].set_ylim([-15.335,-15.325])
     ax[i].set_xlim([num_measurements[i][0],num_measurements[i][-1]])
     #ax[i].set_yticks(np.arange(-15.335, -15.325, step=0.001))
@@ -61,7 +61,7 @@ fig, ax= plt.subplots(1, 2,figsize=(10,5),sharey=True)
 #ax[0].set_yticks(np.arange(-15.335, -15.325, step=0.002))
 #formatter = ticker.FormatStrFormatter('%.4f')
 #ax[0].yaxis.set_major_formatter(formatter)
-ax[0].set_ylabel("Energy (Hartree)")
+ax[0].set_ylabel(r"$\Delta$E (Hartree)")
 epsilons=["10^{-2}","10^{-5}"]
 locs=["left","right"]
 

@@ -36,6 +36,9 @@ class SamplerSystemGaussian():
     def get_num_measurements(self):
         return sum(num_measurements_S.values())+sum(num_measurements_H.values())
     def remove_data(self,data_to_keep):
+        """
+        Which sample geometries to remove
+        """
         data_to_keep=np.sort(data_to_keep).astype(int)
         self.sample_x=np.array(self.sample_x)[data_to_keep]
         new_ordering=np.arange(len(data_to_keep))
@@ -49,16 +52,6 @@ class SamplerSystemGaussian():
                 pauli_string_exp_vals_new["%d%d"%(ind_i,ind_j)]=self.pauli_string_exp_vals["%d%d"%(i,j)]
         self.pauli_string_exp_vals=pauli_string_exp_vals_new
         self.overlaps=overlaps_new
-    def remove_least_important(self,threshold):
-        Smat=np.zeros((len(self.sample_x),len(self.sample_x)))
-        for i in range(len(self.sample_x)):
-            for j in range(i,len(self.sample_x)):
-                Smat[i,j]=Smat[j,i]=self.sampled_overlaps["%d%d"%(i,j)]
-        q,r=np.linalg.qr(Smat)
-        removerinos=np.where(abs(np.diag(r))<threshold)
-        data_to_keep=np.delete(np.arange(len(self.sample_x)),removerinos)
-        print(r)
-        self.remove_data(np.array(data_to_keep).astype(int))
     def __init__(self,filename,cutoff=None):
         infile=open(filename)
         self.sample_x,self.overlaps,self.pauli_string_exp_vals=self.filereader(infile)
@@ -86,7 +79,9 @@ class SamplerSystemGaussian():
         self.num_measurements_S=num_measurements_S
         self.num_measurements_H=num_measurements_H
     def add_measurements(self,type,index,number):
-
+        """
+        Adds "number" measurements for type "H" or "S" with index (i,j)
+        """
         if type=="S": #If S should be measured
             p=0.5*(1+self.overlaps[index]) #True percentage
             sampled_p_new=binomial(number,p)/number #"number" new samples
@@ -103,6 +98,9 @@ class SamplerSystemGaussian():
                 self.sampled_pauli_string_exp_vals[index][pauli_string]=2*sampled_p_tot-1
             self.num_measurements_H[index]=self.num_measurements_H[index]+number
     def create_gaussian_dist(self,qubit_hamiltonian,nuc_rep):
+        """
+        Create gaussian distribution of data for mean and standard deviation for H, S
+        """
         self.S_means={}
         self.H_means={}
         self.S_std={} # Not scaled
@@ -119,7 +117,6 @@ class SamplerSystemGaussian():
 
                 self.S_std["%d%d"%(i,j)]=np.sqrt(0.5*(1-val)*(1-0.5*(1-val)))
                 h=0
-                self.H_std["%d%d"%(i,j)]=maxSigma #In reality MUCH lower
                 #
                 for pauliOpStr,coeff in coefs_strings:
 
@@ -132,6 +129,9 @@ class SamplerSystemGaussian():
                     H_variance+=coeff**2*(p*(1-p))**2
                 self.H_std["%d%d"%(i,j)]=np.sqrt(H_variance)
     def get_E(self,nuc_rep,threshold):
+        """
+        Returns the energy based on the sample mean
+        """
         S=np.zeros((len(self.sample_x),len(self.sample_x)))
         H=np.zeros((len(self.sample_x),len(self.sample_x)))
         for i in range(len(self.sample_x)):
@@ -144,8 +144,9 @@ class SamplerSystemGaussian():
         eigenvalue,vec=canonical_orthonormalization(H,S,threshold)
         return np.real(eigenvalue)
     def sample(self,nuc_rep,threshold):
-        #Given the expectation values and the standard deviations (estimated!) for each matrix element, use Monte Carlo //
-        # Bootstrapping to estimate eigenvalues
+        """
+        Returns the energy based on the sample mean AND sample standard deviations, e.g. returns a random number. Threshold is the cutoff
+        """
         S=np.zeros((len(self.sample_x),len(self.sample_x)))
         H=np.zeros((len(self.sample_x),len(self.sample_x)))
         for i in range(len(self.sample_x)):
@@ -164,6 +165,9 @@ class SamplerSystemGaussian():
         eigenvalue,vec=canonical_orthonormalization(H,S,threshold)
         return np.real(eigenvalue)
     def exact_EVC(self,qubit_hamiltonian,nuc_rep,threshold):
+        """
+        Returns the exact EVC energy
+        """
         S=np.zeros((len(self.sample_x),len(self.sample_x)))
         H=np.zeros((len(self.sample_x),len(self.sample_x)))
         coefs_strings=qubit_hamiltonian.reduce().primitive.to_list()
@@ -179,13 +183,16 @@ class SamplerSystemGaussian():
         eigenvalue,vec=canonical_orthonormalization(H,S,threshold)
         return np.real(eigenvalue)
     def grab_UCC2_val(self,qubit_hamiltonian,nuc_rep,k):
-        #Return the UCC2 energy of the qubit Hamilonian, given the expectation values of the Pauli strings
+        """Return the UCC2 energy of the qubit Hamilonian, given the expectation values of the Pauli strings#"""
         h=nuc_rep
         coefs_strings=qubit_hamiltonian.reduce().primitive.to_list()
         for pauliOpStr,coeff in coefs_strings:
             h+=self.pauli_string_exp_vals["%d%d"%(k,k)][pauliOpStr]*coeff
         return np.real(h),np.real(numPyEigensolver.compute_eigenvalues(qubit_hamiltonian).eigenvalues[0])+nuc_rep
     def add_fake_measurements(self,type,index,number):
+        """
+        Increases the number of measurement for an index without actually changing data (adds "fake" measurements)
+        """
         if type=="S":
             self.num_measurements_S[index]=self.num_measurements_S[index]+number
         elif type=="H":
@@ -198,6 +205,9 @@ class SamplerSystemGaussian():
         E_std=np.std(eigvals)
         return E_mean,E_std #Return mean and standard deviation of those eigenvalues
     def gradient_numMeas(self,eigval_threshold,nuc_rep,num_bootstraps,grad_increase_factor):
+        """
+        measures the "gradients", e.g. the estimated improvements when adding "grad_increase_factor" sapmles
+        """
         S_gradients={}
         H_gradients={}
         mean,std=self.bootstrap(nuc_rep,threshold,num_bootstraps) #Get mean and standard deviation of eigenvalues.
@@ -215,7 +225,7 @@ class SamplerSystemGaussian():
                 self.add_fake_measurements("H","%d%d"%(i,j),-grad_increase_factor)
         return S_gradients,H_gradients
     def increase_max_gradient(self,nuc_rep,eigval_threshold,num_bootstraps,grad_increase_factor,increase_factor):
-        #Estimate where adding more samples has the highest effect and add samples there
+        """Estimate where adding more samples has the highest effect and add samples there"""
         S_gradients,H_gradients=self.gradient_numMeas(eigval_threshold,nuc_rep,num_bootstraps,grad_increase_factor)
         min_S = min(S_gradients, key=S_gradients.get)
         min_H = min(H_gradients, key=H_gradients.get)

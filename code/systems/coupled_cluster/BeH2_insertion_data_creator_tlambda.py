@@ -1,3 +1,5 @@
+"""Create amplitudes and lambda equations for BeH2 using Pyscf"""
+
 import sys
 sys.path.append("../libraries")
 from rccsd_gs import *

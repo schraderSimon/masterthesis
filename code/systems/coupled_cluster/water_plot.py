@@ -27,13 +27,6 @@ for n in range(number_repeats):
         AMP_20_errors[n].append(np.abs(AMP_20[n][i]-CCSD_vals[n]))
 nanval=100
 error_means=np.zeros((number_samples,4))
-for i in range(number_samples):
-    for n in range(number_repeats):
-        pass
-        #WF_errors[n][i]=np.nan_to_num(WF_errors[n][i],nan=nanval)
-        #AMP_errors[n][i]=np.nan_to_num(AMP_errors[n][i],nan=nanval)
-        #AMP_50_errors[n][i]=np.nan_to_num(AMP_50_errors[n][i],nan=nanval)
-        #AMP_20_errors[n][i]=np.nan_to_num(AMP_20_errors[n][i],nan=nanval)
 WF_errors=np.array(WF_errors)
 AMP_errors=np.array(AMP_errors)
 AMP_50_errors=np.array(AMP_50_errors)

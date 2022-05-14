@@ -583,10 +583,10 @@ class EVCSolver():
                 overlap=0
                 overlap+=1+contract("ia,ai->",self.l1s[j],X1)
                 overlap+=0.5*contract("ijab,ai,bj->",self.l2s[j],X1,X1)
-                overlap+=0.5*contract("ijab,abij->",self.l2s[j],X2) #Extra *2 for RCCSD
+                overlap+=0.5*contract("ijab,abij->",self.l2s[j],X2) #Extra *2 for RCCSD. Not derived explicitely, but chosen so that it matches with GCCSD!
                 S[i,j]=overlap
                 extra=contract("ia,ai->",self.l1s[j],t1_error)+contract("ijab,ai,bj->",self.l2s[j],X1,t1_error)
-                extra+=0.5*contract("ijab,abij->",self.l2s[j],t2_error) #Extra *2 for RCCSD
+                extra+=0.5*contract("ijab,abij->",self.l2s[j],t2_error) #Extra *2 for RCCSD. Not derived explicitely, but chosen so that it matches with GCCSD!
                 H[i,j]=overlap*exp_energy
                 H[i,j]+=extra
         return H,S

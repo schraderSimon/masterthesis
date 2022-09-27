@@ -21,6 +21,8 @@ import pickle
 with open(file2,"rb") as f:
     energy_dict2=pickle.load(f)
 AMPred=np.array(energy_dict2["E_machineLearn"]).reshape(10,10)
+print(AMPred)
+sys.exit(1)
 E_ML=np.array(energy_dict["E_machineLearn"]).reshape(10,10)
 #x=energy_dict["x"]
 #y=energy_dict["y"]

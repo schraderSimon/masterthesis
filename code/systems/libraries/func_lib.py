@@ -16,6 +16,64 @@ import matplotlib
 matplotlib.rcParams.update({'font.size': 20})
 matplotlib.rcParams.update({'lines.linewidth': 3})
 np.set_printoptions(linewidth=300,precision=6,suppress=True)
+periodic_table={"H":1,"Be":4,"Li":3,"C":6,"N":7,"O":8,"F":9, "Cl":17,"Na":11}
+
+def coulomb_matrix_from_molecule(molstring):
+    atoms=molstring.split(";")
+    coulomb_matrix=np.zeros((len(atoms),len(atoms)))
+    pos=np.zeros((len(atoms),3))
+    charges=np.zeros(len(atoms))
+    for i,atom in enumerate(atoms):
+        name,a,b,c=atom.strip(" ").split(" ")
+        charge=periodic_table[name]
+        charges[i]=charge
+        coulomb_matrix[i,i]=0.5*charge**2.4
+        pos[i,0]=float(a); pos[i,1]=float(b); pos[i,2]=float(c)
+    for i in range(len(atoms)):
+        for j in range(i+1,len(atoms)):
+            pos1=pos[i,:]
+            pos2=pos[j,:]
+            diff=pos1-pos2
+            R12=np.sqrt(np.dot(diff,diff))
+            coulomb_matrix[i,j]=coulomb_matrix[j,i]=1/(charges[i]*charges[j]/R12)
+    return coulomb_matrix
+
+def get_coulomb_matrix(x,molecule):
+	coulomb_matrices=[]
+	for xval in x:
+		try:
+			len(xval)
+			molstring = molecule(*xval)
+		except TypeError: #xval is a number
+			molstring = molecule(xval)
+		coulomb_matrices.append(coulomb_matrix_from_molecule(molstring))
+	return coulomb_matrices
+def get_U_matrix(x,molecule,basis,reference_determinant):
+    """
+    Returns the matrix U for C=U@S^{-1/2}, with C standing for the Procrustes orbitals with
+    reference MOs in "reference_determinant".
+    """
+    U_matrices=[]
+    for xval in x:
+        mol = gto.Mole()
+        try:
+            len(xval)
+            mol.atom = molecule(*xval)
+        except TypeError: #xval is a number
+            mol.atom = molecule(xval)
+        mol.basis = basis
+        mol.unit="bohr"
+        mol.build()
+        hf=scf.RHF(mol)
+        hf.kernel()
+        C=hf.mo_coeff
+        C_new=localize_procrustes(mol,hf.mo_coeff,hf.mo_occ,reference_determinant)
+        U_matrices.append(C_new)
+        #S=mol.intor("int1e_ovlp")
+        #U_rot=np.real(scipy.linalg.fractional_matrix_power(S,0.5))@C_new
+        #U_matrices.append(U_rot)
+    return U_matrices
+
 def make_mol(molecule,x,basis="6-31G",charge=0):
 	"""Helper function to create Mole object at given geometry in given basis"""
 	mol=gto.Mole()
@@ -207,7 +265,7 @@ def guptri_Eigenvalue(H,S,epsu=1e-8,gap=1000,zero=False):
 def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sref):
 	"""
 	Swaps MO's in coefficient matrix in such a way that the coefficients become analytic w.r.t. the reference
-	taking special care of symmetry. This algorithm works better for natural orbitals. 
+	taking special care of symmetry. This algorithm works better for natural orbitals.
 	Input:
 	noons_ref (array): Natural occupation numbers of reference OR Fock matrix diagonals
 	natorbs_ref (matrix): Natural orbitals of reference OR Canonical orbitals
@@ -255,6 +313,7 @@ def similiarize_natural_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,Sre
 	    natorbs[:,pairs[i]]=natorbs[:,pairs[i]]@new_orbs
 	#similarities=C_1^TS_1^(-1/2)^T S_2^(-1/2)C_2
 	similarities=natorbs_ref.T@np.real(scipy.linalg.fractional_matrix_power(Sref,0.5))@np.real(scipy.linalg.fractional_matrix_power(S,0.5))@natorbs
+	#print(similarities)
 	assignment = linear_sum_assignment(-np.abs(similarities))[1] #Find best match (simple as this should be "basically" the identity matrix)
 	signs=[]
 	for i in range(len(similarities)):
@@ -287,7 +346,7 @@ def similiarize_canonical_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,S
 	while i<len(noons_ref): #For each natural orbital
 	    if i+1==len(noons_ref):
 	        break
-	    if abs((noons_ref[i])-(noons_ref[i+1]))<1e-9: #When two natural orbitals have the same natural occupation number
+	    if abs((noons_ref[i])-(noons_ref[i+1]))<1e-9: #When two canonical orbitals have the same enery
 	        pairs_ref.append((i,i+1)) #Add to pair list
 	        i+=1
 	    else:
@@ -304,8 +363,6 @@ def similiarize_canonical_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,S
 	        i+=1
 	#Having found the pairs, I have to "match" them. This is done via...procrustifying :)
 	#print("Pairs:")
-	print(pairs)
-	print(noons)
 	fits=np.zeros(len(pairs))
 	for i in range(len(pairs)):
 	    for j in range(len(pairs_ref)):
@@ -317,12 +374,12 @@ def similiarize_canonical_orbitals(noons_ref,natorbs_ref,noons,natorbs,nelec,S,S
 	    natorbs[:,pairs[i]]=natorbs[:,pairs[i]]@new_orbs
 	#similarities=C_1^TS_1^(-1/2)^T S_2^(-1/2)C_2
 	similarities=natorbs_ref.T@np.real(scipy.linalg.fractional_matrix_power(Sref,0.5))@np.real(scipy.linalg.fractional_matrix_power(S,0.5))@natorbs
-	#print(similarities)
-	assignment = linear_sum_assignment(-np.abs(similarities))[1] #Find best match (simple as this should be "basically" the identity matrix)
 	print(similarities)
+	assignment = linear_sum_assignment(-np.abs(similarities))[1] #Find best match (simple as this should be "basically" the identity matrix)
 	signs=[]
 	for i in range(len(similarities)):
 	    signs.append(np.sign(similarities[i,assignment[i]])) # Watch out that MO's keep correct sign
 	natorbs=natorbs[:,assignment]*np.array(signs)
 	noons=noons[assignment]
+	pairs=[]
 	return noons, natorbs

@@ -1,6 +1,8 @@
 from qs_ref import *
+from quantum_systems.custom_system import construct_pyscf_system_rhf
 import basis_set_exchange as bse
 from coupled_cluster.rccsd import RCCSD, TDRCCSD
+import coupled_cluster
 import rhs_t
 from coupled_cluster.rccsd import energies as rhs_e
 from opt_einsum import contract
@@ -15,6 +17,19 @@ class sucess():
         self.x=x
         self.success=success
         self.nfev=nfev
+def basischange_clusterOperator(U,t1,t2):
+    "Use U as change of basis operator to go from basis t1 to a new t1-tilde, same for t2"
+    n_virt=t1.shape[0]
+    n_occ=t1.shape[1]
+    U_occ=U[:n_occ,:n_occ] #Occupied orbital rotation
+    U_virt=U[n_occ:,n_occ:] #Virtual orbital rotation
+    new_t1 = contract('ij,ai,ab->bj', U_occ, t1, U_virt)
+    new_t2 = contract("ik,jl,abij,ac,bd->cdkl",U_occ,U_occ,t2,U_virt,U_virt)
+    return new_t1,new_t2
+    return t1,t2
+    #eri_ao = mol.intor('int2e')
+    #eri_mo = ao2mo.incore.full(eri_ao, mo_coeff)
+
 def orthonormalize_ts(t1s: list,t2s: list):
     """
     Given lists of t1 and t2 amplitudes, orthogonalizes the vectors t_1\osumt_2 using SVD
@@ -39,7 +54,6 @@ def orthonormalize_ts(t1s: list,t2s: list):
     coefs=np.zeros((len(t1s),len(t1s))) #Coefficients to transform between the old and the new representations
     for j in range(len(t1s)):
         for k in range(len(t1s)):
-            print(t_tot_old[j,:].shape)
             coefs[j,k]=t_tot_old[j,:]@t_tot[k,:]
 
     for j in range(len(t1s)):
@@ -95,7 +109,6 @@ def setUpsamples_canonicalOrbitals(all_x,molecule_func,basis,desired_samples=Non
         )
         reference_noons_list.append(noons_ref)
     natorbs_ref=noons_ref=S_ref=None
-    print("Finished first iteration")
     for k,x in enumerate(all_x[:]):
         system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_canonicalorb(
             molecule=molecule_func(*x),
@@ -112,7 +125,6 @@ def setUpsamples_canonicalOrbitals(all_x,molecule_func,basis,desired_samples=Non
             reference_overlap_list.append(S_ref)
             reference_natorb_list.append(natorbs_ref)
             systems.append(system)
-    print("Finished second iteration")
     for k,system in enumerate(systems):
         rccsd = RCCSD(system, verbose=False)
         ground_state_tolerance = 1e-10
@@ -180,7 +192,6 @@ def setUpsamples_naturalOrbitals(all_x,molecule_func,basis,freeze_threshold=0,de
         mindices.append(np.where(noons>freeze_threshold)[0][-1])
     mindex=np.max(mindices)+1
     natorbs_ref=noons_ref=S_ref=None
-    (print(mindex,len(noons)))
     print("Finished first iteration")
     for k,x in enumerate(all_x[:]):
         system, natorbs_ref,noons_ref,S_ref = construct_pyscf_system_rhf_natorb(
@@ -254,7 +265,7 @@ def setUpsamples(sample_x,molecule_func,basis,rhf_mo_ref,mix_states=False,type="
             weights=None
         )
         rccsd = RCCSD(system, verbose=False)
-        ground_state_tolerance = 1e-10
+        ground_state_tolerance = 1e-8
         rccsd.compute_ground_state(
             t_kwargs=dict(tol=ground_state_tolerance),
             l_kwargs=dict(tol=ground_state_tolerance),
@@ -290,7 +301,6 @@ def setUpsamples_givenC(sample_x,molecule_func,basis,givenCs,mix_states=False,ty
     l1s=[]
     l2s=[]
     sample_energies=[]
-    print(sample_x)
     for k,x in enumerate(sample_x):
         ref_state=givenCs[k]
         system = construct_pyscf_system_rhf_ref(
@@ -368,6 +378,36 @@ class EVCSolver():
         self.num_params=np.prod(t1s[0].shape)+np.prod(t2s[0].shape)
         self.coefs=None
         self.givenC=givenC
+    def solve_CCSD_noProcrustes(self,xtol=1e-8):
+        """
+        Solves the CCSD equations.
+
+        Returns:
+        E_CCSD (list): CCSD Energies at all_x.
+        """
+        self.num_iter=[]
+        E_CCSD=[]
+        for k,x_alpha in enumerate(self.all_x):
+            if isinstance(self.reference_natorbs,list):
+                ref_state=self.reference_natorbs[k]
+            else:
+                ref_state=self.reference_natorbs
+            system = construct_pyscf_system_rhf(
+                molecule=self.molecule_func(*x_alpha),
+                basis=self.basis,
+                add_spin=False,
+                anti_symmetrize=False,
+            )
+            try:
+                rccsd = RCCSD(system, verbose=False)
+                ground_state_tolerance = xtol
+                rccsd.compute_ground_state(t_kwargs=dict(tol=ground_state_tolerance))
+                E_CCSD.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+                print("Number iterations: %d"%rccsd.num_iterations)
+                self.num_iter.append(rccsd.num_iterations)
+            except:
+                E_CCSD.append(np.nan)
+        return E_CCSD
     def solve_CCSD(self):
         """
         Solves the CCSD equations.
@@ -376,6 +416,7 @@ class EVCSolver():
         E_CCSD (list): CCSD Energies at all_x.
         """
         E_CCSD=[]
+        self.num_iter=[]
         for k,x_alpha in enumerate(self.all_x):
             if isinstance(self.reference_natorbs,list):
                 ref_state=self.reference_natorbs[k]
@@ -392,14 +433,131 @@ class EVCSolver():
             )
             try:
                 rccsd = RCCSD(system, verbose=False)
-                ground_state_tolerance = 1e-10
+                ground_state_tolerance = 1e-8
                 rccsd.compute_ground_state(t_kwargs=dict(tol=ground_state_tolerance))
                 E_CCSD.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+                print("Number iterations: %d"%rccsd.num_iterations)
+                self.num_iter.append(rccsd.num_iterations)
             except:
                 E_CCSD.append(np.nan)
         return E_CCSD
+    def solve_CCSD_previousgeometry(self,xtol=1e-8):
+        """Use the previous geometry as a start guess for CCSD calculations. for the first geometry, no previous geometry is used. (MP2 guess)"""
+        E_CCSD=[]
+        self.num_iter=[]
+        for k,x_alpha in enumerate(self.all_x):
+            if isinstance(self.reference_natorbs,list):
+                ref_state=self.reference_natorbs[k]
+            else:
+                ref_state=self.reference_natorbs
+            system,C_canonical = construct_pyscf_system_rhf_ref( #With these parameters, canonical orbitals are used!
+                molecule=self.molecule_func(*x_alpha),
+                basis=self.basis,
+                add_spin=False,
+                anti_symmetrize=False,
+                reference_state=None,
+                givenC=None,
+                mix_states=self.mix_states,
+                truncation=self.natorb_truncation,
+                return_C=True
+            )
+            if k==0:
+                rccsd = RCCSD(system, include_singles=True)
+            else:
+                molecule=pyscf.M(atom=self.molecule_func(*x_alpha),basis=self.basis)
+                C_new,Uinv=localize_procrustes(None,C_canonical,None,C_prev,nelec=sum(molecule.nelec), return_R=True) #Unitary to go from canonical orbitals to Procrustes
+                #But we want the inverse...
+                U=np.conj(Uinv.T) #The unitary operation to go from Procrustes orbitals to canonical orbitals!
+                t1_new,t2_new=basischange_clusterOperator(U,start_guess_amplitudes[0],start_guess_amplitudes[1])
+                start_guess_amplitudes=[t1_new,t2_new]
 
+                rccsd = RCCSD(system, include_singles=True,start_guess=start_guess_amplitudes)
 
+            ground_state_tolerance = xtol
+            rccsd.compute_ground_state(t_kwargs=dict(tol=ground_state_tolerance))
+            t, l = rccsd.get_amplitudes()
+            start_guess_amplitudes=[t[0],t[1]]
+            E_CCSD.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+            print("Number iterations: %d"%rccsd.num_iterations)
+            self.num_iter.append(rccsd.num_iterations)
+            C_prev=C_canonical
+    def solve_CCSD_startguess(self,start_guess_t1_list,start_guess_t2_list, basis_change_from_Procrustes=True,xtol=1e-8):
+        """
+        Solves the CCSD equations. A start guess for the t amplitudes needs to be provided.
+        Optional: If basis change is true,
+        a transform of the t1 and the t2 to the canonical orbitals will be performed, assuming that the t1 and t2 amplitudes refer
+        to Procrustes orbitals.
+
+        Returns:
+        E_CCSD (list): CCSD Energies at all_x.
+        """
+        E_CCSD=[]
+        self.num_iter=[]
+        for k,x_alpha in enumerate(self.all_x):
+            if isinstance(self.reference_natorbs,list):
+                ref_state=self.reference_natorbs[k]
+            else:
+                ref_state=self.reference_natorbs
+            system,C_canonical = construct_pyscf_system_rhf_ref( #With these parameters, canonical orbitals are used!
+                molecule=self.molecule_func(*x_alpha),
+                basis=self.basis,
+                add_spin=False,
+                anti_symmetrize=False,
+                reference_state=None,
+                givenC=None,
+                mix_states=self.mix_states,
+                truncation=self.natorb_truncation,
+                return_C=True
+            )
+            if basis_change_from_Procrustes:
+                molecule=pyscf.M(atom=self.molecule_func(*x_alpha),basis=self.basis)
+                C_new,Uinv=localize_procrustes(None,C_canonical,None,ref_state,nelec=sum(molecule.nelec), return_R=True) #Unitary to go from canonical orbitals to Procrustes
+                #But we want the inverse...
+                U=np.conj(Uinv.T) #The unitary operation to go from Procrustes orbitals to canonical orbitals!
+                t1_new,t2_new=basischange_clusterOperator(U,start_guess_t1_list[k],start_guess_t2_list[k])
+                start_guess_amplitudes=[t1_new,t2_new]
+            else:
+                start_guess_amplitudes=[start_guess_t1_list[k],start_guess_t2_list[k]]
+            rccsd = RCCSD(system, include_singles=True,start_guess=start_guess_amplitudes)
+            ground_state_tolerance = xtol
+            rccsd.compute_ground_state(t_kwargs=dict(tol=ground_state_tolerance))
+            E_CCSD.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+            print("Number iterations: %d"%rccsd.num_iterations)
+            self.num_iter.append(rccsd.num_iterations)
+            #Add number of iterations. niter.append(rccsd.num_iter)
+            #except:
+            #    E_CCSD.append(np.nan)
+        return E_CCSD
+    def calculate_CCSD_energies_from_guess(self,start_guess_t1_list,start_guess_t2_list, basis_change_from_Procrustes=True,xtol=1e-8):
+        E_CCSD=[]
+        for k,x_alpha in enumerate(self.all_x):
+            if isinstance(self.reference_natorbs,list):
+                ref_state=self.reference_natorbs[k]
+            else:
+                ref_state=self.reference_natorbs
+            system,C_canonical = construct_pyscf_system_rhf_ref( #With these parameters, canonical orbitals are used!
+                molecule=self.molecule_func(*x_alpha),
+                basis=self.basis,
+                add_spin=False,
+                anti_symmetrize=False,
+                reference_state=None,
+                givenC=None,
+                mix_states=self.mix_states,
+                truncation=self.natorb_truncation,
+                return_C=True
+            )
+            if basis_change_from_Procrustes:
+                molecule=pyscf.M(atom=self.molecule_func(*x_alpha),basis=self.basis)
+                C_new,Uinv=localize_procrustes(None,C_canonical,None,ref_state,nelec=sum(molecule.nelec), return_R=True) #Unitary to go from canonical orbitals to Procrustes
+                #But we want the inverse...
+                U=np.conj(Uinv.T) #The unitary operation to go from Procrustes orbitals to canonical orbitals!
+                t1_new,t2_new=basischange_clusterOperator(U,start_guess_t1_list[k],start_guess_t2_list[k])
+                start_guess_amplitudes=[t1_new,t2_new]
+            else:
+                start_guess_amplitudes=[start_guess_t1_list[k],start_guess_t2_list[k]]
+            rccsd = RCCSD(system, include_singles=True,start_guess=start_guess_amplitudes)
+            E_CCSD.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+        return E_CCSD
     def solve_WFCCEVC(self,filename=None,exponent=14):
         """
         Solves the AMP_CCSD equations.
@@ -511,6 +669,8 @@ class EVCSolver():
         self.times=[]
         self.projection_errors=[]
         projection_errors=[]
+        self.t1s_final=[] #List of the t1 solutions for each x
+        self.t2s_final=[] #list of the t2 solutions for each x
         for k,x_alpha in enumerate(self.all_x):
             if isinstance(self.reference_natorbs,list):
                 ref_state=self.reference_natorbs[k]
@@ -531,18 +691,15 @@ class EVCSolver():
             closest_sample_x=np.argmin(np.linalg.norm(np.array(self.sample_x)-x_alpha,axis=1))
             try:
                 start_guess=start_guess_list[k]
-                print(start_guess)
             except TypeError: #Not a list
                 start_guess=self.coefs[:,closest_sample_x]
 
-                sys.exit(1)
             except IndexError: #List to short
                 start_guess=self.coefs[:,closest_sample_x]
             self.times_temp=[]
 
             sol=self._own_root_diis(start_guess,args=[system],options={"xtol":xtol,"maxfev":maxfev})
             final=sol.x
-            print(final)
             self.num_iterations.append(sol.nfev)
             self.times.append(np.sum(np.array(self.times_temp)))
             t1=np.zeros(self.t1s[0].shape)
@@ -550,6 +707,8 @@ class EVCSolver():
             for i in range(len(self.t1s)):
                 t1+=final[i]*self.t1s[i] #Starting guess
                 t2+=final[i]*self.t2s[i] #Starting guess
+            self.t1s_final.append(t1)
+            self.t2s_final.append(t2)
             t1_error = rhs_t.compute_t_1_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
             t2_error = rhs_t.compute_t_2_amplitudes(f, system.u, t1, t2, system.o, system.v, np)
             max_proj_error=np.max((np.max(abs(t1_error)),np.max(abs(t2_error)) ))
@@ -690,7 +849,6 @@ class EVCSolver():
             error=self._error_function(guess,*args)
             update=-np.linalg.inv(jacobian)@error
             guess=guess+update
-            print(error)
             errors.append(error)
             updates.append(update)
             amplitudes.append(guess)

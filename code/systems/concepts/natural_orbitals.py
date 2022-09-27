@@ -25,7 +25,7 @@ noonss=[]
 old_noonss=[]
 natorbss=[]
 
-Rref=linalg.fractional_matrix_power(S, 0.5)@natorbs_ref
+Rref=linalg.fractional_matrix_power(S, 0.5)@natorbs_ref #The underlying unitary obtained from S
 
 diff=np.zeros(len(xs))
 diff2=np.zeros(len(xs))

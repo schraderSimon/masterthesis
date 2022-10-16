@@ -7,6 +7,7 @@ from scipy.linalg import block_diag
 import GPy
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import WhiteKernel, RBF, ConstantKernel, PairwiseKernel, DotProduct
+def multivaritate_gaussian_own()
 def multivariate_gaussian_scikitlearn(x_learn,y_learn,x_predict,sigma=1,l=1):
     kernel = RBF(length_scale=l,length_scale_bounds=(0.5, 10.0))#+np.mean(y_learn)*ConstantKernel(constant_value=1.0)
     gaussian_process = GaussianProcessRegressor(kernel=kernel)

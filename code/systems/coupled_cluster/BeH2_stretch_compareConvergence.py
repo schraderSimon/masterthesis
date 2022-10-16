@@ -47,6 +47,10 @@ t1_machinelearn=[]
 t2_machinelearn=[]
 means_U=[]; std_U=[];
 means_avstand=[]; std_avstand=[];
+sample_U=get_U_matrix(sample_geom,molecule,basis,reference_determinant)
+target_U=get_U_matrix(geom_alphas,molecule,basis,reference_determinant)
+sample_C=get_coulomb_matrix(sample_geom,molecule)
+target_C=get_coulomb_matrix(geom_alphas,molecule)
 for i in range(len(sample_geom)):
     mean_U,std=multivariate_gaussian_gpy_matrixInput(sample_U,t_coefs[i],target_U,sigma=1,l=1)
     means_U.append(mean_U)
@@ -55,6 +59,8 @@ for i in range(len(sample_geom)):
     means_avstand.append(mean_avstand)
     std_avstand.append(std)
 means_U=np.array(means_U)
+print(mean_U)
+sys.exit(1)
 means_avstand=np.array(means_avstand)
 std_U=np.array(std_U)
 std_avstand=np.array(std_avstand)

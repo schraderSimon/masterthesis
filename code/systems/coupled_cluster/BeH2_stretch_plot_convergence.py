@@ -16,11 +16,24 @@ with open(file,"rb") as f:
 CCSD=np.array(energy_dict["E_CCSD"]).reshape((10,10))
 AMPred=np.array(energy_dict["E_AMP_red"]).reshape((10,10))
 
+<<<<<<< HEAD
 with open("energy_data/BeH2_distance_and_U_16sample.bin","rb") as f:
     energy_dict_ML=pickle.load(f)
 
 E_ML_dist=np.array(energy_dict_ML["E_dist"]).reshape(10,10)
 E_ML_U=np.array(energy_dict_ML["E_U"]).reshape(10,10)
+=======
+file2="energy_data/Coulomb_test.bin"
+import pickle
+with open(file2,"rb") as f:
+    energy_dict2=pickle.load(f)
+AMPred=np.array(energy_dict2["E_machineLearn"]).reshape(10,10)
+print(AMPred)
+sys.exit(1)
+E_ML=np.array(energy_dict["E_machineLearn"]).reshape(10,10)
+#x=energy_dict["x"]
+#y=energy_dict["y"]
+>>>>>>> 44d6fa7dd4305855008eaa616a976a8a117121f8
 x=y=np.linspace(2,6,10)
 sample_geom=energy_dict["sample_geometries"]
 test_geom=energy_dict["test_geometries"]

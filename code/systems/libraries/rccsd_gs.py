@@ -481,6 +481,7 @@ class EVCSolver():
             print("Number iterations: %d"%rccsd.num_iterations)
             self.num_iter.append(rccsd.num_iterations)
             C_prev=C_canonical
+        return E_CCSD
     def solve_CCSD_startguess(self,start_guess_t1_list,start_guess_t2_list, basis_change_from_Procrustes=True,xtol=1e-8):
         """
         Solves the CCSD equations. A start guess for the t amplitudes needs to be provided.
@@ -556,7 +557,9 @@ class EVCSolver():
             else:
                 start_guess_amplitudes=[start_guess_t1_list[k],start_guess_t2_list[k]]
             rccsd = RCCSD(system, include_singles=True,start_guess=start_guess_amplitudes)
-            E_CCSD.append(system.compute_reference_energy().real+rccsd.compute_energy().real)
+            reference_energy=system.compute_reference_energy().real
+            CCSD_correction=rccsd.compute_energy().real
+            E_CCSD.append(reference_energy+CCSD_correction)
         return E_CCSD
     def solve_WFCCEVC(self,filename=None,exponent=14):
         """

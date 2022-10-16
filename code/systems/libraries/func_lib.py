@@ -27,7 +27,7 @@ def coulomb_matrix_from_molecule(molstring):
         name,a,b,c=atom.strip(" ").split(" ")
         charge=periodic_table[name]
         charges[i]=charge
-        coulomb_matrix[i,i]=0.5*charge**2.4
+        #coulomb_matrix[i,i]=0.5*charge**2.4
         pos[i,0]=float(a); pos[i,1]=float(b); pos[i,2]=float(c)
     for i in range(len(atoms)):
         for j in range(i+1,len(atoms)):
@@ -35,8 +35,8 @@ def coulomb_matrix_from_molecule(molstring):
             pos2=pos[j,:]
             diff=pos1-pos2
             R12=np.sqrt(np.dot(diff,diff))
-            coulomb_matrix[i,j]=coulomb_matrix[j,i]=1/(charges[i]*charges[j]/R12)
-    return coulomb_matrix
+            coulomb_matrix[i,j]=R12#1//R12) #E.g. approximately proportional with the number of orbitals we're moving
+    return coulomb_matrix.flatten()
 
 def get_coulomb_matrix(x,molecule):
 	coulomb_matrices=[]
@@ -68,10 +68,10 @@ def get_U_matrix(x,molecule,basis,reference_determinant):
         hf.kernel()
         C=hf.mo_coeff
         C_new=localize_procrustes(mol,hf.mo_coeff,hf.mo_occ,reference_determinant)
-        U_matrices.append(C_new)
-        #S=mol.intor("int1e_ovlp")
-        #U_rot=np.real(scipy.linalg.fractional_matrix_power(S,0.5))@C_new
-        #U_matrices.append(U_rot)
+        #U_matrices.append(C_new)
+        S=mol.intor("int1e_ovlp")
+        U_rot=np.real(scipy.linalg.fractional_matrix_power(S,0.5))@C_new
+        U_matrices.append(U_rot)
     return U_matrices
 
 def make_mol(molecule,x,basis="6-31G",charge=0):

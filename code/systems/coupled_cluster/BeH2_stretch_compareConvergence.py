@@ -19,7 +19,7 @@ reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
 n=n0=20
 x=4*np.random.rand(n,2)+2 #n random numbers between 2 and 6 for x and y directions
 sample_geom_new=[]
-x=np.linspace(2.1,5.9,5)
+x=np.linspace(2.1,5.9,4)
 for i in range(len(x)):
     for j in range(len(x)):
         sample_geom_new.append([x[i],x[j]])
@@ -32,6 +32,13 @@ for x in span:
     for y in span:
         geom_alphas.append((x,y))
 x, y = np.meshgrid(span,span)
+
+sample_C=get_coulomb_matrix(sample_geom,molecule) #Not a good estimator - difference dominated by H-H distance...
+target_C=get_coulomb_matrix(geom_alphas,molecule)
+sample_U=get_U_matrix(sample_geom,molecule,basis,reference_determinant)
+target_U=get_U_matrix(geom_alphas,molecule,basis,reference_determinant)
+
+
 energy_dict={}
 t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis_set,reference_determinant,mix_states=False,type="procrustes")
 evcsolver=EVCSolver(geom_alphas,molecule,basis_set,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False)
@@ -40,54 +47,55 @@ t1_machinelearn=[]
 t2_machinelearn=[]
 means_U=[]; std_U=[];
 means_avstand=[]; std_avstand=[];
-#sample_U=get_U_matrix(sample_geom,molecule,basis,reference_determinant)
-#target_U=get_U_matrix(geom_alphas,molecule,basis,reference_determinant)
-sample_C=get_coulomb_matrix(sample_geom,molecule)
-target_C=get_coulomb_matrix(geom_alphas,molecule)
 for i in range(len(sample_geom)):
-    mean_U,std=multivariate_gaussian_gpy_matrixInput(sample_C,t_coefs[i],target_C,sigma=1,l=1)
+    mean_U,std=multivariate_gaussian_gpy_matrixInput(sample_U,t_coefs[i],target_U,sigma=1,l=1)
     means_U.append(mean_U)
     std_U.append(std)
-    mean_avstand,std=multivariate_gaussian_gpy(sample_geom,t_coefs[i],geom_alphas,sigma=1,l=1)
+    mean_avstand,std=multivariate_gaussian_gpy(sample_C,t_coefs[i],target_C,sigma=1,l=1)
     means_avstand.append(mean_avstand)
     std_avstand.append(std)
 means_U=np.array(means_U)
 means_avstand=np.array(means_avstand)
 std_U=np.array(std_U)
 std_avstand=np.array(std_avstand)
+standardDeviation=std_avstand
 
-type="U"
-if type=="U":
-    means=means_U
-    standardDeviation=std_U
-
-elif type=="avstand":
-    means=means_avstand
-    standardDeviation=std_avstand
-    print("Type is avstand")
-else:
-    sys.exit(1)
-for i in range(len(means_U)):
-    print(means_U[i],means_U[i]-means_avstand[i])
+t1_machinelearn=[]
+t2_machinelearn=[]
 for i in range(len(geom_alphas)):
     t1_temp=np.zeros_like(t1s[0])
     t2_temp=np.zeros_like(t2s[0])
     for j in range(len(t_coefs)):
-        t1_temp+=means[j][i]*t1s_orth[j]
-        t2_temp+=means[j][i]*t2s_orth[j]
+        t1_temp+=means_U[j][i]*t1s_orth[j]
+        t2_temp+=means_U[j][i]*t2s_orth[j]
     t1_machinelearn.append(t1_temp)
     t2_machinelearn.append(t2_temp)
 xtol=1e-8 #Convergence tolerance
+E_ML_U=evcsolver.calculate_CCSD_energies_from_guess(t1_machinelearn,t2_machinelearn,xtol=xtol)
+t1_machinelearn=[]
+t2_machinelearn=[]
+for i in range(len(geom_alphas)):
+    t1_temp=np.zeros_like(t1s[0])
+    t2_temp=np.zeros_like(t2s[0])
+    for j in range(len(t_coefs)):
+        t1_temp+=means_avstand[j][i]*t1s_orth[j]
+        t2_temp+=means_avstand[j][i]*t2s_orth[j]
+    t1_machinelearn.append(t1_temp)
+    t2_machinelearn.append(t2_temp)
+xtol=1e-8 #Convergence tolerance
+E_ML_dist=evcsolver.calculate_CCSD_energies_from_guess(t1_machinelearn,t2_machinelearn,xtol=xtol)
 
 outdata={}
+outdata["E_U"]=E_ML_U
+outdata["E_dist"]=E_ML_dist
+
+
 
 #E_CCSD=evcsolver.solve_CCSD_noProcrustes(xtol=xtol)
 #niter_CCSD=evcsolver.num_iter
 #evcsolver.solve_CCSD_startguess(t1_machinelearn,t2_machinelearn,xtol=xtol)
 #niter_machinelearn_guess=evcsolver.num_iter
-E_ML=evcsolver.calculate_CCSD_energies_from_guess(t1_machinelearn,t2_machinelearn,xtol=xtol)
-outdata["E_machineLearn"]=E_ML
-file="energy_data/Coulomb_test.bin"
+file="energy_data/BeH2_distance_and_U_16sample.bin"
 #file="energy_data/convergence_%s2D_%s_%d_%s.bin"%(molecule_name,basis,len(sample_geom),type)
 import pickle
 with open(file,"wb") as f:

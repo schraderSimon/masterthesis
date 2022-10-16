@@ -16,7 +16,7 @@ def change_amplitude_basis(t1,t2,C_ref,C_new):
     # Step 2: "expand" t1 and t2 coefficients to 1-electron and 2-electron integrals
     # Step 3: Use ao2mo in pyscf to convert t1 and t2 coefficients to the "new" orbitals
 """
-basis = 'cc-pVTZ'
+basis = '6-31G'
 #basis="6-31G*"
 charge = 0
 molecule=lambda x:  "H 0 0 0; F 0 0 %f"%x;molecule_name="HF"
@@ -25,9 +25,9 @@ refx=[1.75]
 print(molecule(*refx))
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
 sample_geometry=[[np.linspace(1.5,5,6),np.linspace(1.5,2,6)],[np.linspace(1.5,2,16),np.linspace(4.5,5,6)]]
-sample_geom1=np.linspace(1.5,5.0,20)
+sample_geom1=np.linspace(1.5,5.0,7)
 import pickle
-geom_alphas1=np.linspace(1.45,5.05,37)
+geom_alphas1=np.linspace(1.45,5.05,73)
 geom_alphas=[[x] for x in geom_alphas1]
 energy_dict={}
 energy_dict["xval"]=geom_alphas1

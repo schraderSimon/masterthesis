@@ -15,7 +15,7 @@ def multivariate_gaussian_scikitlearn(x_learn,y_learn,x_predict,sigma=1,l=1):
     mean_predictions_gpr, std_predictions_gpr = gaussian_process.predict(x_predict.reshape(-1, 1),return_std=True)
     return mean_predictions_gpr.ravel(), std_predictions_gpr.ravel()
 def multivariate_gaussian_gpy(x_learn,y_learn,x_predict,sigma=1,l=1):
-    i=1
+    i=1 #Setting i=0 is a bad idea - we should not scale the data!
     x_learn=np.array(x_learn)
     x_predict=np.array(x_predict)
     if i==0:
@@ -27,12 +27,12 @@ def multivariate_gaussian_gpy(x_learn,y_learn,x_predict,sigma=1,l=1):
         x_learn=x_learn.reshape(-1,1)
         x_predict=x_predict.reshape(-1,1)
     m = GPy.models.GPRegression(x_learn,y_learn.reshape(-1, 1),kernel = GPy.kern.RBF(input_dim=x_learn.shape[1]))
-    m["Gaussian_noise.variance"]=1e-10
+    m["Gaussian_noise.variance"]=0
     m.optimize("bfgs")
     mean,var=m.predict(x_predict)
     return mean.ravel(),np.sqrt(var.ravel())
 def multivariate_gaussian_gpy_matrixInput(x_learn,y_learn,x_predict,sigma=1,l=1):
-    i=1
+    i=1#Setting i=0 is a bad idea - we should not scale the data!
     x_learn_new=[]
     for x in x_learn:
         x_learn_new.append(x.flatten())
@@ -50,7 +50,7 @@ def multivariate_gaussian_gpy_matrixInput(x_learn,y_learn,x_predict,sigma=1,l=1)
         x_learn=(x_learn-x_learn_mean)/x_learn_std
         x_predict=(x_predict-x_learn_mean)/x_learn_std
     m = GPy.models.GPRegression(x_learn,y_learn.reshape(-1, 1),kernel = GPy.kern.RBF(input_dim=x_learn.shape[1]))
-    m["Gaussian_noise.variance"]=1e-10
+    m["Gaussian_noise.variance"]=1e-16
     m.optimize("bfgs")
     mean,var=m.predict(x_predict)
     return mean.ravel(),np.sqrt(var.ravel())

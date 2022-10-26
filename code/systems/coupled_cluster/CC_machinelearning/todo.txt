@@ -1,0 +1,6 @@
+So, what else do I want?
+
+1. 2D-example. Show that 25 sample geometries along a very "large" stretch are sufficient.
+2. Make nicer subplots instead of these ugly-ass two plots
+3. Show that considering several variables at once also works (CH4 or ethylene. Probably Ethylene is better).
+4. Consider an "insecurity sampling".

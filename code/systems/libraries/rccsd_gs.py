@@ -358,17 +358,17 @@ class EVCSolver():
     solve_WFCCSD: solves WF-CCEVC equations and returns WF-CCEVC energies for given sample amplitudes & lambda equations
     solve_AMP_CCSD: solves AMP-CCEVC equations and returns AMP-CCEVC energies for given sample amplitudes
     """
-    def __init__(self,all_x,molecule_func,basis,reference_natorbs,t1s,t2s,l1s,l2s,givenC=False,sample_x=None,mix_states=False,natorb_truncation=None):
+    def __init__(self,all_x,molecule_func,basis,reference_determinant,t1s,t2s,l1s,l2s,givenC=False,sample_x=None,mix_states=False,natorb_truncation=None):
         self.all_x=all_x
         self.molecule_func=molecule_func
         self.sample_x=sample_x
         self.basis=basis
-        self.reference_natorbs=reference_natorbs #The reference determiant or a list of different reference determinants. Ignore that it is called "natorbs"
+        self.reference_natorbs=reference_determinant #The reference determiant or a list of different reference determinants. Ignore that it is called "natorbs"
         for i in range(len(t1s)):
-            t1s[i]=np.array(t1s[i],dtype=np.longdouble)
-            t2s[i]=np.array(t2s[i],dtype=np.longdouble)
-            l1s[i]=np.array(l1s[i],dtype=np.longdouble)
-            l2s[i]=np.array(l2s[i],dtype=np.longdouble)
+            t1s[i]=np.array(t1s[i])
+            t2s[i]=np.array(t2s[i])
+            l1s[i]=np.array(l1s[i])
+            l2s[i]=np.array(l2s[i])
         self.t1s=t1s
         self.t2s=t2s
         self.l1s=l1s
@@ -732,12 +732,12 @@ class EVCSolver():
         Returns: H and S matrices as expressed in terms of the sample basis.
         """
         RHF_energy=system.compute_reference_energy().real
-        H=np.zeros((len(self.t1s),len(self.t1s)),dtype=np.longdouble)
-        S=np.zeros((len(self.t1s),len(self.t1s)),dtype=np.longdouble)
+        H=np.zeros((len(self.t1s),len(self.t1s)))
+        S=np.zeros((len(self.t1s),len(self.t1s)))
         for i in range(len(self.t1s)):
             f = system.construct_fock_matrix(system.h, system.u)
-            t1_error = np.array(rhs_t.compute_t_1_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np),dtype=np.longdouble)
-            t2_error = np.array(rhs_t.compute_t_2_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np),dtype=np.longdouble)
+            t1_error = np.array(rhs_t.compute_t_1_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np))
+            t2_error = np.array(rhs_t.compute_t_2_amplitudes(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np))
             exp_energy=rhs_e.compute_rccsd_ground_state_energy(f, system.u, self.t1s[i], self.t2s[i], system.o, system.v, np)+RHF_energy
             for j in range(len(self.t1s)):
                 X1=self.t1s[i]-self.t1s[j]

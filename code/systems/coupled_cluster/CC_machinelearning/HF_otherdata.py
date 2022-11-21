@@ -15,7 +15,7 @@ molecule=lambda x:  "H 0 0 0; F 0 0 %f"%x;molecule_name="HF"
 refx=[1.75]
 print(molecule(*refx))
 reference_determinant=get_reference_determinant(molecule,refx,basis,0)
-sample_geom1=np.linspace(1.5,4,10)
+sample_geom1=np.linspace(1.5,4,7)
 import pickle
 geom_alphas1=np.linspace(1.4,4.1,81)
 geom_alphas=[[x] for x in geom_alphas1]
@@ -35,13 +35,13 @@ niter_prevGeom=evcsolver.num_iter
 evcsolver.solve_CCSD_noProcrustes(xtol=xtol)
 niter_CCSD=evcsolver.num_iter
 
-E_AMP_red_10=evcsolver.solve_AMP_CCSD(occs=1,virts=0.1,xtol=1e-8)
+E_AMP_red_10=evcsolver.solve_AMP_CCSD(occs=1,virts=0.1,xtol=xtol)
 t1s_reduced=evcsolver.t1s_final
 t2s_reduced=evcsolver.t2s_final
 evcsolver.solve_CCSD_startguess(t1s_reduced,t2s_reduced,xtol=xtol)
 niter_AMP_startguess10=evcsolver.num_iter
 
-E_AMP_red_20=evcsolver.solve_AMP_CCSD(occs=1,virts=0.2,xtol=1e-8)
+E_AMP_red_20=evcsolver.solve_AMP_CCSD(occs=1,virts=0.2,xtol=xtol)
 t1s_reduced=evcsolver.t1s_final
 t2s_reduced=evcsolver.t2s_final
 evcsolver.solve_CCSD_startguess(t1s_reduced,t2s_reduced,xtol=xtol)

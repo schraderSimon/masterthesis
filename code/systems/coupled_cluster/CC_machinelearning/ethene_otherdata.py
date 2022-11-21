@@ -11,7 +11,7 @@ from matrix_operations import *
 from helper_functions import *
 basis = 'cc-pVDZ'
 #basis="6-31G*"
-def molecule(x):
+def molecule(x:float)->str:
     C_pos=2.482945+x
     H_pos=3.548545+x
     return "C 0 0 0 ;C 0 0 %f;H 0 1.728121 -1.0656 ;H 0 -1.728121 -1.0656 ;H 0 1.728121 %f;H 0 -1.728121 %f"%(C_pos,H_pos,H_pos)
@@ -20,9 +20,9 @@ refx=[0]
 print(molecule(*refx))
 charge=0
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-sample_geom1=np.linspace(-1,2.8,7)
+sample_geom1=np.linspace(-0.9,2.7,10)
 import pickle
-geom_alphas1=np.linspace(-1,2.8,39)
+geom_alphas1=np.linspace(-1,2.8,77)
 geom_alphas=[[x] for x in geom_alphas1]
 
 sample_geom=[[x] for x in sample_geom1]

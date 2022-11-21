@@ -392,7 +392,7 @@ class EVCSolver():
                 ref_state=self.reference_natorbs[k]
             else:
                 ref_state=self.reference_natorbs
-            system = construct_pyscf_system_rhf(
+            system = construct_pyscf_system_rhf( #Construct a canonical-orbital HF state.
                 molecule=self.molecule_func(*x_alpha),
                 basis=self.basis,
                 add_spin=False,
@@ -618,7 +618,7 @@ class EVCSolver():
 
         return E_WFCCEVC
 
-    def solve_AMP_CCSD(self,occs=1,virts=0.5,xtol=1e-5,maxfev=40, start_guess_list=None):
+    def solve_AMP_CCSD(self,occs=1,virts=0.5,xtol=1e-5,maxfev=60, start_guess_list=None):
         """
         Solves the AMP_CCSD equations.
 
@@ -637,7 +637,7 @@ class EVCSolver():
         t1s_orth,t2s_orth,coefs=orthonormalize_ts(self.t1s,self.t2s) # Use orthonormal t1 and t2 amplitudes
         if self.coefs is None:
             self.coefs=coefs
-        self.t1s=t1s_orth
+        self.t1s=t1s_orth #Use the orthogonalized forms of t1s and t2s
         self.t2s=t2s_orth
         t2=np.zeros(self.t2s[0].shape)
         for i in range(len(self.t1s)):
@@ -646,7 +646,7 @@ class EVCSolver():
         t1_o_ordering=contract=np.einsum("abij->i",t2**2)
         important_o=np.argsort(t1_o_ordering)[::-1]
         important_v=np.argsort(t1_v_ordering)[::-1]
-        pickerino=np.zeros(self.t2s[0].shape)
+        chosen_t=np.zeros(self.t2s[0].shape)
         if occs is None:
             occs_local=self.t2s[0].shape[2]
         elif occs<1.1:
@@ -661,11 +661,10 @@ class EVCSolver():
             virts_local=virts
         self.used_o=np.sort(important_o[:occs_local])
         self.used_v=np.sort(important_v[:virts_local])
-        pickerino[np.ix_(self.used_v,self.used_v,self.used_o,self.used_o)]=1
-        self.picks=pickerino.reshape(self.t2s[0].shape)
+        chosen_t[np.ix_(self.used_v,self.used_v,self.used_o,self.used_o)]=1
+        self.picks=chosen_t.reshape(self.t2s[0].shape)
         self.picks=(self.picks*(-1)+1).astype(bool)
 
-        self.cutoff=occs_local**2*virts_local**2
         self.nos=important_o[:occs_local]
         self.nvs=important_v[:virts_local]
         self.num_iterations=[]
@@ -768,7 +767,7 @@ class EVCSolver():
             for b in range(nv):
                 for i in range(no):
                     for j in range(no):
-                        t2_Jac[a,b,i,j]=f[a+no,a+no]-f[i,i]+f[b+no,b+no]-f[j,j]
+                        t2_Jac[a,b,i,j]=f[a+no,a+no]-f[i,i]+f[b+no,b+no]-f[j,j] #This is really crappy, as the diagonal approximation does not hold. Though it works!!
         self.t1_Jac=t1_Jac
         self.t2_Jac=t2_Jac
     def _error_function(self,params,system):

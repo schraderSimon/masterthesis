@@ -10,7 +10,7 @@ from mpl_toolkits.axes_grid1 import ImageGrid
 
 molecule_name="BeH2"
 
-basis = 'cc-pVDZ'
+basis = 'cc-pVTZ'
 basis_set = bse.get_basis(basis, fmt='nwchem')
 charge = 0
 def molecule(x,y):
@@ -24,7 +24,7 @@ geom_alphas=[]
 for x in span:
     for y in span:
         geom_alphas.append((x,y))
-sample_geom=[(2,2),(2,6),(6,2),(6,6)]
+sample_geom=[(2.1,2.1),(2.1,5.9),(5.9,2.1),(5.9,5.9)]
 x, y = np.meshgrid(span,span)
 
 target_U=get_U_matrix(geom_alphas,molecule,basis,reference_determinant)
@@ -33,7 +33,7 @@ target_U=get_U_matrix(geom_alphas,molecule,basis,reference_determinant)
 Set up machine learning for t amplitudes
 """
 num_samples=4
-max_samples=25
+max_samples=30
 sample_U=get_U_matrix(sample_geom,molecule,basis,reference_determinant)
 t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis,reference_determinant,mix_states=False,type="procrustes")
 
@@ -64,7 +64,20 @@ while num_samples < max_samples: #As long as I want to add samples:
     print(stds)
     print(sample_geom)
     num_samples+=1
+evcsolver=EVCSolver(geom_alphas,molecule,basis,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False)
 
+"""
+Set up machine learning for t amplitudes
+"""
+t1s_orth,t2s_orth,t_coefs=orthonormalize_ts(evcsolver.t1s,evcsolver.t2s)
+
+kernel=RBF_kernel_unitary_matrices #Use standard RBF kernel
+stds=np.ones(len(geom_alphas))
+predictions=[]
+for i in range(len(sample_geom)):
+    mean,std=get_model(sample_U,t_coefs[i]-np.mean(t_coefs[i]),kernel,target_U)
+    predictions.append(mean+np.mean(t_coefs[i]))
+    stds+=(std)
 t1s_orth,t2s_orth,t_coefs=orthonormalize_ts(evcsolver.t1s,evcsolver.t2s)
 t1_machinelearn=[]
 t2_machinelearn=[]
@@ -88,7 +101,7 @@ for i in range(len(geom_alphas)):
     t2_machinelearn.append(t2_temp)
 
 print("Initial")
-xtol=1e-8 #Convergence tolerance
+xtol=1e-5 #Convergence tolerance
 E_ML_U=evcsolver.calculate_CCSD_energies_from_guess(t1_machinelearn,t2_machinelearn,xtol=xtol)
 
 evcsolver.solve_CCSD_startguess(t1_machinelearn,t2_machinelearn,xtol=xtol)

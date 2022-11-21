@@ -12,22 +12,6 @@ from helper_functions import *
 basis = 'cc-pVDZ'
 #basis="6-31G*"
 molecule_name="ethene"
-def get_U_matrix(x,molecule,basis,reference_determinant):
-    U_matrices=[]
-    for xval in x:
-        mol = gto.Mole()
-        mol.atom = molecule(xval)
-        mol.basis = basis
-        mol.unit="bohr"
-        mol.build()
-        hf=scf.RHF(mol)
-        hf.kernel()
-        C=hf.mo_coeff
-        C_new=localize_procrustes(mol,hf.mo_coeff,hf.mo_occ,reference_determinant)
-        S=mol.intor("int1e_ovlp")
-        U_rot=np.real(scipy.linalg.fractional_matrix_power(S,0.5))@C_new
-        U_matrices.append(U_rot)
-    return U_matrices
 charge = 0
 def molecule(x):
     C_pos=2.482945+x
@@ -37,9 +21,9 @@ def molecule(x):
 refx=[0]
 print(molecule(*refx))
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-sample_geom1=np.linspace(-1,2.8,7)
+sample_geom1=np.linspace(-0.9,2.7,10)
 import pickle
-geom_alphas1=np.linspace(-1,2.8,39)
+geom_alphas1=np.linspace(-1,2.8,77)
 geom_alphas=[[x] for x in geom_alphas1]
 
 sample_geom=[[x] for x in sample_geom1]

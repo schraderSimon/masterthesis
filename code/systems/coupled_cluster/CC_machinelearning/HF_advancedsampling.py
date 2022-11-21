@@ -34,40 +34,69 @@ print(molecule(*refx))
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
 sample_geom1=np.linspace(1.5,4,2)
 num_samples=2
-max_samples=7
+max_samples=10
 sample_indices=[0,80]
-geom_alphas1=np.linspace(1.5,4,81)
+geom_alphas1=np.linspace(1.4,4.1,81)
 target_U=get_U_matrix(geom_alphas1,molecule,basis,reference_determinant)
+target_U_sampling=target_U[3:-3]
+sample_U=get_U_matrix(sample_geom1,molecule,basis,reference_determinant)
+geom_alphas_sampling1=geom_alphas1[3:-3]
 import pickle
 geom_alphas=[[x] for x in geom_alphas1]
+geom_alphas_sampling=[[x] for x in geom_alphas_sampling1]
+sample_geom=[[x] for x in sample_geom1]
 
-while num_samples <= max_samples: #As long as I want to add samples:
-    sample_geom=[[x] for x in sample_geom1]
-    sample_geom1=np.array(sample_geom).flatten()
+t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis,reference_determinant,mix_states=False,type="procrustes")
 
-    sample_U=get_U_matrix(sample_geom1,molecule,basis,reference_determinant)
-    t1s,t2s,l1s,l2s,sample_energies=setUpsamples(sample_geom,molecule,basis,reference_determinant,mix_states=False,type="procrustes")
+while num_samples < max_samples: #As long as I want to add samples:
     evcsolver=EVCSolver(geom_alphas,molecule,basis,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False)
 
     """
     Set up machine learning for t amplitudes
     """
-    t1s_orth,t2s_orth,t_coefs=orthonormalize_ts(evcsolver.t1s,evcsolver.t2s)
-
-    kernel=extended_RBF_kernel_unitary_matrices #Use standard RBF kernel
-    kernel=RBF_kernel_unitary_matrices
-    stds=np.ones(len(geom_alphas))
+    kernel=RBF_kernel_unitary_matrices #Use standard RBF kernel
+    stds=np.ones(len(geom_alphas_sampling1))
     predictions=[]
-    for i in range(len(sample_geom1)):
-        mean,std=get_model(sample_U,t_coefs[i]-np.mean(t_coefs[i]),kernel,target_U)
+
+    """
+    Set up machine learning for t amplitudes
+    """
+    t1s_orth,t2s_orth,t_coefs=orthonormalize_ts(evcsolver.t1s,evcsolver.t2s)
+    for i in range(len(sample_geom)):
+        mean,std=get_model(sample_U,t_coefs[i]-np.mean(t_coefs[i]),kernel,target_U_sampling)
         predictions.append(mean+np.mean(t_coefs[i]))
-        stds*=(std)
+        stds+=(std)
     largest_std_pos=np.argmax(stds) #The position with the largest std
+    sample_geom.append(geom_alphas_sampling[largest_std_pos])
     sample_geom1=list(sample_geom1)
-    sample_geom1.append(geom_alphas1[largest_std_pos])
+    sample_geom1.append(geom_alphas_sampling1[largest_std_pos])
+    sample_geom1=np.array(sample_geom1)
+    sample_U.append(target_U_sampling[largest_std_pos])
+    newt1,newt2,newl1,newl2,nwesample_energies=setUpsamples([sample_geom[-1]],molecule,basis,reference_determinant,mix_states=False,type="procrustes")
+    t1s.append(newt1)
+    t2s.append(newt2)
+    l1s.append(newt1)
+    l2s.append(newt2)
     print(stds)
-    print(sample_geom1)
+    print(sample_geom)
     num_samples+=1
+evcsolver=EVCSolver(geom_alphas,molecule,basis,reference_determinant,t1s,t2s,l1s,l2s,sample_x=sample_geom,mix_states=False)
+
+"""
+Set up machine learning for t amplitudes
+"""
+kernel=RBF_kernel_unitary_matrices #Use standard RBF kernel
+stds=np.ones(len(geom_alphas_sampling1))
+predictions=[]
+
+"""
+Set up machine learning for t amplitudes
+"""
+t1s_orth,t2s_orth,t_coefs=orthonormalize_ts(evcsolver.t1s,evcsolver.t2s)
+for i in range(len(sample_geom)):
+    mean,std=get_model(sample_U,t_coefs[i]-np.mean(t_coefs[i]),kernel,target_U)
+    predictions.append(mean+np.mean(t_coefs[i]))
+
 t1s_orth,t2s_orth,t_coefs=orthonormalize_ts(evcsolver.t1s,evcsolver.t2s)
 t1_machinelearn=[]
 t2_machinelearn=[]

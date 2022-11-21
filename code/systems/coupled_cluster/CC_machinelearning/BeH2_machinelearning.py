@@ -9,7 +9,7 @@ from helper_functions import *
 from mpl_toolkits.axes_grid1 import ImageGrid
 
 molecule_name="BeH2"
-basis = 'cc-pVDZ'
+basis = 'cc-pVTZ'
 basis_set = bse.get_basis(basis, fmt='nwchem')
 charge = 0
 def molecule(x,y):
@@ -67,7 +67,7 @@ for i in range(len(geom_alphas)):
     t2_machinelearn.append(t2_temp)
 
 print("Initial")
-xtol=1e-8 #Convergence tolerance
+xtol=1e-5 #Convergence tolerance
 E_ML_U=evcsolver.calculate_CCSD_energies_from_guess(t1_machinelearn,t2_machinelearn,xtol=xtol)
 
 evcsolver.solve_CCSD_startguess(t1_machinelearn,t2_machinelearn,xtol=xtol)

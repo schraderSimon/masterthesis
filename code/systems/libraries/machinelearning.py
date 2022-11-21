@@ -61,7 +61,7 @@ def RBF_kernel_unitary_matrices(list_U1,list_U2,kernel_params=[1,1,1,1,1]):
         kernel_params[1]=-0.5
     l_1=np.exp(kernel_params[1])
     sigma_1=np.exp(kernel_params[0])
-    noise=0#np.exp(kernel_params[4])
+    noise=1e-10#np.exp(kernel_params[4])
     norm=np.zeros((len(list_U1),len(list_U2)))
     n=min([len(list_U1),len(list_U2)])
     for i in range(len(list_U1)):
@@ -126,7 +126,7 @@ def GP(X1, y1, X2, kernel_func,kernel_params):
     return μ2, Σ2  # mean, covariance
 def log_likelihood(kernel_params,data_X,y,kernel):
     cov_matrix=kernel(data_X,data_X,kernel_params) #The covariance matrix
-    cov_matrix=cov_matrix+np.eye(len(cov_matrix))*1e-14
+    cov_matrix=cov_matrix
     det=np.linalg.det(cov_matrix)
     log_det=np.log(det)
     #inverse=np.linalg.inv(cov_matrix+1e-10*np.eye(len(cov_matrix)))

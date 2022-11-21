@@ -32,7 +32,7 @@ molecule=lambda x:  "H 0 0 0; F 0 0 %f"%x;molecule_name="HF"
 refx=[1.75]
 print(molecule(*refx))
 reference_determinant=get_reference_determinant(molecule,refx,basis,charge)
-sample_geom1=np.linspace(1.5,4,7)
+sample_geom1=np.linspace(1.5,4,10)
 import pickle
 geom_alphas1=np.linspace(1.4,4.1,81)
 geom_alphas=[[x] for x in geom_alphas1]

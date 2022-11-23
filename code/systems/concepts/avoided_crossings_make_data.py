@@ -60,7 +60,7 @@ for i,x in enumerate(xs):
 choices=np.random.choice(np.arange(len(noonss[0])),size=len(noonss[0])//1, replace=False)
 circle2 = plt.Circle((5, 5), 0.5, color='b', fill=False)
 
-axes[0].set_title("Orbital enery (Hartree)")
+axes[0].set_title("Orbital energy (Hartree)")
 axes[1].set_title("Natural occupation number")
 axes[1].plot(xs,np.array(noonss)[:,5:])
 axes[0].plot(xs,np.array(new_energiess)[:,5:])
@@ -68,6 +68,21 @@ axes[0].set_xlabel("x (Bohr)")
 axes[1].set_xlabel("x (Bohr)")
 axes[0].set_xticks([2,3,4,5])
 axes[1].set_xticks([2,3,4,5])
+
+noons_data=np.array(noonss)[:,5:]
+energies_data=np.array(new_energiess)
+avoided_crossing_locations=[[[1.67,1.5],[2.75,1]],[[3.35,0.0044],[3.95,6*1e-4]]]
+crossing_locations=[[[1.95,2.45],[4.32,0.66]],[[3.095,0.000453],[4.32,0.000359]]]
+energy_dict={}
+energy_dict["noons"]=noons_data
+energy_dict["energies"]=energies_data
+energy_dict["crossings"]=crossing_locations
+energy_dict["avoided_crossings"]=avoided_crossing_locations
+energy_dict["xs"]=xs
+import pickle
+file="orbitals_data/avoided_crossings.bin"
+with open(file,"wb") as f:
+    pickle.dump(energy_dict,f)
 
 axes[0].plot(1.67,1.5,marker='o',markerfacecolor ='none',markeredgewidth=2,markeredgecolor="black",alpha=1.0,ms=x*5) #Avoided crossing
 axes[0].plot(2.75,1.0,marker='o',markerfacecolor ='none',markeredgewidth=2,markeredgecolor="black",alpha=1.0,ms=x*5) #Avoided rossing

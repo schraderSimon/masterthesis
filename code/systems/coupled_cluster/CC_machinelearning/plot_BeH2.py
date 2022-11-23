@@ -100,26 +100,26 @@ plt.savefig("plots/BeH2_energies.pdf")
 plt.show()
 
 fig,grid=plt.subplots(2,2,sharey=True,sharex=True,figsize=(15,10))
-im0=grid[0,0].pcolormesh(x, y, niter_ML-niter_MP2, cmap=cmap,shading='auto',vmin=z_min,vmax=np.amax(niter_ML-niter_MP2),alpha=alpha)
+im0=grid[0,0].pcolormesh(x, y, niter_ML-niter_MP2, cmap=cmap,shading='auto',vmin=np.amin(niter_ML-niter_MP2),vmax=np.amax(niter_ML-niter_MP2),alpha=alpha)
 grid[0,0].set_title("GP")
 grid[0,0].set_xlabel(r"distance $H^2$-Be (Bohr)")
 grid[0,0].set_ylabel(r"distance $H^1$-Be (Bohr)")
 grid[0,0].scatter(ML_sample_geometries[:,0],ML_sample_geometries[:,1],color="magenta",marker="*")
 
-im2=grid[1,0].pcolormesh(x, y, niter_AMP_10-niter_MP2, cmap=cmap,shading='auto',vmin=z_min,vmax=np.amax(niter_AMP_10-niter_MP2),alpha=alpha)
+im2=grid[1,0].pcolormesh(x, y, niter_AMP_10-niter_MP2, cmap=cmap,shading='auto',vmin=np.amin(niter_AMP_10-niter_MP2),vmax=np.amax(niter_AMP_10-niter_MP2),alpha=alpha)
 grid[1,0].set_title("truncated sum (10%)")
 grid[1,0].set_xlabel(r"distance $H^2$-Be (Bohr)")
 grid[1,0].set_ylabel(r"distance $H^1$-Be (Bohr)")
 grid[1,0].scatter(ML_sample_geometries[:,0],ML_sample_geometries[:,1],color="magenta",marker="*")
 
-im3=grid[1,1].pcolormesh(x, y, niter_AMP_20-niter_MP2, cmap=cmap,shading='auto',vmin=z_min,vmax=np.amax(niter_AMP_20-niter_MP2),alpha=alpha)
+im3=grid[1,1].pcolormesh(x, y, niter_AMP_20-niter_MP2, cmap=cmap,shading='auto',vmin=np.amin(niter_AMP_20-niter_MP2),vmax=np.amax(niter_AMP_20-niter_MP2),alpha=alpha)
 grid[1,1].set_title("truncated sum (20%)")
 grid[1,1].set_xlabel(r"distance $H^2$-Be (Bohr)")
 grid[1,1].set_ylabel(r"distance $H^1$-Be (Bohr)")
 grid[1,1].scatter(ML_sample_geometries[:,0],ML_sample_geometries[:,1],color="magenta",marker="*")
 
 
-im1=grid[0,1].pcolormesh(x, y, niter_ML_auto-niter_MP2, cmap=cmap,shading='auto',vmin=z_min,vmax=np.amax(niter_ML_auto-niter_MP2),alpha=alpha)
+im1=grid[0,1].pcolormesh(x, y, niter_ML_auto-niter_MP2, cmap=cmap,shading='auto',vmin=np.amin(niter_ML_auto-niter_MP2),vmax=np.amax(niter_ML_auto-niter_MP2),alpha=alpha)
 
 grid[0,1].scatter(ML_top_sample_geometries[:,0],ML_top_sample_geometries[:,1],color="magenta",marker="*")
 
@@ -134,4 +134,18 @@ colorbar=fig.colorbar(im3,label=r'$\Delta$ num. iter.')
 
 plt.tight_layout()
 plt.savefig("plots/BeH2_niter.pdf")
+niter_ML_auto=np.array(niter_ML_auto,dtype=float)
+niter_ML=np.array(niter_ML,dtype=float)
+niter_AMP_10=np.array(niter_AMP_10,dtype=float)
+niter_AMP_20=np.array(niter_AMP_20,dtype=float)
+niter_ML_auto[niter_ML_auto == 1] = np.nan
+niter_AMP_10[niter_AMP_10 == 1] = np.nan
+niter_ML[niter_ML == 1] = np.nan
+niter_AMP_20[niter_AMP_20 == 1] = np.nan
+print("Average number of iterations")
+print("MP2: %f"%np.nanmean(niter_MP2))
+print("ML auto: %f"%np.nanmean(niter_ML_auto))
+print("ML: %f"%np.nanmean(niter_ML))
+print("AMP 20: %f"%np.nanmean(niter_AMP_20))
+print("AMP 10: %f"%np.nanmean(niter_AMP_10))
 plt.show()

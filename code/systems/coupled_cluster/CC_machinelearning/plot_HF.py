@@ -4,6 +4,8 @@ from rccsd_gs import *
 from machinelearning import *
 from func_lib import *
 from numba import jit
+from matplotlib.ticker import MaxNLocator
+
 from matrix_operations import *
 from helper_functions import *
 basis = 'cc-pVTZ'
@@ -138,6 +140,8 @@ ax[1].set_title("10 sample geometries")
 
 ax[0].legend(loc="upper left",columnspacing=0.0,handletextpad=0.0,labelspacing=0)
 plt.suptitle("Number of iterations (HF)")
+for i in range(len(ax)):
+    ax[i].yaxis.set_major_locator(MaxNLocator(integer=True))
 
 plt.tight_layout()
 plt.savefig("plots/HF_niter.pdf")

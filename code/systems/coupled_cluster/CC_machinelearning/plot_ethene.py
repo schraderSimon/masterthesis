@@ -8,6 +8,7 @@ from matrix_operations import *
 from helper_functions import *
 basis = 'cc-pVDZ'
 import pickle
+from matplotlib.ticker import MaxNLocator
 num_points=7
 basis=basis
 file="energy_data/ethene_machinelearning_%s_%d.bin"%(basis,num_points)
@@ -61,7 +62,6 @@ sample_geom2_10=np.array(data_ML_top["sample_geometries"])+2.482945
 
 
 fig,ax=plt.subplots(2,1,sharey=False,sharex=True,figsize=(10,10))
-
 for x in (sample_geom1_7[:-1]):
     ax[0].axvline(x,linestyle="--",color="blue",alpha=0.3)
 ax[0].axvline(sample_geom1_7[-1],linestyle="--",color="blue",alpha=0.3,label="Sample geom.")
@@ -139,6 +139,10 @@ ax[1].set_title("10 sample geometries")
 
 ax[0].legend(loc="upper left",columnspacing=0.0,handletextpad=0.0,labelspacing=0)
 plt.suptitle("Number of iterations (ethylene)")
+#ax[0].set_yticks(np.linspace(6,22,9,dtype=int))
+#ax[1].set_yticks(np.linspace(6,22,9,dtype=int))
+for i in range(len(ax)):
+    ax[i].yaxis.set_major_locator(MaxNLocator(integer=True))
 
 plt.tight_layout()
 plt.savefig("plots/ethene_niter.pdf")
